@@ -203,26 +203,29 @@ SystemWindow::SystemWindow()
 	std::memset(&vk_device_queue_create_info, 0, sizeof(vk_device_queue_create_info));
 	vk_device_queue_create_info.sType= VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	vk_device_queue_create_info.pNext= nullptr;
-	vk_device_queue_create_info.flags= 0;
+	vk_device_queue_create_info.flags= 0u;
 	vk_device_queue_create_info.queueFamilyIndex= queue_family_index;
+	vk_device_queue_create_info.queueCount= 1u;
 	vk_device_queue_create_info.pQueuePriorities= queue_priorities;
 
 	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	VkDeviceCreateInfo vk_device_create_info;
 	std::memset(&vk_device_create_info, 0, sizeof(vk_device_create_info));
 	vk_device_create_info.sType= VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	vk_device_create_info.queueCreateInfoCount= 1;
+	vk_device_create_info.queueCreateInfoCount= 1u;
 	vk_device_create_info.pQueueCreateInfos= &vk_device_queue_create_info;
-	vk_device_create_info.enabledLayerCount= 0;
+	vk_device_create_info.enabledLayerCount= 0u;
 	vk_device_create_info.ppEnabledLayerNames= nullptr;
 	vk_device_create_info.enabledExtensionCount= std::size(device_extension_names);
 	vk_device_create_info.ppEnabledExtensionNames= device_extension_names;
 	vk_device_create_info.pEnabledFeatures= nullptr;
 
-	if(vkCreateDevice(physical_devices.front(), &vk_device_create_info, NULL, &vk_device_) != VK_SUCCESS)
+	if(vkCreateDevice(physical_device, &vk_device_create_info, nullptr, &vk_device_) != VK_SUCCESS)
 	{
 		std::exit(-1);
 	}
+
+	vkGetDeviceQueue(vk_device_, queue_family_index, 0u, &vk_queue_);
 
 	return;
 }
