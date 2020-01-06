@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 set(CMAKE_CXX_EXTENSIONS Off)
 
+if(MSVC)
+	add_compile_options(/utf-8 /W3 /Wx)
+else()
+	add_compile_options(-Werror -Wall -Wextra -Wconversion)
+endif()
+
 find_package(SDL2 REQUIRED)
 
 file(GLOB SOURCES "*.cpp" "*.hpp")
