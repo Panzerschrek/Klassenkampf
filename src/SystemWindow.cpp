@@ -1,5 +1,8 @@
+#include "Assert.hpp"
 #include "SystemWindow.hpp"
 #include <SDL.h>
+#include <SDL_vulkan.h>
+#include <cstring>
 
 
 namespace KK
@@ -103,11 +106,52 @@ SystemWindow::SystemWindow()
 			"Klassenkampf",
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 			800, 600,
-			SDL_WINDOW_SHOWN);
+			SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+
+	unsigned int extension_names_count= 0;
+	if( !SDL_Vulkan_GetInstanceExtensions(window_, &extension_names_count, nullptr) )
+	{
+		std::exit(-1);
+	}
+
+	std::vector<const char*> extensions_list;
+	extensions_list.resize(extension_names_count, nullptr);
+
+	if( !SDL_Vulkan_GetInstanceExtensions(window_, &extension_names_count, extensions_list.data()) )
+	{
+		std::exit(-1);
+	}
+
+#ifdef DEBUG
+	extensions_list.push_back("VK_EXT_debug_report");
+	++extension_names_count;
+#endif
+
+	VkApplicationInfo vk_app_info;
+	std::memset(&vk_app_info, 0, sizeof(vk_app_info));
+	vk_app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	vk_app_info.pApplicationName = "Klassenkampf";
+	vk_app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	vk_app_info.pEngineName = "Klassenkampf";
+	vk_app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	vk_app_info.apiVersion = VK_MAKE_VERSION(1, 0, 0);
+
+	VkInstanceCreateInfo vk_create_info;
+	std::memset(&vk_create_info, 0, sizeof(vk_create_info));
+	vk_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	vk_create_info.pApplicationInfo = &vk_app_info;
+	vk_create_info.enabledExtensionCount = extension_names_count;
+	vk_create_info.ppEnabledExtensionNames= extensions_list.data();
+
+	if(vkCreateInstance(&vk_create_info, nullptr, &vk_instance_) != VK_SUCCESS)
+	{
+		std::exit(-1);
+	}
 }
 
 SystemWindow::~SystemWindow()
 {
+	vkDestroyInstance(vk_instance_, nullptr);
 	SDL_DestroyWindow(window_);
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }

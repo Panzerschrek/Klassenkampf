@@ -1,6 +1,7 @@
 #pragma once
 #include "SystemEvent.hpp"
 #include <SDL_video.h>
+#include <vulkan/vulkan.h>
 
 
 namespace KK
@@ -20,6 +21,7 @@ public:
 private:
 
 	SDL_Window* window_= nullptr;
+	VkInstance vk_instance_= nullptr;
 };
 
 } // namespace KK
