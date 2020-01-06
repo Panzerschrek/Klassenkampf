@@ -129,18 +129,23 @@ SystemWindow::SystemWindow()
 
 	VkApplicationInfo vk_app_info;
 	std::memset(&vk_app_info, 0, sizeof(vk_app_info));
-	vk_app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	vk_app_info.pApplicationName = "Klassenkampf";
-	vk_app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	vk_app_info.pEngineName = "Klassenkampf";
-	vk_app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-	vk_app_info.apiVersion = VK_MAKE_VERSION(1, 0, 0);
+	vk_app_info.sType= VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	vk_app_info.pNext= nullptr;
+	vk_app_info.pApplicationName= "Klassenkampf";
+	vk_app_info.applicationVersion= VK_MAKE_VERSION(1, 0, 0);
+	vk_app_info.pEngineName= "Klassenkampf";
+	vk_app_info.engineVersion= VK_MAKE_VERSION(1, 0, 0);
+	vk_app_info.apiVersion= VK_MAKE_VERSION(1, 0, 0);
 
 	VkInstanceCreateInfo vk_create_info;
 	std::memset(&vk_create_info, 0, sizeof(vk_create_info));
-	vk_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	vk_create_info.pApplicationInfo = &vk_app_info;
-	vk_create_info.enabledExtensionCount = extension_names_count;
+	vk_create_info.sType= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	vk_create_info.pNext= nullptr;
+	vk_create_info.flags= 0;
+	vk_create_info.pApplicationInfo= &vk_app_info;
+	vk_create_info.enabledLayerCount= 0;
+	vk_create_info.ppEnabledLayerNames= nullptr;
+	vk_create_info.enabledExtensionCount= extension_names_count;
 	vk_create_info.ppEnabledExtensionNames= extensions_list.data();
 
 	if(vkCreateInstance(&vk_create_info, nullptr, &vk_instance_) != VK_SUCCESS)
@@ -152,10 +157,79 @@ SystemWindow::SystemWindow()
 	{
 		std::exit(-1);
 	}
+
+	uint32_t device_count= 0u;
+	vkEnumeratePhysicalDevices(vk_instance_, &device_count, nullptr);
+	if(device_count == 0u)
+	{
+		std::exit(-1);
+	}
+
+	std::vector<VkPhysicalDevice> physical_devices;
+	physical_devices.resize(device_count);
+	vkEnumeratePhysicalDevices(vk_instance_, &device_count, physical_devices.data());
+
+	// TODO - select appropriate device or read device id from settings.
+	const VkPhysicalDevice physical_device= physical_devices.front();
+
+	uint32_t queue_family_property_count= 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_property_count, nullptr);
+
+	std::vector<VkQueueFamilyProperties> queue_family_properties;
+	queue_family_properties.resize(queue_family_property_count);
+
+	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_property_count, queue_family_properties.data());
+	uint32_t queue_family_index= ~0u;
+	for(uint32_t i= 0u; i < queue_family_property_count; ++i)
+	{
+		VkBool32 supported= 0;
+		vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, vk_surface_, &supported);
+		if(supported != 0 &&
+			queue_family_properties[i].queueCount > 0 &&
+			(queue_family_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+		{
+			queue_family_index= i;
+			break;
+		}
+	}
+
+	if(queue_family_index == ~0u)
+	{
+		std::exit(-1);
+	}
+
+	const float queue_priorities[1]{0.0f};
+	VkDeviceQueueCreateInfo vk_device_queue_create_info;
+	std::memset(&vk_device_queue_create_info, 0, sizeof(vk_device_queue_create_info));
+	vk_device_queue_create_info.sType= VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	vk_device_queue_create_info.pNext= nullptr;
+	vk_device_queue_create_info.flags= 0;
+	vk_device_queue_create_info.queueFamilyIndex= queue_family_index;
+	vk_device_queue_create_info.pQueuePriorities= queue_priorities;
+
+	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+	VkDeviceCreateInfo vk_device_create_info;
+	std::memset(&vk_device_create_info, 0, sizeof(vk_device_create_info));
+	vk_device_create_info.sType= VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	vk_device_create_info.queueCreateInfoCount= 1;
+	vk_device_create_info.pQueueCreateInfos= &vk_device_queue_create_info;
+	vk_device_create_info.enabledLayerCount= 0;
+	vk_device_create_info.ppEnabledLayerNames= nullptr;
+	vk_device_create_info.enabledExtensionCount= std::size(device_extension_names);
+	vk_device_create_info.ppEnabledExtensionNames= device_extension_names;
+	vk_device_create_info.pEnabledFeatures= nullptr;
+
+	if(vkCreateDevice(physical_devices.front(), &vk_device_create_info, NULL, &vk_device_) != VK_SUCCESS)
+	{
+		std::exit(-1);
+	}
+
+	return;
 }
 
 SystemWindow::~SystemWindow()
 {
+	vkDestroyDevice(vk_device_, nullptr);
 	vkDestroySurfaceKHR(vk_instance_, vk_surface_, nullptr);
 	vkDestroyInstance(vk_instance_, nullptr);
 	SDL_DestroyWindow(window_);
