@@ -1,0 +1,32 @@
+Cto hocetsä
+===========
+
+Sutj - šuter ot pervogo liça s generirujemymi urovnämi.
+Risovanije grafiki - cerez "Vulkan" i programmnyoje.
+
+Urovni sobirajutsä iz zagotovok, sobirajemyh v programme, vrode "GTKRadiant". Generator generirujet urovenj iz zagotovok, razmescajet oružije, patrony, aptecki, bronü, bonusy, mostrov.
+V igre dolžny bytj klüci, knopki.
+
+Hocetsä poboljše graficeskih effektov - dinamiceskoje osvescenije so množestvom istocnikov i s tenämi, HDR, stökla, zerkala, voda.
+
+Oçenka rabot
+============
+
+* Napisanije Sobstvenno generatora. Predpolagajet mnogo raboty s grafami.
+* Modelirovanije zagotovok urovnej. Kažetsä nesložnoj rabotoj, hvatit okolo dvuh desätkov krupnyh i stoljko že melkih elementov.
+* Tekstury. Možno vzätj gotovyje.
+* Dopilka generatoa - temy, nastrojki, složnostj igry, struktura urovnej s çiklami (ne vsegda drevovidnaja).
+* Modeli monstrov i oružija. Možno vzätj gotovyje, podhodäscije pod dizajn igry.
+* Napisanije postroitelä svetokart. Možno vzätj narobotki iz "PanzerLightmapsBuilder".
+* Napisanije igrovoj logiki. Castj možno pozaimstvovatj iz "PanzerChasm". Ostaljnoje - nado dopisatj samomu. Kažetsä, eto ne složno.
+* Poisk puti (dlä monstrov).
+* Napisanije renderinga s kucej fišek na osnove "Vulkan". Kažetsä, eto dovoljno trudojomkaja zadaca.
+
+Obscaja trudojomkostj - vyše, cem v "PanzerChasm" raza v 1.5 ili 2. No jestj i plüsy - ne nado zanimatjsä obratnoj razrabotkoj, jestj potençial dlä ulucšenij.
+
+S cego nacatj.
+============
+
+* V ekosisteme "Unity" jestj mnogo kontenta. Vozmožno, cto-to ottuda možno vzätj. Nado na eto posmtretj.
+* Stoit vzglänutj na igru "Strife". Tam tože urovni generirujutsä.
+* Nado podumatj nad osnovnym algoritmom generaçii urovnej, naskoljko jego voobsce vozmožno realizovatj.
