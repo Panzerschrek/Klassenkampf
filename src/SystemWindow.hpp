@@ -22,6 +22,7 @@ private:
 
 	SDL_Window* window_= nullptr;
 	VkInstance vk_instance_= nullptr;
+	VkSurfaceKHR vk_surface_= nullptr;
 };
 
 } // namespace KK

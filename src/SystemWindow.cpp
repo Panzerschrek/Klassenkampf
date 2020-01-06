@@ -147,10 +147,16 @@ SystemWindow::SystemWindow()
 	{
 		std::exit(-1);
 	}
+
+	if(!SDL_Vulkan_CreateSurface(window_, vk_instance_, &vk_surface_))
+	{
+		std::exit(-1);
+	}
 }
 
 SystemWindow::~SystemWindow()
 {
+	vkDestroySurfaceKHR(vk_instance_, vk_surface_, nullptr);
 	vkDestroyInstance(vk_instance_, nullptr);
 	SDL_DestroyWindow(window_);
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
