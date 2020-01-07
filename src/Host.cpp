@@ -14,6 +14,7 @@ bool Host::Loop()
 {
 	const Clock::time_point tick_start_time= Clock::now();
 	const auto dt= tick_start_time - prev_tick_time_;
+	prev_tick_time_ = tick_start_time;
 
 	for(const SystemEvent& system_event : system_window_.ProcessEvents())
 	{

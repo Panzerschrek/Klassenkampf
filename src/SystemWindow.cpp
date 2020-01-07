@@ -198,6 +198,7 @@ SystemWindow::SystemWindow()
 	{
 		std::exit(-1);
 	}
+	vk_queue_familiy_index_= queue_family_index;
 
 	const float queue_priorities[1]{0.0f};
 	VkDeviceQueueCreateInfo vk_device_queue_create_info;
@@ -290,11 +291,33 @@ SystemWindow::SystemWindow()
 		std::exit(-1);
 	}
 
+	uint32_t swapchain_images_count= 0u;
+	vkGetSwapchainImagesKHR(vk_device_, vk_swapchain_, &swapchain_images_count, nullptr);
+	if(swapchain_images_count == 0u)
+	{
+		std::exit(-1);
+	}
+	vk_swapchain_images_.resize(swapchain_images_count);
+	vkGetSwapchainImagesKHR(vk_device_, vk_swapchain_, &swapchain_images_count, vk_swapchain_images_.data());
+
+	VkCommandPoolCreateInfo vk_command_pool_create_info;
+	std::memset(&vk_command_pool_create_info, 0, sizeof(vk_command_pool_create_info));
+	vk_command_pool_create_info.sType= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	vk_command_pool_create_info.pNext= nullptr;
+	vk_command_pool_create_info.flags= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	vk_command_pool_create_info.queueFamilyIndex= queue_family_index;
+
+	if(vkCreateCommandPool(vk_device_, &vk_command_pool_create_info, nullptr, &vk_command_pool_) != VK_SUCCESS)
+	{
+		std::exit(-1);
+	}
+
 	return;
 }
 
 SystemWindow::~SystemWindow()
 {
+	vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
 	vkDestroySwapchainKHR(vk_device_, vk_swapchain_, nullptr);
 	vkDestroyDevice(vk_device_, nullptr);
 	vkDestroySurfaceKHR(vk_instance_, vk_surface_, nullptr);
@@ -379,7 +402,120 @@ void SystemWindow::BeginFrame()
 
 void SystemWindow::EndFrame()
 {
-	SDL_UpdateWindowSurface(window_);
+	VkResult res= VK_SUCCESS;
+
+	// Create one command buffer per frame.
+	// Delete old command buffers.
+
+	VkCommandBufferAllocateInfo vk_command_buffer_allocate_info;
+	std::memset(&vk_command_buffer_allocate_info, 0, sizeof(vk_command_buffer_allocate_info));
+	vk_command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	vk_command_buffer_allocate_info.pNext= nullptr;
+	vk_command_buffer_allocate_info.commandPool = vk_command_pool_;
+	vk_command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	vk_command_buffer_allocate_info.commandBufferCount = 1;
+
+	vk_command_buffers_.push(nullptr);
+	res= vkAllocateCommandBuffers(vk_device_, &vk_command_buffer_allocate_info, &vk_command_buffers_.back());
+	const VkCommandBuffer command_buffer= vk_command_buffers_.back();
+
+	VkCommandBufferBeginInfo vk_command_buffer_begin_info;
+	std::memset(&vk_command_buffer_begin_info, 0, sizeof(vk_command_buffer_begin_info));
+	vk_command_buffer_begin_info.sType= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	vk_command_buffer_begin_info.pNext= nullptr;
+	vk_command_buffer_begin_info.flags= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	res= vkBeginCommandBuffer(command_buffer, &vk_command_buffer_begin_info);
+
+	// Draw here.
+
+	uint32_t image_index= ~0u;
+	res= vkAcquireNextImageKHR(vk_device_, vk_swapchain_, std::numeric_limits<uint64_t>::max(), nullptr, nullptr, &image_index);
+
+	VkImageSubresourceRange vk_image_range;
+	std::memset(&vk_image_range, 0, sizeof(vk_image_range));
+	vk_image_range.aspectMask= VK_IMAGE_ASPECT_COLOR_BIT;
+	vk_image_range.baseMipLevel= 0u;
+	vk_image_range.levelCount= VK_REMAINING_MIP_LEVELS;
+	vk_image_range.baseArrayLayer= 0u;
+	vk_image_range.levelCount= VK_REMAINING_ARRAY_LAYERS;
+
+	VkImageMemoryBarrier vk_image_memory_barrier;
+	std::memset(&vk_image_memory_barrier, 0, sizeof(vk_image_memory_barrier));
+	vk_image_memory_barrier.sType= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	vk_image_memory_barrier.srcAccessMask= 0u;
+	vk_image_memory_barrier.dstAccessMask= VK_ACCESS_TRANSFER_WRITE_BIT;
+	vk_image_memory_barrier.oldLayout= VK_IMAGE_LAYOUT_UNDEFINED;
+	vk_image_memory_barrier.newLayout= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	vk_image_memory_barrier.srcQueueFamilyIndex= vk_queue_familiy_index_;
+	vk_image_memory_barrier.dstQueueFamilyIndex= vk_queue_familiy_index_;
+	vk_image_memory_barrier.image= vk_swapchain_images_[image_index];
+	vk_image_memory_barrier.subresourceRange= vk_image_range;
+
+	vkCmdPipelineBarrier(
+		command_buffer,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0u, 0u, nullptr, 0u, nullptr, 1u,
+		&vk_image_memory_barrier);
+
+	VkClearColorValue clear_color;
+	std::memset(&clear_color, 0, sizeof(clear_color));
+	clear_color.float32[0]= 1.0f;
+	clear_color.float32[1]= 0.0f;
+	clear_color.float32[2]= 1.0f;
+	clear_color.float32[3]= 0.0f;
+
+	vkCmdClearColorImage(command_buffer, vk_swapchain_images_[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1u, &vk_image_range);
+
+	vk_image_memory_barrier.srcAccessMask= VK_ACCESS_TRANSFER_WRITE_BIT;
+	vk_image_memory_barrier.dstAccessMask= VK_ACCESS_MEMORY_READ_BIT;
+	vk_image_memory_barrier.oldLayout= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	vk_image_memory_barrier.newLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+	vkCmdPipelineBarrier(
+		command_buffer,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+		0u, 0u, nullptr, 0u, nullptr, 1u,
+		&vk_image_memory_barrier);
+
+	res= vkEndCommandBuffer(command_buffer);
+
+	VkSubmitInfo vk_submit_info;
+	std::memset(&vk_submit_info, 0, sizeof(vk_submit_info));
+	vk_submit_info.sType= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	vk_submit_info.pNext= nullptr;
+	vk_submit_info.waitSemaphoreCount= 0u;
+	vk_submit_info.pWaitSemaphores= nullptr;
+	vk_submit_info.pWaitDstStageMask= 0u;
+	vk_submit_info.commandBufferCount= 1u;
+	vk_submit_info.pCommandBuffers= &command_buffer;
+	vk_submit_info.signalSemaphoreCount= 0u;
+	vk_submit_info.pSignalSemaphores= nullptr;
+
+	res= vkQueueSubmit(vk_queue_, 1u, &vk_submit_info, nullptr);
+
+	VkPresentInfoKHR vk_present_info;
+	std::memset(&vk_present_info, 0, sizeof(vk_present_info));
+	vk_present_info.sType= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	vk_present_info.pNext= nullptr;
+	vk_present_info.waitSemaphoreCount= 0u;
+	vk_present_info.pWaitSemaphores= nullptr;
+	vk_present_info.swapchainCount= 1u;
+	vk_present_info.pSwapchains= &vk_swapchain_;
+	vk_present_info.pImageIndices= &image_index;
+	vk_present_info.pResults= nullptr;
+
+	res= vkQueuePresentKHR(vk_queue_, &vk_present_info);
+
+	res= vkDeviceWaitIdle(vk_device_);
+
+	if(vk_command_buffers_.size() >= 64u)
+	{
+		vkFreeCommandBuffers(vk_device_, vk_command_pool_, 1u, &vk_command_buffers_.front());
+		vk_command_buffers_.pop();
+	}
+
+	KK_UNUSED(res);
 }
 
 } // namespace KK
