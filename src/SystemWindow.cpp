@@ -138,17 +138,19 @@ SystemWindow::SystemWindow()
 	vk_app_info.engineVersion= VK_MAKE_VERSION(1, 0, 0);
 	vk_app_info.apiVersion= VK_MAKE_VERSION(1, 0, 0);
 
-	const char* const validation_names[]{ "VK_LAYER_LUNARG_core_validation" };
 	VkInstanceCreateInfo vk_create_info;
 	std::memset(&vk_create_info, 0, sizeof(vk_create_info));
 	vk_create_info.sType= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	vk_create_info.pNext= nullptr;
 	vk_create_info.flags= 0;
 	vk_create_info.pApplicationInfo= &vk_app_info;
-	vk_create_info.enabledLayerCount= std::size(validation_names);
-	vk_create_info.ppEnabledLayerNames= validation_names;
 	vk_create_info.enabledExtensionCount= extension_names_count;
 	vk_create_info.ppEnabledExtensionNames= extensions_list.data();
+#ifdef DEBUG
+	const char* const validation_names[]{ "VK_LAYER_LUNARG_core_validation" };
+	vk_create_info.enabledLayerCount= std::size(validation_names);
+	vk_create_info.ppEnabledLayerNames= validation_names;
+#endif
 
 	if(vkCreateInstance(&vk_create_info, nullptr, &vk_instance_) != VK_SUCCESS)
 	{
