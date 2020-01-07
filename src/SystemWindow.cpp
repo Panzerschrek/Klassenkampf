@@ -2,6 +2,7 @@
 #include "SystemWindow.hpp"
 #include <SDL.h>
 #include <SDL_vulkan.h>
+#include <algorithm>
 #include <cstring>
 
 
@@ -227,11 +228,74 @@ SystemWindow::SystemWindow()
 
 	vkGetDeviceQueue(vk_device_, queue_family_index, 0u, &vk_queue_);
 
+	unsigned int surface_format_count= 0;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, vk_surface_, &surface_format_count, nullptr);
+	if(surface_format_count == 0u)
+	{
+		std::exit(-1);
+	}
+
+	std::vector<VkSurfaceFormatKHR> surface_formats;
+	surface_formats.resize(surface_format_count);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, vk_surface_, &surface_format_count, surface_formats.data());
+
+	// TODO - select one of
+	const VkSurfaceFormatKHR surface_format= surface_formats.back();
+
+	unsigned int present_mode_count= 0;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, vk_surface_, &present_mode_count, nullptr);
+	if(present_mode_count == 0u)
+	{
+		std::exit(-1);
+	}
+
+	std::vector<VkPresentModeKHR> present_modes;
+	present_modes.resize(present_mode_count);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, vk_surface_, &present_mode_count, present_modes.data());
+
+	VkPresentModeKHR present_mode= present_modes.front();
+	if(std::find(present_modes.begin(), present_modes.end(), VK_PRESENT_MODE_MAILBOX_KHR) != present_modes.end())
+		present_mode= VK_PRESENT_MODE_MAILBOX_KHR; // Use tripple buffering.
+	else if(std::find(present_modes.begin(), present_modes.end(), VK_PRESENT_MODE_FIFO_KHR) != present_modes.end())
+		present_mode= VK_PRESENT_MODE_FIFO_KHR; // Use double buffering.
+
+	VkSurfaceCapabilitiesKHR surface_capabilities;
+	if(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, vk_surface_, &surface_capabilities) != VK_SUCCESS)
+	{
+		std::exit(-1);
+	}
+
+	VkSwapchainCreateInfoKHR vk_swapchain_create_info;
+	std::memset(&vk_swapchain_create_info, 0, sizeof(vk_swapchain_create_info));
+	vk_swapchain_create_info.sType= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	vk_swapchain_create_info.pNext= nullptr;
+	vk_swapchain_create_info.flags= 0u;
+	vk_swapchain_create_info.surface= vk_surface_;
+	vk_swapchain_create_info.minImageCount= surface_capabilities.minImageCount;
+	vk_swapchain_create_info.imageFormat= surface_format.format;
+	vk_swapchain_create_info.imageColorSpace= surface_format.colorSpace;
+	vk_swapchain_create_info.imageExtent= surface_capabilities.maxImageExtent;
+	vk_swapchain_create_info.imageArrayLayers= 1u;
+	vk_swapchain_create_info.imageUsage= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	vk_swapchain_create_info.imageSharingMode= VK_SHARING_MODE_EXCLUSIVE;
+	vk_swapchain_create_info.queueFamilyIndexCount= 1u;
+	vk_swapchain_create_info.pQueueFamilyIndices= &queue_family_index;
+	vk_swapchain_create_info.preTransform= surface_capabilities.currentTransform;
+	vk_swapchain_create_info.compositeAlpha= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	vk_swapchain_create_info.presentMode= present_mode;
+	vk_swapchain_create_info.clipped= VK_TRUE;
+
+	if(vkCreateSwapchainKHR(vk_device_, &vk_swapchain_create_info, nullptr, &vk_swapchain_) != VK_SUCCESS)
+	{
+		std::exit(-1);
+	}
+
 	return;
 }
 
 SystemWindow::~SystemWindow()
 {
+	vkDestroySwapchainKHR(vk_device_, vk_swapchain_, nullptr);
 	vkDestroyDevice(vk_device_, nullptr);
 	vkDestroySurfaceKHR(vk_instance_, vk_surface_, nullptr);
 	vkDestroyInstance(vk_instance_, nullptr);

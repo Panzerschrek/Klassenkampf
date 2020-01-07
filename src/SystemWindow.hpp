@@ -25,6 +25,7 @@ private:
 	VkSurfaceKHR vk_surface_= nullptr;
 	VkDevice vk_device_= nullptr;
 	VkQueue vk_queue_= nullptr;
+	VkSwapchainKHR vk_swapchain_= nullptr;
 };
 
 } // namespace KK
