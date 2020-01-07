@@ -30,6 +30,9 @@ private:
 	std::vector<VkImage> vk_swapchain_images_;
 	VkCommandPool vk_command_pool_= nullptr;
 
+	VkSemaphore vk_rendering_finished_semaphore_= nullptr;
+	VkSemaphore vk_image_available_semaphore_= nullptr;
+
 	std::queue<VkCommandBuffer> vk_command_buffers_;
 };
 

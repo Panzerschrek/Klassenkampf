@@ -138,14 +138,15 @@ SystemWindow::SystemWindow()
 	vk_app_info.engineVersion= VK_MAKE_VERSION(1, 0, 0);
 	vk_app_info.apiVersion= VK_MAKE_VERSION(1, 0, 0);
 
+	const char* const validation_names[]{ "VK_LAYER_LUNARG_core_validation" };
 	VkInstanceCreateInfo vk_create_info;
 	std::memset(&vk_create_info, 0, sizeof(vk_create_info));
 	vk_create_info.sType= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	vk_create_info.pNext= nullptr;
 	vk_create_info.flags= 0;
 	vk_create_info.pApplicationInfo= &vk_app_info;
-	vk_create_info.enabledLayerCount= 0;
-	vk_create_info.ppEnabledLayerNames= nullptr;
+	vk_create_info.enabledLayerCount= std::size(validation_names);
+	vk_create_info.ppEnabledLayerNames= validation_names;
 	vk_create_info.enabledExtensionCount= extension_names_count;
 	vk_create_info.ppEnabledExtensionNames= extensions_list.data();
 
@@ -200,7 +201,7 @@ SystemWindow::SystemWindow()
 	}
 	vk_queue_familiy_index_= queue_family_index;
 
-	const float queue_priorities[1]{0.0f};
+	const float queue_priority= 1.0f;
 	VkDeviceQueueCreateInfo vk_device_queue_create_info;
 	std::memset(&vk_device_queue_create_info, 0, sizeof(vk_device_queue_create_info));
 	vk_device_queue_create_info.sType= VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -208,7 +209,7 @@ SystemWindow::SystemWindow()
 	vk_device_queue_create_info.flags= 0u;
 	vk_device_queue_create_info.queueFamilyIndex= queue_family_index;
 	vk_device_queue_create_info.queueCount= 1u;
-	vk_device_queue_create_info.pQueuePriorities= queue_priorities;
+	vk_device_queue_create_info.pQueuePriorities= &queue_priority;
 
 	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	VkDeviceCreateInfo vk_device_create_info;
@@ -312,11 +313,21 @@ SystemWindow::SystemWindow()
 		std::exit(-1);
 	}
 
+	VkSemaphoreCreateInfo vk_semaphore_create_info;
+	std::memset(&vk_semaphore_create_info, 0, sizeof(vk_semaphore_create_info));
+	vk_semaphore_create_info.sType= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	vk_semaphore_create_info.pNext= nullptr;
+	vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &vk_rendering_finished_semaphore_);
+	vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &vk_image_available_semaphore_);
+
 	return;
 }
 
 SystemWindow::~SystemWindow()
 {
+	vkDestroySemaphore(vk_device_, vk_image_available_semaphore_, nullptr);
+	vkDestroySemaphore(vk_device_, vk_rendering_finished_semaphore_, nullptr);
+
 	vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
 	vkDestroySwapchainKHR(vk_device_, vk_swapchain_, nullptr);
 	vkDestroyDevice(vk_device_, nullptr);
@@ -404,41 +415,40 @@ void SystemWindow::EndFrame()
 {
 	VkResult res= VK_SUCCESS;
 
+	uint32_t image_index= ~0u;
+	res= vkAcquireNextImageKHR(vk_device_, vk_swapchain_, std::numeric_limits<uint64_t>::max(), vk_image_available_semaphore_, nullptr, &image_index);
+
 	// Create one command buffer per frame.
 	// Delete old command buffers.
 
 	VkCommandBufferAllocateInfo vk_command_buffer_allocate_info;
 	std::memset(&vk_command_buffer_allocate_info, 0, sizeof(vk_command_buffer_allocate_info));
-	vk_command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	vk_command_buffer_allocate_info.sType= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	vk_command_buffer_allocate_info.pNext= nullptr;
-	vk_command_buffer_allocate_info.commandPool = vk_command_pool_;
-	vk_command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	vk_command_buffer_allocate_info.commandBufferCount = 1;
+	vk_command_buffer_allocate_info.commandPool= vk_command_pool_;
+	vk_command_buffer_allocate_info.level= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	vk_command_buffer_allocate_info.commandBufferCount= 1u;
 
-	vk_command_buffers_.push(nullptr);
-	res= vkAllocateCommandBuffers(vk_device_, &vk_command_buffer_allocate_info, &vk_command_buffers_.back());
-	const VkCommandBuffer command_buffer= vk_command_buffers_.back();
+	VkCommandBuffer command_buffer= nullptr;
+	res= vkAllocateCommandBuffers(vk_device_, &vk_command_buffer_allocate_info, &command_buffer);
+	vk_command_buffers_.push(command_buffer);
 
 	VkCommandBufferBeginInfo vk_command_buffer_begin_info;
 	std::memset(&vk_command_buffer_begin_info, 0, sizeof(vk_command_buffer_begin_info));
 	vk_command_buffer_begin_info.sType= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	vk_command_buffer_begin_info.pNext= nullptr;
 	vk_command_buffer_begin_info.flags= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
 	res= vkBeginCommandBuffer(command_buffer, &vk_command_buffer_begin_info);
 
 	// Draw here.
-
-	uint32_t image_index= ~0u;
-	res= vkAcquireNextImageKHR(vk_device_, vk_swapchain_, std::numeric_limits<uint64_t>::max(), nullptr, nullptr, &image_index);
 
 	VkImageSubresourceRange vk_image_range;
 	std::memset(&vk_image_range, 0, sizeof(vk_image_range));
 	vk_image_range.aspectMask= VK_IMAGE_ASPECT_COLOR_BIT;
 	vk_image_range.baseMipLevel= 0u;
-	vk_image_range.levelCount= VK_REMAINING_MIP_LEVELS;
+	vk_image_range.layerCount= 1u;
 	vk_image_range.baseArrayLayer= 0u;
-	vk_image_range.levelCount= VK_REMAINING_ARRAY_LAYERS;
+	vk_image_range.levelCount= 1u;
 
 	VkImageMemoryBarrier vk_image_memory_barrier;
 	std::memset(&vk_image_memory_barrier, 0, sizeof(vk_image_memory_barrier));
@@ -463,7 +473,7 @@ void SystemWindow::EndFrame()
 	clear_color.float32[0]= 1.0f;
 	clear_color.float32[1]= 0.0f;
 	clear_color.float32[2]= 1.0f;
-	clear_color.float32[3]= 0.0f;
+	clear_color.float32[3]= 0.5f;
 
 	vkCmdClearColorImage(command_buffer, vk_swapchain_images_[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1u, &vk_image_range);
 
@@ -480,17 +490,18 @@ void SystemWindow::EndFrame()
 
 	res= vkEndCommandBuffer(command_buffer);
 
+	const uint32_t wait_dst_stage_mask= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo vk_submit_info;
 	std::memset(&vk_submit_info, 0, sizeof(vk_submit_info));
 	vk_submit_info.sType= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	vk_submit_info.pNext= nullptr;
-	vk_submit_info.waitSemaphoreCount= 0u;
-	vk_submit_info.pWaitSemaphores= nullptr;
-	vk_submit_info.pWaitDstStageMask= 0u;
+	vk_submit_info.waitSemaphoreCount= 1u;
+	vk_submit_info.pWaitSemaphores= &vk_image_available_semaphore_;
+	vk_submit_info.pWaitDstStageMask= &wait_dst_stage_mask;
 	vk_submit_info.commandBufferCount= 1u;
 	vk_submit_info.pCommandBuffers= &command_buffer;
-	vk_submit_info.signalSemaphoreCount= 0u;
-	vk_submit_info.pSignalSemaphores= nullptr;
+	vk_submit_info.signalSemaphoreCount= 1u;
+	vk_submit_info.pSignalSemaphores= &vk_rendering_finished_semaphore_;
 
 	res= vkQueueSubmit(vk_queue_, 1u, &vk_submit_info, nullptr);
 
@@ -498,8 +509,8 @@ void SystemWindow::EndFrame()
 	std::memset(&vk_present_info, 0, sizeof(vk_present_info));
 	vk_present_info.sType= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	vk_present_info.pNext= nullptr;
-	vk_present_info.waitSemaphoreCount= 0u;
-	vk_present_info.pWaitSemaphores= nullptr;
+	vk_present_info.waitSemaphoreCount= 1u;
+	vk_present_info.pWaitSemaphores= &vk_rendering_finished_semaphore_;
 	vk_present_info.swapchainCount= 1u;
 	vk_present_info.pSwapchains= &vk_swapchain_;
 	vk_present_info.pImageIndices= &image_index;
