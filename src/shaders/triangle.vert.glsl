@@ -1,4 +1,4 @@
-#version 400
+#version 450
 
 void main()
 {
