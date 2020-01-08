@@ -7,7 +7,10 @@ namespace KK
 
 Host::Host()
 	: system_window_()
-	, world_renderer_(system_window_.GetVulkanDevice(), system_window_.GetSurfaceFormat())
+	, world_renderer_(
+		system_window_.GetVulkanDevice(),
+		system_window_.GetSurfaceFormat(),
+		system_window_.GetSwapchainImagesViews())
 	, prev_tick_time_(Clock::now())
 {
 }

@@ -5,14 +5,17 @@
 namespace KK
 {
 
-WorldRenderer::WorldRenderer(const VkDevice vk_device, const VkFormat surface_format)
+WorldRenderer::WorldRenderer(
+	const VkDevice vk_device,
+	const VkFormat surface_format,
+	const std::vector<VkImageView>& swapchain_image_views)
 	: vk_device_(vk_device)
 {
 	VkAttachmentDescription vk_attachment_description;
 	std::memset(&vk_attachment_description, 0, sizeof(vk_attachment_description));
 	vk_attachment_description.flags= 0u;
 	vk_attachment_description.format= surface_format;
-	vk_attachment_description.samples= 0; // TODO - maybe VK_SAMPLE_COUNT_1_BIT?
+	vk_attachment_description.samples= VK_SAMPLE_COUNT_1_BIT; // TODO - maybe use 0?
 	vk_attachment_description.loadOp= VK_ATTACHMENT_LOAD_OP_CLEAR;
 	vk_attachment_description.storeOp= VK_ATTACHMENT_STORE_OP_STORE;
 	vk_attachment_description.stencilLoadOp= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -48,12 +51,34 @@ WorldRenderer::WorldRenderer(const VkDevice vk_device, const VkFormat surface_fo
 	vk_render_pass_create_info.subpassCount= 1u;
 	vk_render_pass_create_info.pSubpasses= &vk_subpass_description;
 
-	auto ok= vkCreateRenderPass(vk_device_, &vk_render_pass_create_info, nullptr, &vk_render_pass_);
-	(void)ok;
+	vkCreateRenderPass(vk_device_, &vk_render_pass_create_info, nullptr, &vk_render_pass_);
+
+	vk_framebuffers_.resize(swapchain_image_views.size());
+	for(size_t i= 0u; i < swapchain_image_views.size(); ++i)
+	{
+		VkFramebufferCreateInfo vk_framebuffer_create_info;
+		std::memset(&vk_framebuffer_create_info, 0, sizeof(vk_framebuffer_create_info));
+		vk_framebuffer_create_info.sType= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		vk_framebuffer_create_info.pNext= nullptr;
+		vk_framebuffer_create_info.flags= 0u;
+		vk_framebuffer_create_info.renderPass= vk_render_pass_;
+		vk_framebuffer_create_info.attachmentCount= 1u;
+		vk_framebuffer_create_info.pAttachments= &swapchain_image_views[i];
+		vk_framebuffer_create_info.width= 800u;
+		vk_framebuffer_create_info.height= 600u;
+		vk_framebuffer_create_info.layers= 1u;
+
+		vkCreateFramebuffer(vk_device_, &vk_framebuffer_create_info, nullptr, &vk_framebuffers_[i]);
+	}
 }
 
 WorldRenderer::~WorldRenderer()
 {
+	for(const VkFramebuffer framebuffer : vk_framebuffers_)
+	{
+		vkDestroyFramebuffer(vk_device_, framebuffer, nullptr);
+	}
+
 	vkDestroyRenderPass(vk_device_, vk_render_pass_, nullptr);
 }
 

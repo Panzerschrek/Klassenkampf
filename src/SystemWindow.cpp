@@ -304,6 +304,29 @@ SystemWindow::SystemWindow()
 	vk_swapchain_images_.resize(swapchain_images_count);
 	vkGetSwapchainImagesKHR(vk_device_, vk_swapchain_, &swapchain_images_count, vk_swapchain_images_.data());
 
+	vk_swapchain_images_view_.resize(swapchain_images_count);
+	for(uint32_t i= 0u; i < swapchain_images_count; ++i)
+	{
+		VkImageViewCreateInfo vk_image_view_create_info;
+		std::memset(&vk_image_view_create_info, 0, sizeof(vk_image_view_create_info));
+		vk_image_view_create_info.sType= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		vk_image_view_create_info.pNext= nullptr;
+		vk_image_view_create_info.flags= 0u;
+		vk_image_view_create_info.image= vk_swapchain_images_[i];
+		vk_image_view_create_info.viewType= VK_IMAGE_VIEW_TYPE_2D;
+		vk_image_view_create_info.format= swapchain_image_format_;
+		vk_image_view_create_info.components.r= VK_COMPONENT_SWIZZLE_IDENTITY;
+		vk_image_view_create_info.components.g= VK_COMPONENT_SWIZZLE_IDENTITY;
+		vk_image_view_create_info.components.b= VK_COMPONENT_SWIZZLE_IDENTITY;
+		vk_image_view_create_info.components.a= VK_COMPONENT_SWIZZLE_IDENTITY;
+		vk_image_view_create_info.subresourceRange.aspectMask= VK_IMAGE_ASPECT_COLOR_BIT;
+		vk_image_view_create_info.subresourceRange.baseMipLevel= 0u;
+		vk_image_view_create_info.subresourceRange.levelCount= 1u;
+		vk_image_view_create_info.subresourceRange.baseArrayLayer= 0u;
+		vk_image_view_create_info.subresourceRange.layerCount= 1u;
+		vkCreateImageView(vk_device_, &vk_image_view_create_info, nullptr, &vk_swapchain_images_view_[i]);
+	}
+
 	VkCommandPoolCreateInfo vk_command_pool_create_info;
 	std::memset(&vk_command_pool_create_info, 0, sizeof(vk_command_pool_create_info));
 	vk_command_pool_create_info.sType= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -541,6 +564,11 @@ VkDevice SystemWindow::GetVulkanDevice() const
 VkFormat SystemWindow::GetSurfaceFormat() const
 {
 	return swapchain_image_format_;
+}
+
+const std::vector<VkImageView>& SystemWindow::GetSwapchainImagesViews() const
+{
+	return vk_swapchain_images_view_;
 }
 
 } // namespace KK
