@@ -21,6 +21,7 @@ public:
 	VkDevice GetVulkanDevice() const;
 	VkFormat GetSurfaceFormat() const;
 	const std::vector<VkImageView>& GetSwapchainImagesViews() const;
+	size_t GetCurrentSwapchainImageIndex() const;
 
 private:
 	struct FrameData

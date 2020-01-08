@@ -29,7 +29,7 @@ bool Host::Loop()
 	}
 
 	const auto command_buffer= system_window_.BeginFrame();
-	world_renderer_.Draw(command_buffer);
+	world_renderer_.Draw(command_buffer, system_window_.GetCurrentSwapchainImageIndex());
 	system_window_.EndFrame();
 
 	const Clock::time_point tick_end_time= Clock::now();

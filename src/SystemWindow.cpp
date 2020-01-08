@@ -519,35 +519,14 @@ void SystemWindow::ClearScreen(const VkCommandBuffer command_buffer)
 	VkImageMemoryBarrier vk_image_memory_barrier;
 	std::memset(&vk_image_memory_barrier, 0, sizeof(vk_image_memory_barrier));
 	vk_image_memory_barrier.sType= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	vk_image_memory_barrier.srcAccessMask= 0u;
-	vk_image_memory_barrier.dstAccessMask= VK_ACCESS_TRANSFER_WRITE_BIT;
+	vk_image_memory_barrier.srcAccessMask= VK_ACCESS_TRANSFER_WRITE_BIT;
+	vk_image_memory_barrier.dstAccessMask= VK_ACCESS_MEMORY_READ_BIT;
 	vk_image_memory_barrier.oldLayout= VK_IMAGE_LAYOUT_UNDEFINED;
-	vk_image_memory_barrier.newLayout= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	vk_image_memory_barrier.newLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	vk_image_memory_barrier.srcQueueFamilyIndex= vk_queue_familiy_index_;
 	vk_image_memory_barrier.dstQueueFamilyIndex= vk_queue_familiy_index_;
 	vk_image_memory_barrier.image= vk_swapchain_images_[current_swapchain_image_index_];
 	vk_image_memory_barrier.subresourceRange= vk_image_range;
-
-	vkCmdPipelineBarrier(
-		command_buffer,
-		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		0u, 0u, nullptr, 0u, nullptr, 1u,
-		&vk_image_memory_barrier);
-
-	VkClearColorValue clear_color;
-	std::memset(&clear_color, 0, sizeof(clear_color));
-	const size_t c_color_gradations= 16u;
-	clear_color.float32[0]= float(frame_count_ % c_color_gradations) / float(c_color_gradations - 1u);
-	clear_color.float32[1]= float(frame_count_ / c_color_gradations % c_color_gradations ) / float(c_color_gradations - 1u);
-	clear_color.float32[2]= float(frame_count_ / c_color_gradations / c_color_gradations % c_color_gradations) / float(c_color_gradations - 1u);
-	clear_color.float32[3]= 0.5f;
-
-	vkCmdClearColorImage(command_buffer, vk_swapchain_images_[current_swapchain_image_index_], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1u, &vk_image_range);
-
-	vk_image_memory_barrier.srcAccessMask= VK_ACCESS_TRANSFER_WRITE_BIT;
-	vk_image_memory_barrier.dstAccessMask= VK_ACCESS_MEMORY_READ_BIT;
-	vk_image_memory_barrier.oldLayout= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	vk_image_memory_barrier.newLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 	vkCmdPipelineBarrier(
 		command_buffer,
@@ -569,6 +548,11 @@ VkFormat SystemWindow::GetSurfaceFormat() const
 const std::vector<VkImageView>& SystemWindow::GetSwapchainImagesViews() const
 {
 	return vk_swapchain_images_view_;
+}
+
+size_t SystemWindow::GetCurrentSwapchainImageIndex() const
+{
+	return current_swapchain_image_index_;
 }
 
 } // namespace KK
