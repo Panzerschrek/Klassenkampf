@@ -12,6 +12,7 @@ public:
 	WorldRenderer(
 		VkDevice vk_device,
 		VkFormat surface_format,
+		VkExtent2D viewport_size,
 		const std::vector<VkImageView>& swapchain_image_views);
 
 	~WorldRenderer();
@@ -20,6 +21,7 @@ public:
 
 private:
 	const VkDevice vk_device_;
+	const VkExtent2D viewport_size_;
 
 	VkRenderPass vk_render_pass_= nullptr;
 	std::vector<VkFramebuffer> vk_framebuffers_;

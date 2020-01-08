@@ -10,6 +10,7 @@ Host::Host()
 	, world_renderer_(
 		system_window_.GetVulkanDevice(),
 		system_window_.GetSurfaceFormat(),
+		system_window_.GetViewportSize(),
 		system_window_.GetSwapchainImagesViews())
 	, prev_tick_time_(Clock::now())
 {

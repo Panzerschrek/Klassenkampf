@@ -20,6 +20,7 @@ public:
 
 	VkDevice GetVulkanDevice() const;
 	VkFormat GetSurfaceFormat() const;
+	VkExtent2D GetViewportSize() const;
 	const std::vector<VkImageView>& GetSwapchainImagesViews() const;
 	size_t GetCurrentSwapchainImageIndex() const;
 
@@ -41,6 +42,7 @@ private:
 	VkDevice vk_device_= nullptr;
 	VkQueue vk_queue_= nullptr;
 	uint32_t vk_queue_familiy_index_= ~0u;
+	VkExtent2D viewport_size_{};
 	VkSwapchainKHR vk_swapchain_= nullptr;
 	std::vector<VkImage> vk_swapchain_images_;
 	std::vector<VkImageView> vk_swapchain_images_view_;

@@ -162,6 +162,8 @@ SystemWindow::SystemWindow()
 		std::exit(-1);
 	}
 
+	SDL_Vulkan_GetDrawableSize(window_, reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
+
 	uint32_t device_count= 0u;
 	vkEnumeratePhysicalDevices(vk_instance_, &device_count, nullptr);
 	if(device_count == 0u)
@@ -543,6 +545,11 @@ VkDevice SystemWindow::GetVulkanDevice() const
 VkFormat SystemWindow::GetSurfaceFormat() const
 {
 	return swapchain_image_format_;
+}
+
+VkExtent2D SystemWindow::GetViewportSize() const
+{
+	return viewport_size_;
 }
 
 const std::vector<VkImageView>& SystemWindow::GetSwapchainImagesViews() const

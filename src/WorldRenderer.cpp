@@ -21,8 +21,10 @@ namespace Shaders
 WorldRenderer::WorldRenderer(
 	const VkDevice vk_device,
 	const VkFormat surface_format,
+	const VkExtent2D viewport_size,
 	const std::vector<VkImageView>& swapchain_image_views)
 	: vk_device_(vk_device)
+	, viewport_size_(viewport_size)
 {
 	VkAttachmentDescription vk_attachment_description;
 	std::memset(&vk_attachment_description, 0, sizeof(vk_attachment_description));
@@ -77,8 +79,8 @@ WorldRenderer::WorldRenderer(
 		vk_framebuffer_create_info.renderPass= vk_render_pass_;
 		vk_framebuffer_create_info.attachmentCount= 1u;
 		vk_framebuffer_create_info.pAttachments= &swapchain_image_views[i];
-		vk_framebuffer_create_info.width= 800u;
-		vk_framebuffer_create_info.height= 600u;
+		vk_framebuffer_create_info.width = viewport_size_.width ;
+		vk_framebuffer_create_info.height= viewport_size_.height;
 		vk_framebuffer_create_info.layers= 1u;
 
 		vkCreateFramebuffer(vk_device_, &vk_framebuffer_create_info, nullptr, &vk_framebuffers_[i]);
@@ -173,10 +175,10 @@ WorldRenderer::WorldRenderer(
 
 	VkViewport vk_viewport;
 	std::memset(&vk_viewport, 0, sizeof(vk_viewport));
-	vk_viewport.x= 0u;
-	vk_viewport.y= 0u;
-	vk_viewport.width = 800u;
-	vk_viewport.height= 600u;
+	vk_viewport.x= 0.0f;
+	vk_viewport.y= 0.0f;
+	vk_viewport.width = float(viewport_size_.width );
+	vk_viewport.height= float(viewport_size_.height);
 	vk_viewport.minDepth= 0.0f;
 	vk_viewport.maxDepth= 1.0f;
 
@@ -184,8 +186,7 @@ WorldRenderer::WorldRenderer(
 	std::memset(&vk_scissor, 0, sizeof(vk_scissor));
 	vk_scissor.offset.x= 0;
 	vk_scissor.offset.y= 0;
-	vk_scissor.extent.width = 800u;
-	vk_scissor.extent.height= 600u;
+	vk_scissor.extent= viewport_size_;
 
 	VkPipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info;
 	std::memset(&vk_pipieline_viewport_state_create_info, 0, sizeof(vk_pipieline_viewport_state_create_info));
@@ -334,32 +335,13 @@ void WorldRenderer::Draw(const VkCommandBuffer command_buffer, const size_t swap
 	render_pass_begin_info.framebuffer= vk_framebuffers_[swapchain_image_index];
 	render_pass_begin_info.renderArea.offset.x= 0u;
 	render_pass_begin_info.renderArea.offset.y= 0u;
-	render_pass_begin_info.renderArea.extent.width = 800u;
-	render_pass_begin_info.renderArea.extent.height= 600u;
+	render_pass_begin_info.renderArea.extent= viewport_size_;
 	render_pass_begin_info.clearValueCount= 1u;
 	render_pass_begin_info.pClearValues= &clear_value;
-
-	VkViewport vk_viewport;
-	std::memset(&vk_viewport, 0, sizeof(vk_viewport));
-	vk_viewport.x= 0u;
-	vk_viewport.y= 0u;
-	vk_viewport.width = 800u;
-	vk_viewport.height= 600u;
-	vk_viewport.minDepth= 0.0f;
-	vk_viewport.maxDepth= 1.0f;
-
-	VkRect2D vk_scissor;
-	std::memset(&vk_scissor, 0, sizeof(vk_scissor));
-	vk_scissor.offset.x= 0;
-	vk_scissor.offset.y= 0;
-	vk_scissor.extent.width = 800u;
-	vk_scissor.extent.height= 600u;
 
 	vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 	{
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
-		//vkCmdSetViewport(command_buffer, 0u, 1u, &vk_viewport);
-		//vkCmdSetScissor(command_buffer, 0, 1, &vk_scissor);
 		vkCmdDraw(command_buffer, 3, 1, 0, 0);
 	}
 	vkCmdEndRenderPass(command_buffer);
