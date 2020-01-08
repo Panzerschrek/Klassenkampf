@@ -18,6 +18,9 @@ public:
 	VkCommandBuffer BeginFrame();
 	void EndFrame();
 
+	VkDevice GetVulkanDevice() const;
+	VkFormat GetSurfaceFormat() const;
+
 private:
 	struct FrameData
 	{
@@ -38,6 +41,7 @@ private:
 	uint32_t vk_queue_familiy_index_= ~0u;
 	VkSwapchainKHR vk_swapchain_= nullptr;
 	std::vector<VkImage> vk_swapchain_images_;
+	VkFormat swapchain_image_format_= VK_FORMAT_UNDEFINED;
 	VkCommandPool vk_command_pool_= nullptr;
 
 	std::vector<FrameData> frames_data_;

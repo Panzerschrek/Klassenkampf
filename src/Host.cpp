@@ -6,7 +6,9 @@ namespace KK
 {
 
 Host::Host()
-	: prev_tick_time_(Clock::now())
+	: system_window_()
+	, world_renderer_(system_window_.GetVulkanDevice(), system_window_.GetSurfaceFormat())
+	, prev_tick_time_(Clock::now())
 {
 }
 
@@ -23,7 +25,8 @@ bool Host::Loop()
 
 	}
 
-	system_window_.BeginFrame();
+	const auto command_buffer= system_window_.BeginFrame();
+	world_renderer_.Draw(command_buffer);
 	system_window_.EndFrame();
 
 	const Clock::time_point tick_end_time= Clock::now();

@@ -1,5 +1,6 @@
 #pragma once
 #include "SystemWindow.hpp"
+#include "WorldRenderer.hpp"
 #include <chrono>
 
 
@@ -18,6 +19,7 @@ private:
 	using Clock= std::chrono::steady_clock;
 
 	SystemWindow system_window_;
+	WorldRenderer world_renderer_;
 	Clock::time_point prev_tick_time_;
 };
 

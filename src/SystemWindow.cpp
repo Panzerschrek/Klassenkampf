@@ -245,6 +245,7 @@ SystemWindow::SystemWindow()
 
 	// TODO - select one of
 	const VkSurfaceFormatKHR surface_format= surface_formats.back();
+	swapchain_image_format_= surface_format.format;
 
 	unsigned int present_mode_count= 0;
 	vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, vk_surface_, &present_mode_count, nullptr);
@@ -530,6 +531,16 @@ void SystemWindow::ClearScreen(const VkCommandBuffer command_buffer)
 		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 		0u, 0u, nullptr, 0u, nullptr, 1u,
 		&vk_image_memory_barrier);
+}
+
+VkDevice SystemWindow::GetVulkanDevice() const
+{
+	return vk_device_;
+}
+
+VkFormat SystemWindow::GetSurfaceFormat() const
+{
+	return swapchain_image_format_;
 }
 
 } // namespace KK
