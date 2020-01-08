@@ -20,6 +20,8 @@ private:
 
 	SystemWindow system_window_;
 	WorldRenderer world_renderer_;
+
+	const Clock::time_point init_time_;
 	Clock::time_point prev_tick_time_;
 };
 

@@ -1,4 +1,5 @@
 #include "WorldRenderer.hpp"
+#include <cmath>
 #include <cstring>
 
 
@@ -121,12 +122,20 @@ WorldRenderer::WorldRenderer(
 
 	vkCreateDescriptorSetLayout(vk_device_, &vk_descriptor_set_layout_create_info, nullptr, &vk_decriptor_set_layout_);
 
+	VkPushConstantRange vk_push_constant_range;
+	std::memset(&vk_push_constant_range, 0, sizeof(vk_push_constant_range));
+	vk_push_constant_range.stageFlags= VK_SHADER_STAGE_VERTEX_BIT;
+	vk_push_constant_range.offset= 0u;
+	vk_push_constant_range.size= sizeof(float) * 2;
+
 	VkPipelineLayoutCreateInfo vk_pipeline_layout_create_info;
 	std::memset(&vk_pipeline_layout_create_info, 0, sizeof(vk_pipeline_layout_create_info));
 	vk_pipeline_layout_create_info.sType= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	vk_pipeline_layout_create_info.pNext= nullptr;
 	vk_pipeline_layout_create_info.setLayoutCount= 1u;
 	vk_pipeline_layout_create_info.pSetLayouts= &vk_decriptor_set_layout_;
+	vk_pipeline_layout_create_info.pushConstantRangeCount= 1u;
+	vk_pipeline_layout_create_info.pPushConstantRanges= &vk_push_constant_range;
 
 	vkCreatePipelineLayout(vk_device_, &vk_pipeline_layout_create_info, nullptr, &vk_pipeline_layout_);
 
@@ -316,7 +325,10 @@ WorldRenderer::~WorldRenderer()
 	vkDestroyRenderPass(vk_device_, vk_render_pass_, nullptr);
 }
 
-void WorldRenderer::Draw(const VkCommandBuffer command_buffer, const size_t swapchain_image_index)
+void WorldRenderer::Draw(
+	const VkCommandBuffer command_buffer,
+	const size_t swapchain_image_index,
+	const float frame_time_s)
 {
 	(void)command_buffer;
 
@@ -341,6 +353,10 @@ void WorldRenderer::Draw(const VkCommandBuffer command_buffer, const size_t swap
 
 	vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 	{
+		float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
+
+		vkCmdPushConstants(command_buffer, vk_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pos_delta), &pos_delta);
+
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
 		vkCmdDraw(command_buffer, 3, 1, 0, 0);
 	}

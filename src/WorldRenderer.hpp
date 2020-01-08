@@ -17,7 +17,7 @@ public:
 
 	~WorldRenderer();
 
-	void Draw(VkCommandBuffer command_buffer, size_t swapchain_image_index);
+	void Draw(VkCommandBuffer command_buffer, size_t swapchain_image_index, float frame_time_s);
 
 private:
 	const VkDevice vk_device_;

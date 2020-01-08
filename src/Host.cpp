@@ -12,7 +12,8 @@ Host::Host()
 		system_window_.GetSurfaceFormat(),
 		system_window_.GetViewportSize(),
 		system_window_.GetSwapchainImagesViews())
-	, prev_tick_time_(Clock::now())
+	, init_time_(Clock::now())
+	, prev_tick_time_(init_time_)
 {
 }
 
@@ -30,7 +31,10 @@ bool Host::Loop()
 	}
 
 	const auto command_buffer= system_window_.BeginFrame();
-	world_renderer_.Draw(command_buffer, system_window_.GetCurrentSwapchainImageIndex());
+	world_renderer_.Draw(
+		command_buffer,
+		system_window_.GetCurrentSwapchainImageIndex(),
+		float(std::chrono::duration_cast<std::chrono::milliseconds>(tick_start_time - init_time_).count()) / 1000.0f);
 	system_window_.EndFrame();
 
 	const Clock::time_point tick_end_time= Clock::now();
