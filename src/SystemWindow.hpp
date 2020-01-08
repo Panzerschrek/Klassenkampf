@@ -2,7 +2,6 @@
 #include "SystemEvent.hpp"
 #include <SDL_video.h>
 #include <vulkan/vulkan.h>
-#include <queue>
 
 
 namespace KK
@@ -16,8 +15,19 @@ public:
 
 	SystemEvents ProcessEvents();
 
-	void BeginFrame();
+	VkCommandBuffer BeginFrame();
 	void EndFrame();
+
+private:
+	struct FrameData
+	{
+		VkCommandBuffer command_buffer;
+		VkSemaphore image_available_semaphore;
+		VkSemaphore rendering_finished_semaphore;
+	};
+
+private:
+	void ClearScreen(VkCommandBuffer command_buffer);
 
 private:
 	SDL_Window* window_= nullptr;
@@ -30,10 +40,10 @@ private:
 	std::vector<VkImage> vk_swapchain_images_;
 	VkCommandPool vk_command_pool_= nullptr;
 
-	VkSemaphore vk_rendering_finished_semaphore_= nullptr;
-	VkSemaphore vk_image_available_semaphore_= nullptr;
-
-	std::queue<VkCommandBuffer> vk_command_buffers_;
+	std::vector<FrameData> frames_data_;
+	const FrameData* current_frame_data_= nullptr;
+	size_t frame_count_= 0u;
+	uint32_t current_swapchain_image_index_= ~0u;
 };
 
 } // namespace KK

@@ -315,20 +315,38 @@ SystemWindow::SystemWindow()
 		std::exit(-1);
 	}
 
-	VkSemaphoreCreateInfo vk_semaphore_create_info;
-	std::memset(&vk_semaphore_create_info, 0, sizeof(vk_semaphore_create_info));
-	vk_semaphore_create_info.sType= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	vk_semaphore_create_info.pNext= nullptr;
-	vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &vk_rendering_finished_semaphore_);
-	vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &vk_image_available_semaphore_);
+	frames_data_.resize(16u); // TODO - maybe use less frame data?
+	for(FrameData& frame_data : frames_data_)
+	{
+		VkCommandBufferAllocateInfo vk_command_buffer_allocate_info;
+		std::memset(&vk_command_buffer_allocate_info, 0, sizeof(vk_command_buffer_allocate_info));
+		vk_command_buffer_allocate_info.sType= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		vk_command_buffer_allocate_info.pNext= nullptr;
+		vk_command_buffer_allocate_info.commandPool= vk_command_pool_;
+		vk_command_buffer_allocate_info.level= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		vk_command_buffer_allocate_info.commandBufferCount= 1u;
+
+		vkAllocateCommandBuffers(vk_device_, &vk_command_buffer_allocate_info, &frame_data.command_buffer);
+
+		VkSemaphoreCreateInfo vk_semaphore_create_info;
+		std::memset(&vk_semaphore_create_info, 0, sizeof(vk_semaphore_create_info));
+		vk_semaphore_create_info.sType= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		vk_semaphore_create_info.pNext= nullptr;
+		vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &frame_data.image_available_semaphore);
+		vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &frame_data.rendering_finished_semaphore);
+	}
 
 	return;
 }
 
 SystemWindow::~SystemWindow()
 {
-	vkDestroySemaphore(vk_device_, vk_image_available_semaphore_, nullptr);
-	vkDestroySemaphore(vk_device_, vk_rendering_finished_semaphore_, nullptr);
+	for(const FrameData& frame_data : frames_data_)
+	{
+		vkFreeCommandBuffers(vk_device_, vk_command_pool_, 1u, &frame_data.command_buffer);
+		vkDestroySemaphore(vk_device_, frame_data.image_available_semaphore, nullptr);
+		vkDestroySemaphore(vk_device_, frame_data.rendering_finished_semaphore, nullptr);
+	}
 
 	vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
 	vkDestroySwapchainKHR(vk_device_, vk_swapchain_, nullptr);
@@ -409,41 +427,63 @@ SystemEvents SystemWindow::ProcessEvents()
 	return result_events;
 }
 
-void SystemWindow::BeginFrame()
+VkCommandBuffer SystemWindow::BeginFrame()
 {
-}
+	current_frame_data_= &frames_data_[frame_count_ % frames_data_.size()];
+	++frame_count_;
 
-void SystemWindow::EndFrame()
-{
-	VkResult res= VK_SUCCESS;
+	vkAcquireNextImageKHR(vk_device_, vk_swapchain_, std::numeric_limits<uint64_t>::max(), current_frame_data_->image_available_semaphore, nullptr, &current_swapchain_image_index_);
 
-	uint32_t image_index= ~0u;
-	res= vkAcquireNextImageKHR(vk_device_, vk_swapchain_, std::numeric_limits<uint64_t>::max(), vk_image_available_semaphore_, nullptr, &image_index);
-
-	// Create one command buffer per frame.
-	// Delete old command buffers.
-
-	VkCommandBufferAllocateInfo vk_command_buffer_allocate_info;
-	std::memset(&vk_command_buffer_allocate_info, 0, sizeof(vk_command_buffer_allocate_info));
-	vk_command_buffer_allocate_info.sType= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	vk_command_buffer_allocate_info.pNext= nullptr;
-	vk_command_buffer_allocate_info.commandPool= vk_command_pool_;
-	vk_command_buffer_allocate_info.level= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	vk_command_buffer_allocate_info.commandBufferCount= 1u;
-
-	VkCommandBuffer command_buffer= nullptr;
-	res= vkAllocateCommandBuffers(vk_device_, &vk_command_buffer_allocate_info, &command_buffer);
-	vk_command_buffers_.push(command_buffer);
+	const VkCommandBuffer command_buffer= current_frame_data_->command_buffer;
 
 	VkCommandBufferBeginInfo vk_command_buffer_begin_info;
 	std::memset(&vk_command_buffer_begin_info, 0, sizeof(vk_command_buffer_begin_info));
 	vk_command_buffer_begin_info.sType= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	vk_command_buffer_begin_info.pNext= nullptr;
 	vk_command_buffer_begin_info.flags= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	res= vkBeginCommandBuffer(command_buffer, &vk_command_buffer_begin_info);
+	vkBeginCommandBuffer(command_buffer, &vk_command_buffer_begin_info);
 
-	// Draw here.
+	ClearScreen(command_buffer);
 
+	return command_buffer;
+}
+
+void SystemWindow::EndFrame()
+{
+	vkEndCommandBuffer(current_frame_data_->command_buffer);
+
+	const uint32_t wait_dst_stage_mask= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkSubmitInfo vk_submit_info;
+	std::memset(&vk_submit_info, 0, sizeof(vk_submit_info));
+	vk_submit_info.sType= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	vk_submit_info.pNext= nullptr;
+	vk_submit_info.waitSemaphoreCount= 1u;
+	vk_submit_info.pWaitSemaphores= &current_frame_data_->image_available_semaphore;
+	vk_submit_info.pWaitDstStageMask= &wait_dst_stage_mask;
+	vk_submit_info.commandBufferCount= 1u;
+	vk_submit_info.pCommandBuffers= &current_frame_data_->command_buffer;
+	vk_submit_info.signalSemaphoreCount= 1u;
+	vk_submit_info.pSignalSemaphores= &current_frame_data_->rendering_finished_semaphore;
+
+	vkQueueSubmit(vk_queue_, 1u, &vk_submit_info, nullptr);
+
+	VkPresentInfoKHR vk_present_info;
+	std::memset(&vk_present_info, 0, sizeof(vk_present_info));
+	vk_present_info.sType= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	vk_present_info.pNext= nullptr;
+	vk_present_info.waitSemaphoreCount= 1u;
+	vk_present_info.pWaitSemaphores= &current_frame_data_->rendering_finished_semaphore;
+	vk_present_info.swapchainCount= 1u;
+	vk_present_info.pSwapchains= &vk_swapchain_;
+	vk_present_info.pImageIndices= &current_swapchain_image_index_;
+	vk_present_info.pResults= nullptr;
+
+	vkQueuePresentKHR(vk_queue_, &vk_present_info);
+	vkDeviceWaitIdle(vk_device_);
+}
+
+void SystemWindow::ClearScreen(const VkCommandBuffer command_buffer)
+{
 	VkImageSubresourceRange vk_image_range;
 	std::memset(&vk_image_range, 0, sizeof(vk_image_range));
 	vk_image_range.aspectMask= VK_IMAGE_ASPECT_COLOR_BIT;
@@ -461,7 +501,7 @@ void SystemWindow::EndFrame()
 	vk_image_memory_barrier.newLayout= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	vk_image_memory_barrier.srcQueueFamilyIndex= vk_queue_familiy_index_;
 	vk_image_memory_barrier.dstQueueFamilyIndex= vk_queue_familiy_index_;
-	vk_image_memory_barrier.image= vk_swapchain_images_[image_index];
+	vk_image_memory_barrier.image= vk_swapchain_images_[current_swapchain_image_index_];
 	vk_image_memory_barrier.subresourceRange= vk_image_range;
 
 	vkCmdPipelineBarrier(
@@ -472,12 +512,13 @@ void SystemWindow::EndFrame()
 
 	VkClearColorValue clear_color;
 	std::memset(&clear_color, 0, sizeof(clear_color));
-	clear_color.float32[0]= 1.0f;
-	clear_color.float32[1]= 0.0f;
-	clear_color.float32[2]= 1.0f;
+	const size_t c_color_gradations= 16u;
+	clear_color.float32[0]= float(frame_count_ % c_color_gradations) / float(c_color_gradations - 1u);
+	clear_color.float32[1]= float(frame_count_ / c_color_gradations % c_color_gradations ) / float(c_color_gradations - 1u);
+	clear_color.float32[2]= float(frame_count_ / c_color_gradations / c_color_gradations % c_color_gradations) / float(c_color_gradations - 1u);
 	clear_color.float32[3]= 0.5f;
 
-	vkCmdClearColorImage(command_buffer, vk_swapchain_images_[image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1u, &vk_image_range);
+	vkCmdClearColorImage(command_buffer, vk_swapchain_images_[current_swapchain_image_index_], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1u, &vk_image_range);
 
 	vk_image_memory_barrier.srcAccessMask= VK_ACCESS_TRANSFER_WRITE_BIT;
 	vk_image_memory_barrier.dstAccessMask= VK_ACCESS_MEMORY_READ_BIT;
@@ -489,46 +530,6 @@ void SystemWindow::EndFrame()
 		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 		0u, 0u, nullptr, 0u, nullptr, 1u,
 		&vk_image_memory_barrier);
-
-	res= vkEndCommandBuffer(command_buffer);
-
-	const uint32_t wait_dst_stage_mask= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	VkSubmitInfo vk_submit_info;
-	std::memset(&vk_submit_info, 0, sizeof(vk_submit_info));
-	vk_submit_info.sType= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	vk_submit_info.pNext= nullptr;
-	vk_submit_info.waitSemaphoreCount= 1u;
-	vk_submit_info.pWaitSemaphores= &vk_image_available_semaphore_;
-	vk_submit_info.pWaitDstStageMask= &wait_dst_stage_mask;
-	vk_submit_info.commandBufferCount= 1u;
-	vk_submit_info.pCommandBuffers= &command_buffer;
-	vk_submit_info.signalSemaphoreCount= 1u;
-	vk_submit_info.pSignalSemaphores= &vk_rendering_finished_semaphore_;
-
-	res= vkQueueSubmit(vk_queue_, 1u, &vk_submit_info, nullptr);
-
-	VkPresentInfoKHR vk_present_info;
-	std::memset(&vk_present_info, 0, sizeof(vk_present_info));
-	vk_present_info.sType= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	vk_present_info.pNext= nullptr;
-	vk_present_info.waitSemaphoreCount= 1u;
-	vk_present_info.pWaitSemaphores= &vk_rendering_finished_semaphore_;
-	vk_present_info.swapchainCount= 1u;
-	vk_present_info.pSwapchains= &vk_swapchain_;
-	vk_present_info.pImageIndices= &image_index;
-	vk_present_info.pResults= nullptr;
-
-	res= vkQueuePresentKHR(vk_queue_, &vk_present_info);
-
-	res= vkDeviceWaitIdle(vk_device_);
-
-	if(vk_command_buffers_.size() >= 64u)
-	{
-		vkFreeCommandBuffers(vk_device_, vk_command_pool_, 1u, &vk_command_buffers_.front());
-		vk_command_buffers_.pop();
-	}
-
-	KK_UNUSED(res);
 }
 
 } // namespace KK
