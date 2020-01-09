@@ -402,6 +402,9 @@ SystemWindow::~SystemWindow()
 		vkDestroySemaphore(vk_device_, frame_data.rendering_finished_semaphore, nullptr);
 	}
 
+	for(const VkImageView image_view : vk_swapchain_images_view_)
+		vkDestroyImageView(vk_device_, image_view, nullptr);
+
 	vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
 	vkDestroySwapchainKHR(vk_device_, vk_swapchain_, nullptr);
 	vkDestroyDevice(vk_device_, nullptr);
