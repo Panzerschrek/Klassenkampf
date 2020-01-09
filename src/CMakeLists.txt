@@ -9,7 +9,7 @@ set(CMAKE_CXX_EXTENSIONS Off)
 
 # Setup compiler options.
 if(MSVC)
-	add_compile_options(/utf-8 /W3 /Wx)
+	add_compile_options(/utf-8 /W3 /WX)
 else()
 	add_compile_options(-Werror -Wall -Wextra -Wconversion)
 endif()

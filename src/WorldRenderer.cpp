@@ -286,7 +286,7 @@ WorldRenderer::WorldRenderer(
 	vk_graphics_pipeline_create_info.sType= VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	vk_graphics_pipeline_create_info.pNext= nullptr;
 	vk_graphics_pipeline_create_info.flags= 0u;
-	vk_graphics_pipeline_create_info.stageCount= std::size(vk_shader_stage_create_info);
+	vk_graphics_pipeline_create_info.stageCount= uint32_t(std::size(vk_shader_stage_create_info));
 	vk_graphics_pipeline_create_info.pStages= vk_shader_stage_create_info;
 	vk_graphics_pipeline_create_info.pVertexInputState= &vk_pipiline_vertex_input_state_create_info;
 	vk_graphics_pipeline_create_info.pInputAssemblyState= &vk_pipeline_input_assembly_state_create_info;

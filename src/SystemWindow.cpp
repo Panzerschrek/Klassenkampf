@@ -148,7 +148,7 @@ SystemWindow::SystemWindow()
 	vk_create_info.ppEnabledExtensionNames= extensions_list.data();
 #ifdef DEBUG
 	const char* const validation_names[]{ "VK_LAYER_LUNARG_core_validation" };
-	vk_create_info.enabledLayerCount= std::size(validation_names);
+	vk_create_info.enabledLayerCount= uint32_t(std::size(validation_names));
 	vk_create_info.ppEnabledLayerNames= validation_names;
 #endif
 
@@ -223,7 +223,7 @@ SystemWindow::SystemWindow()
 	vk_device_create_info.pQueueCreateInfos= &vk_device_queue_create_info;
 	vk_device_create_info.enabledLayerCount= 0u;
 	vk_device_create_info.ppEnabledLayerNames= nullptr;
-	vk_device_create_info.enabledExtensionCount= std::size(device_extension_names);
+	vk_device_create_info.enabledExtensionCount= uint32_t(std::size(device_extension_names));
 	vk_device_create_info.ppEnabledExtensionNames= device_extension_names;
 	vk_device_create_info.pEnabledFeatures= nullptr;
 
