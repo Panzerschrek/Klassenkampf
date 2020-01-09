@@ -146,11 +146,32 @@ SystemWindow::SystemWindow()
 	vk_create_info.pApplicationInfo= &vk_app_info;
 	vk_create_info.enabledExtensionCount= extension_names_count;
 	vk_create_info.ppEnabledExtensionNames= extensions_list.data();
+	vk_create_info.enabledLayerCount= 0u;
+	vk_create_info.ppEnabledLayerNames= nullptr;
 #ifdef DEBUG
-	const char* const validation_names[]{ "VK_LAYER_LUNARG_core_validation" };
-	vk_create_info.enabledLayerCount= uint32_t(std::size(validation_names));
-	vk_create_info.ppEnabledLayerNames= validation_names;
-#endif
+	{
+		uint32_t instance_layer_count= 0u;
+		vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
+
+		std::vector<VkLayerProperties> vk_layer_properties;
+		vk_layer_properties.resize(instance_layer_count);
+		vkEnumerateInstanceLayerProperties(&instance_layer_count, vk_layer_properties.data());
+
+		const char* const possible_validation_layers[]{
+			"VK_LAYER_LUNARG_core_validation",
+			"VK_LAYER_KHRONOS_validation",
+		};
+
+		for(const char* const& layer_name : possible_validation_layers)
+			for(const VkLayerProperties& property : vk_layer_properties)
+				if(std::strcmp(property.layerName, layer_name) == 0)
+				{
+					vk_create_info.enabledLayerCount= 1u;
+					vk_create_info.ppEnabledLayerNames= &layer_name;
+					break;
+				}
+	}
+	#endif
 
 	if(vkCreateInstance(&vk_create_info, nullptr, &vk_instance_) != VK_SUCCESS)
 	{
