@@ -245,8 +245,15 @@ SystemWindow::SystemWindow()
 	surface_formats.resize(surface_format_count);
 	vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, vk_surface_, &surface_format_count, surface_formats.data());
 
-	// TODO - select one of
-	const VkSurfaceFormatKHR surface_format= surface_formats.back();
+	VkSurfaceFormatKHR surface_format= surface_formats.back();
+	for(const VkSurfaceFormatKHR& surface_format_variant : surface_formats)
+	{
+		if(surface_format_variant.format == VK_FORMAT_B8G8R8A8_UNORM)
+		{
+			surface_format= surface_format_variant;
+			break;
+		}
+	}
 	swapchain_image_format_= surface_format.format;
 
 	unsigned int present_mode_count= 0;
