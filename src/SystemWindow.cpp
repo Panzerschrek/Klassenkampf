@@ -196,8 +196,20 @@ SystemWindow::SystemWindow()
 	physical_devices.resize(device_count);
 	vkEnumeratePhysicalDevices(vk_instance_, &device_count, physical_devices.data());
 
-	// TODO - select appropriate device or read device id from settings.
-	const VkPhysicalDevice physical_device= physical_devices.front();
+	VkPhysicalDevice physical_device= physical_devices.front();
+	if(physical_devices.size() > 1u)
+	{
+		for(const VkPhysicalDevice physical_device_candidate : physical_devices)
+		{
+			VkPhysicalDeviceProperties porperties;
+			vkGetPhysicalDeviceProperties(physical_device_candidate,& porperties);
+			if(porperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			{
+				physical_device= physical_device_candidate;
+				break;
+			}
+		}
+	}
 
 	uint32_t queue_family_property_count= 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_property_count, nullptr);
