@@ -20,6 +20,7 @@ namespace Shaders
 struct WorldVertex
 {
 	float pos[3];
+	uint8_t color[4];
 };
 
 } // namespace
@@ -169,12 +170,16 @@ WorldRenderer::WorldRenderer(
 	vk_vertex_input_binding_description.inputRate= VK_VERTEX_INPUT_RATE_VERTEX;
 	vk_vertex_input_binding_description.stride= sizeof(WorldVertex);
 
-	VkVertexInputAttributeDescription vk_vertex_input_attribute_description;
-	std::memset(&vk_vertex_input_attribute_description, 0, sizeof(vk_vertex_input_attribute_description));
-	vk_vertex_input_attribute_description.location= 0u;
-	vk_vertex_input_attribute_description.binding= 0u;
-	vk_vertex_input_attribute_description.format= VK_FORMAT_R32G32B32_SFLOAT;
-	vk_vertex_input_attribute_description.offset= 0u;
+	VkVertexInputAttributeDescription vk_vertex_input_attribute_description[2];
+	std::memset(vk_vertex_input_attribute_description, 0, sizeof(vk_vertex_input_attribute_description));
+	vk_vertex_input_attribute_description[0].location= 0u;
+	vk_vertex_input_attribute_description[0].binding= 0u;
+	vk_vertex_input_attribute_description[0].format= VK_FORMAT_R32G32B32_SFLOAT;
+	vk_vertex_input_attribute_description[0].offset= 0u;
+	vk_vertex_input_attribute_description[1].location= 1u;
+	vk_vertex_input_attribute_description[1].binding= 0u;
+	vk_vertex_input_attribute_description[1].format= VK_FORMAT_R8G8B8A8_UNORM;
+	vk_vertex_input_attribute_description[1].offset= sizeof(float) * 3;
 
 	VkPipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info;
 	std::memset(&vk_pipiline_vertex_input_state_create_info, 0, sizeof(vk_pipiline_vertex_input_state_create_info));
@@ -183,8 +188,8 @@ WorldRenderer::WorldRenderer(
 	vk_pipiline_vertex_input_state_create_info.flags= 0u;
 	vk_pipiline_vertex_input_state_create_info.vertexBindingDescriptionCount= 1u;
 	vk_pipiline_vertex_input_state_create_info.pVertexBindingDescriptions= &vk_vertex_input_binding_description;
-	vk_pipiline_vertex_input_state_create_info.vertexAttributeDescriptionCount= 1u;
-	vk_pipiline_vertex_input_state_create_info.pVertexAttributeDescriptions= &vk_vertex_input_attribute_description;
+	vk_pipiline_vertex_input_state_create_info.vertexAttributeDescriptionCount= 2u;
+	vk_pipiline_vertex_input_state_create_info.pVertexAttributeDescriptions= vk_vertex_input_attribute_description;
 
 	VkPipelineTessellationStateCreateInfo vk_pipeline_tesselation_state_create_info;
 	std::memset(&vk_pipeline_tesselation_state_create_info, 0, sizeof(vk_pipeline_tesselation_state_create_info));
@@ -328,9 +333,9 @@ WorldRenderer::WorldRenderer(
 
 	std::vector<WorldVertex> world_vertices
 	{
-		{ -0.5f, -0.5f, 0.0f },
-		{ +0.5f, -0.5f, 0.0f },
-		{ +0.5f, +0.5f, 0.0f },
+		{ { -0.5f, -0.5f, 0.0f }, { 255, 0, 0, 0 }, },
+		{ { +0.5f, -0.5f, 0.0f }, { 0, 255, 0, 0 }, },
+		{ { +0.5f, +0.5f, 0.0f }, { 0, 0, 255, 0 }, },
 	};
 
 	VkBufferCreateInfo vk_vertex_buffer_create_info;
@@ -402,9 +407,9 @@ void WorldRenderer::Draw(
 
 	VkClearValue clear_value;
 	std::memset(&clear_value, 0, sizeof(clear_value));
-	clear_value.color.float32[0]= 0.25f;
-	clear_value.color.float32[1]= 1.0f;
-	clear_value.color.float32[2]= 0.25f;
+	clear_value.color.float32[0]= 0.2f;
+	clear_value.color.float32[1]= 0.1f;
+	clear_value.color.float32[2]= 0.1f;
 	clear_value.color.float32[3]= 0.5f;
 
 	VkRenderPassBeginInfo render_pass_begin_info;
