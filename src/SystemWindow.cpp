@@ -402,7 +402,7 @@ SystemWindow::SystemWindow()
 		vkCreateSemaphore(vk_device_, &vk_semaphore_create_info, nullptr, &frame_data.rendering_finished_semaphore);
 	}
 
-	return;
+	vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties_);
 }
 
 SystemWindow::~SystemWindow()
@@ -593,6 +593,11 @@ VkFormat SystemWindow::GetSurfaceFormat() const
 VkExtent2D SystemWindow::GetViewportSize() const
 {
 	return viewport_size_;
+}
+
+const VkPhysicalDeviceMemoryProperties& SystemWindow::GetMemoryProperties() const
+{
+	return memory_properties_;
 }
 
 const std::vector<VkImageView>& SystemWindow::GetSwapchainImagesViews() const

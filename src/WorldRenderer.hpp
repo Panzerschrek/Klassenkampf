@@ -13,6 +13,7 @@ public:
 		VkDevice vk_device,
 		VkFormat surface_format,
 		VkExtent2D viewport_size,
+		const VkPhysicalDeviceMemoryProperties& memory_properties,
 		const std::vector<VkImageView>& swapchain_image_views);
 
 	~WorldRenderer();
@@ -31,6 +32,9 @@ private:
 	VkDescriptorSetLayout vk_decriptor_set_layout_= nullptr;
 	VkPipelineLayout vk_pipeline_layout_= nullptr;
 	VkPipeline vk_pipeline_= nullptr;
+
+	VkBuffer vk_vertex_buffer_= nullptr;
+	VkDeviceMemory vk_vertex_buffer_memory_= nullptr;
 };
 
 } // namespace KK

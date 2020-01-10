@@ -17,12 +17,18 @@ namespace Shaders
 
 } // namespace Shaders
 
+struct WorldVertex
+{
+	float pos[3];
+};
+
 } // namespace
 
 WorldRenderer::WorldRenderer(
 	const VkDevice vk_device,
 	const VkFormat surface_format,
 	const VkExtent2D viewport_size,
+	const VkPhysicalDeviceMemoryProperties& memory_properties,
 	const std::vector<VkImageView>& swapchain_image_views)
 	: vk_device_(vk_device)
 	, viewport_size_(viewport_size)
@@ -157,15 +163,28 @@ WorldRenderer::WorldRenderer(
 	vk_shader_stage_create_info[1].module= shader_frag_;
 	vk_shader_stage_create_info[1].pName= "main";
 
+	VkVertexInputBindingDescription vk_vertex_input_binding_description;
+	std::memset(&vk_vertex_input_binding_description, 0, sizeof(vk_vertex_input_binding_description));
+	vk_vertex_input_binding_description.binding= 0u;
+	vk_vertex_input_binding_description.inputRate= VK_VERTEX_INPUT_RATE_VERTEX;
+	vk_vertex_input_binding_description.stride= sizeof(WorldVertex);
+
+	VkVertexInputAttributeDescription vk_vertex_input_attribute_description;
+	std::memset(&vk_vertex_input_attribute_description, 0, sizeof(vk_vertex_input_attribute_description));
+	vk_vertex_input_attribute_description.location= 0u;
+	vk_vertex_input_attribute_description.binding= 0u;
+	vk_vertex_input_attribute_description.format= VK_FORMAT_R32G32B32_SFLOAT;
+	vk_vertex_input_attribute_description.offset= 0u;
+
 	VkPipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info;
 	std::memset(&vk_pipiline_vertex_input_state_create_info, 0, sizeof(vk_pipiline_vertex_input_state_create_info));
 	vk_pipiline_vertex_input_state_create_info.sType= VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vk_pipiline_vertex_input_state_create_info.pNext= nullptr;
 	vk_pipiline_vertex_input_state_create_info.flags= 0u;
-	vk_pipiline_vertex_input_state_create_info.vertexBindingDescriptionCount= 0u;
-	vk_pipiline_vertex_input_state_create_info.pVertexBindingDescriptions= nullptr;
-	vk_pipiline_vertex_input_state_create_info.vertexAttributeDescriptionCount= 0u;
-	vk_pipiline_vertex_input_state_create_info.pVertexAttributeDescriptions= nullptr;
+	vk_pipiline_vertex_input_state_create_info.vertexBindingDescriptionCount= 1u;
+	vk_pipiline_vertex_input_state_create_info.pVertexBindingDescriptions= &vk_vertex_input_binding_description;
+	vk_pipiline_vertex_input_state_create_info.vertexAttributeDescriptionCount= 1u;
+	vk_pipiline_vertex_input_state_create_info.pVertexAttributeDescriptions= &vk_vertex_input_attribute_description;
 
 	VkPipelineTessellationStateCreateInfo vk_pipeline_tesselation_state_create_info;
 	std::memset(&vk_pipeline_tesselation_state_create_info, 0, sizeof(vk_pipeline_tesselation_state_create_info));
@@ -303,12 +322,61 @@ WorldRenderer::WorldRenderer(
 	vk_graphics_pipeline_create_info.basePipelineHandle= nullptr;
 	vk_graphics_pipeline_create_info.basePipelineIndex= ~0u;
 
-	auto res= vkCreateGraphicsPipelines(vk_device_, nullptr, 1u, &vk_graphics_pipeline_create_info, nullptr, &vk_pipeline_);
-	(void)res;
+	vkCreateGraphicsPipelines(vk_device_, nullptr, 1u, &vk_graphics_pipeline_create_info, nullptr, &vk_pipeline_);
+
+	// Create vertex buffer
+
+	std::vector<WorldVertex> world_vertices
+	{
+		{ -0.5f, -0.5f, 0.0f },
+		{ +0.5f, -0.5f, 0.0f },
+		{ +0.5f, +0.5f, 0.0f },
+	};
+
+	VkBufferCreateInfo vk_vertex_buffer_create_info;
+	std::memset(&vk_vertex_buffer_create_info, 0, sizeof(vk_vertex_buffer_create_info));
+	vk_vertex_buffer_create_info.sType= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	vk_vertex_buffer_create_info.pNext= nullptr;
+	vk_vertex_buffer_create_info.size= world_vertices.size() * sizeof(WorldVertex);
+	vk_vertex_buffer_create_info.usage= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	vk_vertex_buffer_create_info.sharingMode= VK_SHARING_MODE_EXCLUSIVE;
+	vk_vertex_buffer_create_info.queueFamilyIndexCount= 0u;
+	vk_vertex_buffer_create_info.pQueueFamilyIndices= nullptr;
+
+	vkCreateBuffer(vk_device_, &vk_vertex_buffer_create_info, nullptr, &vk_vertex_buffer_);
+
+	VkMemoryRequirements vertex_buffer_memory_requirements;
+	vkGetBufferMemoryRequirements(vk_device_, vk_vertex_buffer_, &vertex_buffer_memory_requirements);
+
+	VkMemoryAllocateInfo vk_memory_allocate_info;
+	std::memset(&vk_memory_allocate_info, 0, sizeof(vk_memory_allocate_info));
+	vk_memory_allocate_info.sType= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	vk_memory_allocate_info.pNext= nullptr;
+	vk_memory_allocate_info.allocationSize= vertex_buffer_memory_requirements.size;
+
+	for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+	{
+		if((vertex_buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+			(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0 &&
+			(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0)
+			vk_memory_allocate_info.memoryTypeIndex= i;
+	}
+
+	vkAllocateMemory(vk_device_, &vk_memory_allocate_info, nullptr, &vk_vertex_buffer_memory_);
+
+	vkBindBufferMemory(vk_device_, vk_vertex_buffer_, vk_vertex_buffer_memory_, 0u);
+
+	void* vertex_data_gpu_size= nullptr;
+	vkMapMemory(vk_device_, vk_vertex_buffer_memory_, 0u, vk_memory_allocate_info.allocationSize, 0, &vertex_data_gpu_size);
+	std::memcpy(vertex_data_gpu_size, world_vertices.data(), world_vertices.size() * sizeof(WorldVertex));
+	vkUnmapMemory(vk_device_, vk_vertex_buffer_memory_);
 }
 
 WorldRenderer::~WorldRenderer()
 {
+	vkFreeMemory(vk_device_, vk_vertex_buffer_memory_, nullptr);
+	vkDestroyBuffer(vk_device_, vk_vertex_buffer_, nullptr);
+
 	vkDestroyPipeline(vk_device_, vk_pipeline_, nullptr);
 
 	vkDestroyDescriptorSetLayout(vk_device_, vk_decriptor_set_layout_, nullptr);
@@ -353,6 +421,9 @@ void WorldRenderer::Draw(
 
 	vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 	{
+		const VkDeviceSize offsets= 0u;
+		vkCmdBindVertexBuffers(command_buffer, 0u, 1u, &vk_vertex_buffer_, &offsets);
+
 		float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
 
 		vkCmdPushConstants(command_buffer, vk_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pos_delta), &pos_delta);

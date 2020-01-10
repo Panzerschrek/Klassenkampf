@@ -11,6 +11,7 @@ Host::Host()
 		system_window_.GetVulkanDevice(),
 		system_window_.GetSurfaceFormat(),
 		system_window_.GetViewportSize(),
+		system_window_.GetMemoryProperties(),
 		system_window_.GetSwapchainImagesViews())
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
