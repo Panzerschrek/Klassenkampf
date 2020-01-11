@@ -336,49 +336,96 @@ WorldRenderer::WorldRenderer(
 		{ { -0.5f, -0.5f, 0.0f }, { 255, 0, 0, 0 }, },
 		{ { +0.5f, -0.5f, 0.0f }, { 0, 255, 0, 0 }, },
 		{ { +0.5f, +0.5f, 0.0f }, { 0, 0, 255, 0 }, },
+		{ { -0.5f, +0.5f, 0.0f }, { 0, 0, 0,   0 }, },
 	};
 
-	VkBufferCreateInfo vk_vertex_buffer_create_info;
-	std::memset(&vk_vertex_buffer_create_info, 0, sizeof(vk_vertex_buffer_create_info));
-	vk_vertex_buffer_create_info.sType= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	vk_vertex_buffer_create_info.pNext= nullptr;
-	vk_vertex_buffer_create_info.size= world_vertices.size() * sizeof(WorldVertex);
-	vk_vertex_buffer_create_info.usage= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	vk_vertex_buffer_create_info.sharingMode= VK_SHARING_MODE_EXCLUSIVE;
-	vk_vertex_buffer_create_info.queueFamilyIndexCount= 0u;
-	vk_vertex_buffer_create_info.pQueueFamilyIndices= nullptr;
-
-	vkCreateBuffer(vk_device_, &vk_vertex_buffer_create_info, nullptr, &vk_vertex_buffer_);
-
-	VkMemoryRequirements vertex_buffer_memory_requirements;
-	vkGetBufferMemoryRequirements(vk_device_, vk_vertex_buffer_, &vertex_buffer_memory_requirements);
-
-	VkMemoryAllocateInfo vk_memory_allocate_info;
-	std::memset(&vk_memory_allocate_info, 0, sizeof(vk_memory_allocate_info));
-	vk_memory_allocate_info.sType= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	vk_memory_allocate_info.pNext= nullptr;
-	vk_memory_allocate_info.allocationSize= vertex_buffer_memory_requirements.size;
-
-	for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+	std::vector<uint16_t> world_indeces{ 0, 1, 2, 0, 2, 3 };
 	{
-		if((vertex_buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-			(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0 &&
-			(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0)
-			vk_memory_allocate_info.memoryTypeIndex= i;
+		VkBufferCreateInfo vk_vertex_buffer_create_info;
+		std::memset(&vk_vertex_buffer_create_info, 0, sizeof(vk_vertex_buffer_create_info));
+		vk_vertex_buffer_create_info.sType= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		vk_vertex_buffer_create_info.pNext= nullptr;
+		vk_vertex_buffer_create_info.size= world_vertices.size() * sizeof(WorldVertex);
+		vk_vertex_buffer_create_info.usage= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		vk_vertex_buffer_create_info.sharingMode= VK_SHARING_MODE_EXCLUSIVE;
+		vk_vertex_buffer_create_info.queueFamilyIndexCount= 0u;
+		vk_vertex_buffer_create_info.pQueueFamilyIndices= nullptr;
+
+		vkCreateBuffer(vk_device_, &vk_vertex_buffer_create_info, nullptr, &vk_vertex_buffer_);
+
+		VkMemoryRequirements vertex_buffer_memory_requirements;
+		vkGetBufferMemoryRequirements(vk_device_, vk_vertex_buffer_, &vertex_buffer_memory_requirements);
+
+		VkMemoryAllocateInfo vk_memory_allocate_info;
+		std::memset(&vk_memory_allocate_info, 0, sizeof(vk_memory_allocate_info));
+		vk_memory_allocate_info.sType= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		vk_memory_allocate_info.pNext= nullptr;
+		vk_memory_allocate_info.allocationSize= vertex_buffer_memory_requirements.size;
+
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((vertex_buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0)
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vkAllocateMemory(vk_device_, &vk_memory_allocate_info, nullptr, &vk_vertex_buffer_memory_);
+
+		vkBindBufferMemory(vk_device_, vk_vertex_buffer_, vk_vertex_buffer_memory_, 0u);
+
+		void* vertex_data_gpu_size= nullptr;
+		vkMapMemory(vk_device_, vk_vertex_buffer_memory_, 0u, vk_memory_allocate_info.allocationSize, 0, &vertex_data_gpu_size);
+		std::memcpy(vertex_data_gpu_size, world_vertices.data(), world_vertices.size() * sizeof(WorldVertex));
+		vkUnmapMemory(vk_device_, vk_vertex_buffer_memory_);
 	}
 
-	vkAllocateMemory(vk_device_, &vk_memory_allocate_info, nullptr, &vk_vertex_buffer_memory_);
+	{
+		VkBufferCreateInfo vk_index_buffer_create_info;
+		std::memset(&vk_index_buffer_create_info, 0, sizeof(vk_index_buffer_create_info));
+		vk_index_buffer_create_info.sType= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		vk_index_buffer_create_info.pNext= nullptr;
+		vk_index_buffer_create_info.size= world_indeces.size() * sizeof(uint16_t);
+		vk_index_buffer_create_info.usage= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+		vk_index_buffer_create_info.sharingMode= VK_SHARING_MODE_EXCLUSIVE;
+		vk_index_buffer_create_info.queueFamilyIndexCount= 0u;
+		vk_index_buffer_create_info.pQueueFamilyIndices= nullptr;
 
-	vkBindBufferMemory(vk_device_, vk_vertex_buffer_, vk_vertex_buffer_memory_, 0u);
+		vkCreateBuffer(vk_device_, &vk_index_buffer_create_info, nullptr, &vk_index_buffer_);
 
-	void* vertex_data_gpu_size= nullptr;
-	vkMapMemory(vk_device_, vk_vertex_buffer_memory_, 0u, vk_memory_allocate_info.allocationSize, 0, &vertex_data_gpu_size);
-	std::memcpy(vertex_data_gpu_size, world_vertices.data(), world_vertices.size() * sizeof(WorldVertex));
-	vkUnmapMemory(vk_device_, vk_vertex_buffer_memory_);
+		VkMemoryRequirements index_buffer_memory_requirements;
+		vkGetBufferMemoryRequirements(vk_device_, vk_index_buffer_, &index_buffer_memory_requirements);
+
+		VkMemoryAllocateInfo vk_memory_allocate_info;
+		std::memset(&vk_memory_allocate_info, 0, sizeof(vk_memory_allocate_info));
+		vk_memory_allocate_info.sType= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		vk_memory_allocate_info.pNext= nullptr;
+		vk_memory_allocate_info.allocationSize= index_buffer_memory_requirements.size;
+
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((index_buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0)
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vkAllocateMemory(vk_device_, &vk_memory_allocate_info, nullptr, &vk_index_buffer_memory_);
+
+		vkBindBufferMemory(vk_device_, vk_index_buffer_, vk_index_buffer_memory_, 0u);
+
+		void* index_data_gpu_size= nullptr;
+		vkMapMemory(vk_device_, vk_index_buffer_memory_, 0u, vk_memory_allocate_info.allocationSize, 0, &index_data_gpu_size);
+		std::memcpy(index_data_gpu_size, world_indeces.data(), world_indeces.size() * sizeof(uint16_t));
+		vkUnmapMemory(vk_device_, vk_index_buffer_memory_);
+	}
 }
 
 WorldRenderer::~WorldRenderer()
 {
+	vkFreeMemory(vk_device_, vk_index_buffer_memory_, nullptr);
+	vkDestroyBuffer(vk_device_, vk_index_buffer_, nullptr);
+
 	vkFreeMemory(vk_device_, vk_vertex_buffer_memory_, nullptr);
 	vkDestroyBuffer(vk_device_, vk_vertex_buffer_, nullptr);
 
@@ -428,13 +475,14 @@ void WorldRenderer::Draw(
 	{
 		const VkDeviceSize offsets= 0u;
 		vkCmdBindVertexBuffers(command_buffer, 0u, 1u, &vk_vertex_buffer_, &offsets);
+		vkCmdBindIndexBuffer(command_buffer, vk_index_buffer_, 0, VK_INDEX_TYPE_UINT16);
 
 		float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
 
 		vkCmdPushConstants(command_buffer, vk_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pos_delta), &pos_delta);
 
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
-		vkCmdDraw(command_buffer, 3, 1, 0, 0);
+		vkCmdDrawIndexed(command_buffer, 6u, 1u, 0u, 0u, 0u);
 	}
 	vkCmdEndRenderPass(command_buffer);
 }

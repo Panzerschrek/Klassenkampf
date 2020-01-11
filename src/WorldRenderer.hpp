@@ -35,6 +35,9 @@ private:
 
 	VkBuffer vk_vertex_buffer_= nullptr;
 	VkDeviceMemory vk_vertex_buffer_memory_= nullptr;
+
+	VkBuffer vk_index_buffer_= nullptr;
+	VkDeviceMemory vk_index_buffer_memory_= nullptr;
 };
 
 } // namespace KK
