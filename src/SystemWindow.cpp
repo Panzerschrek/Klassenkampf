@@ -108,6 +108,12 @@ SystemWindow::SDLWindowDestroyer::~SDLWindowDestroyer()
 
 SystemWindow::SystemWindow()
 {
+	#ifdef DEBUG
+	const bool use_debug_extensions_and_layers= true;
+	#else
+	const bool use_debug_extensions_and_layers= true;
+	#endif
+
 	// TODO - check errors.
 	SDL_Init(SDL_INIT_VIDEO);
 
@@ -118,6 +124,7 @@ SystemWindow::SystemWindow()
 			800, 600,
 			SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 
+	// Get vulkan extensiion, needed by SDL.
 	unsigned int extension_names_count= 0;
 	if( !SDL_Vulkan_GetInstanceExtensions(sdl_window_wrapper_.w, &extension_names_count, nullptr) )
 	{
@@ -132,10 +139,13 @@ SystemWindow::SystemWindow()
 		std::exit(-1);
 	}
 
-#ifdef DEBUG
-	extensions_list.push_back("VK_EXT_debug_report");
-	++extension_names_count;
-#endif
+	if(use_debug_extensions_and_layers)
+	{
+		extensions_list.push_back("VK_EXT_debug_report");
+		++extension_names_count;
+	}
+
+	// Create Vulkan instance.
 	const vk::ApplicationInfo vk_app_info(
 		"Klassenkampf",
 		VK_MAKE_VERSION(0, 0, 1),
@@ -148,10 +158,12 @@ SystemWindow::SystemWindow()
 		&vk_app_info,
 		0u, nullptr,
 		extension_names_count, extensions_list.data());
-#ifdef DEBUG
+
+	if(use_debug_extensions_and_layers)
 	{
 		const std::vector<vk::LayerProperties> vk_layer_properties= vk::enumerateInstanceLayerProperties();
-		const char* const possible_validation_layers[]{
+		const char* const possible_validation_layers[]
+		{
 			"VK_LAYER_LUNARG_core_validation",
 			"VK_LAYER_KHRONOS_validation",
 		};
@@ -165,11 +177,10 @@ SystemWindow::SystemWindow()
 					break;
 				}
 	}
-	#endif
 
 	vk_instance_= vk::createInstanceUnique(vk_instance_create_info);
 
-
+	// Create surface.
 	VkSurfaceKHR vk_tmp_surface;
 	if(!SDL_Vulkan_CreateSurface(sdl_window_wrapper_.w, *vk_instance_, &vk_tmp_surface))
 	{
@@ -179,6 +190,7 @@ SystemWindow::SystemWindow()
 
 	SDL_Vulkan_GetDrawableSize(sdl_window_wrapper_.w, reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
 
+	// Create physical device. Prefer usage of discrete GPU. TODO - allow user to select device.
 	const std::vector<vk::PhysicalDevice> physical_devices= vk_instance_->enumeratePhysicalDevices();
 	vk::PhysicalDevice physical_device= physical_devices.front();
 	if(physical_devices.size() > 1u)
@@ -194,6 +206,7 @@ SystemWindow::SystemWindow()
 		}
 	}
 
+	// Select queue family.
 	const std::vector<vk::QueueFamilyProperties> queue_family_properties= physical_device.getQueueFamilyProperties();
 	uint32_t queue_family_index= ~0u;
 	for(uint32_t i= 0u; i < queue_family_properties.size(); ++i)
@@ -226,7 +239,8 @@ SystemWindow::SystemWindow()
 		0u, nullptr,
 		uint32_t(std::size(device_extension_names)), device_extension_names);
 
-	// HACK! createDeviceUnique works wrong
+	// Create physical device.
+	// HACK! createDeviceUnique works wrong! Use other method instead.
 	//vk_device_= physical_device.createDeviceUnique(vk_device_create_info);
 	vk::Device vk_device_tmp;
 	if((physical_device.createDevice(&vk_device_create_info, nullptr, &vk_device_tmp)) != vk::Result::eSuccess)
@@ -237,6 +251,7 @@ SystemWindow::SystemWindow()
 
 	vk_queue_= vk_device_->getQueue(queue_family_index, 0u);
 
+	// Select surface format. Prefer usage of normalized rbga32.
 	const std::vector<vk::SurfaceFormatKHR> surface_formats= physical_device.getSurfaceFormatsKHR(vk_surface_);
 	vk::SurfaceFormatKHR surface_format= surface_formats.back();
 	for(const vk::SurfaceFormatKHR& surface_format_variant : surface_formats)
@@ -249,6 +264,7 @@ SystemWindow::SystemWindow()
 	}
 	swapchain_image_format_= surface_format.format;
 
+	// Select present mode. Prefer usage of tripple buffering, than double buffering.
 	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(vk_surface_);
 	vk::PresentModeKHR present_mode= present_modes.front();
 	if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eMailbox) != present_modes.end())
@@ -272,9 +288,9 @@ SystemWindow::SystemWindow()
 			1u, &queue_family_index,
 			vk::SurfaceTransformFlagBitsKHR::eIdentity,
 			vk::CompositeAlphaFlagBitsKHR::eOpaque,
-			present_mode,
-			0));
+			present_mode));
 
+	// Get images and create images view (for further framebuffers creation).
 	vk_swapchain_images_= vk_device_->getSwapchainImagesKHR(*vk_swapchain_);
 
 	vk_swapchain_images_view_.resize(vk_swapchain_images_.size());
@@ -291,11 +307,13 @@ SystemWindow::SystemWindow()
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
 	}
 
+	// Create command pull.
 	vk_command_pool_= vk_device_->createCommandPoolUnique(
 		vk::CommandPoolCreateInfo(
 			vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
 			queue_family_index));
 
+	// Create command buffers and it's synchronization primitives.
 	frames_data_.resize(3u); // Use tripple buffering for command buffers.
 	for(FrameData& frame_data : frames_data_)
 	{
