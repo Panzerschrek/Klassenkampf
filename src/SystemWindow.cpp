@@ -97,12 +97,21 @@ uint16_t TranslateKeyModifiers(const Uint16 modifiers)
 
 } // namespace
 
+SystemWindow::SDLWindowDestroyer::~SDLWindowDestroyer()
+{
+	if(w != nullptr)
+	{
+		SDL_DestroyWindow(w);
+		SDL_QuitSubSystem(SDL_INIT_VIDEO);
+	}
+}
+
 SystemWindow::SystemWindow()
 {
 	// TODO - check errors.
 	SDL_Init(SDL_INIT_VIDEO);
 
-	window_=
+	sdl_window_wrapper_.w=
 		SDL_CreateWindow(
 			"Klassenkampf",
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -110,7 +119,7 @@ SystemWindow::SystemWindow()
 			SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 
 	unsigned int extension_names_count= 0;
-	if( !SDL_Vulkan_GetInstanceExtensions(window_, &extension_names_count, nullptr) )
+	if( !SDL_Vulkan_GetInstanceExtensions(sdl_window_wrapper_.w, &extension_names_count, nullptr) )
 	{
 		std::exit(-1);
 	}
@@ -118,7 +127,7 @@ SystemWindow::SystemWindow()
 	std::vector<const char*> extensions_list;
 	extensions_list.resize(extension_names_count, nullptr);
 
-	if( !SDL_Vulkan_GetInstanceExtensions(window_, &extension_names_count, extensions_list.data()) )
+	if( !SDL_Vulkan_GetInstanceExtensions(sdl_window_wrapper_.w, &extension_names_count, extensions_list.data()) )
 	{
 		std::exit(-1);
 	}
@@ -162,14 +171,15 @@ SystemWindow::SystemWindow()
 
 	vk_instance_= vk::createInstanceUnique(vk_instance_create_info);
 
+
 	VkSurfaceKHR vk_tmp_surface;
-	if(!SDL_Vulkan_CreateSurface(window_, *vk_instance_, &vk_tmp_surface))
+	if(!SDL_Vulkan_CreateSurface(sdl_window_wrapper_.w, *vk_instance_, &vk_tmp_surface))
 	{
 		std::exit(-1);
 	}
-	vk_surface_.reset(vk_tmp_surface);
+	vk_surface_= vk_tmp_surface;
 
-	SDL_Vulkan_GetDrawableSize(window_, reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
+	SDL_Vulkan_GetDrawableSize(sdl_window_wrapper_.w, reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
 
 	const std::vector<vk::PhysicalDevice> physical_devices= vk_instance_->enumeratePhysicalDevices();
 	vk::PhysicalDevice physical_device= physical_devices.front();
@@ -190,7 +200,7 @@ SystemWindow::SystemWindow()
 	uint32_t queue_family_index= ~0u;
 	for(uint32_t i= 0u; i < queue_family_properties.size(); ++i)
 	{
-		const VkBool32 supported= physical_device.getSurfaceSupportKHR(i, *vk_surface_);
+		const VkBool32 supported= physical_device.getSurfaceSupportKHR(i, vk_surface_);
 		if(supported != 0 &&
 			queue_family_properties[i].queueCount > 0 &&
 			(queue_family_properties[i].queueFlags & vk::QueueFlagBits::eGraphics) != vk::QueueFlagBits(0))
@@ -232,7 +242,7 @@ SystemWindow::SystemWindow()
 
 	vk_queue_= vk_device_->getQueue(queue_family_index, 0u);
 
-	const std::vector<vk::SurfaceFormatKHR> surface_formats= physical_device.getSurfaceFormatsKHR(*vk_surface_);
+	const std::vector<vk::SurfaceFormatKHR> surface_formats= physical_device.getSurfaceFormatsKHR(vk_surface_);
 	vk::SurfaceFormatKHR surface_format= surface_formats.back();
 	for(const vk::SurfaceFormatKHR& surface_format_variant : surface_formats)
 	{
@@ -244,19 +254,19 @@ SystemWindow::SystemWindow()
 	}
 	swapchain_image_format_= surface_format.format;
 
-	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(*vk_surface_);
+	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(vk_surface_);
 	vk::PresentModeKHR present_mode= present_modes.front();
 	if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eMailbox) != present_modes.end())
 		present_mode= vk::PresentModeKHR::eMailbox; // Use tripple buffering.
 	else if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eFifo) != present_modes.end())
 		present_mode= vk::PresentModeKHR::eFifo; // Use double buffering.
 
-	const vk::SurfaceCapabilitiesKHR surface_capabilities= physical_device.getSurfaceCapabilitiesKHR(*vk_surface_);
+	const vk::SurfaceCapabilitiesKHR surface_capabilities= physical_device.getSurfaceCapabilitiesKHR(vk_surface_);
 
 	vk_swapchain_= vk_device_->createSwapchainKHRUnique(
 		vk::SwapchainCreateInfoKHR(
 			vk::SwapchainCreateFlagsKHR(),
-			*vk_surface_,
+			vk_surface_,
 			surface_capabilities.minImageCount,
 			surface_format.format,
 			surface_format.colorSpace,
@@ -289,8 +299,8 @@ SystemWindow::SystemWindow()
 
 	vk_command_pool_= vk_device_->createCommandPoolUnique(
 		vk::CommandPoolCreateInfo(
-				vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-				queue_family_index));
+			vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+			queue_family_index));
 
 	frames_data_.resize(16u); // TODO - maybe use less frame data?
 	for(FrameData& frame_data : frames_data_)
@@ -312,18 +322,6 @@ SystemWindow::SystemWindow()
 
 SystemWindow::~SystemWindow()
 {
-	frames_data_.clear();
-
-	vk_swapchain_images_view_.clear();
-	vk_swapchain_images_.clear();
-	vk_swapchain_.reset();
-
-	vk_surface_.reset();
-	vk_device_.reset();
-	vk_instance_.reset();
-
-	SDL_DestroyWindow(window_);
-	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
 SystemEvents SystemWindow::ProcessEvents()

@@ -33,13 +33,21 @@ private:
 		vk::UniqueSemaphore rendering_finished_semaphore;
 	};
 
+	// Use wrapper, because we needs to destroy window in last moment, after destruction of all vulkan objects.
+	struct SDLWindowDestroyer
+	{
+		~SDLWindowDestroyer();
+		SDL_Window* w= nullptr;
+	};
+
 private:
 	void ClearScreen(vk::CommandBuffer command_buffer);
 
 private:
-	SDL_Window* window_= nullptr;
+	// Keep here order of construction.
+	SDLWindowDestroyer sdl_window_wrapper_;
 	vk::UniqueInstance vk_instance_;
-	vk::UniqueSurfaceKHR vk_surface_;
+	vk::SurfaceKHR vk_surface_;
 	vk::UniqueDevice vk_device_;
 	vk::Queue vk_queue_= nullptr;
 	uint32_t vk_queue_familiy_index_= ~0u;
