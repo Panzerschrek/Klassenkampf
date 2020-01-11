@@ -146,10 +146,8 @@ SystemWindow::SystemWindow()
 	vk::InstanceCreateInfo vk_instance_create_info(
 		vk::InstanceCreateFlags(),
 		&vk_app_info,
-		0u,
-		nullptr,
-		extension_names_count,
-		extensions_list.data());
+		0u, nullptr,
+		extension_names_count, extensions_list.data());
 #ifdef DEBUG
 	{
 		const std::vector<vk::LayerProperties> vk_layer_properties= vk::enumerateInstanceLayerProperties();
@@ -224,12 +222,9 @@ SystemWindow::SystemWindow()
 	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	const vk::DeviceCreateInfo vk_device_create_info(
 		vk::DeviceCreateFlags(),
-		1u,
-		&vk_device_queue_create_info,
-		0u,
-		nullptr,
-		uint32_t(std::size(device_extension_names)),
-		device_extension_names);
+		1u, &vk_device_queue_create_info,
+		0u, nullptr,
+		uint32_t(std::size(device_extension_names)), device_extension_names);
 
 	// HACK! createDeviceUnique works wrong
 	//vk_device_= physical_device.createDeviceUnique(vk_device_create_info);
@@ -274,8 +269,7 @@ SystemWindow::SystemWindow()
 			1u,
 			vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst,
 			vk::SharingMode::eExclusive,
-			1u,
-			&queue_family_index,
+			1u, &queue_family_index,
 			vk::SurfaceTransformFlagBitsKHR::eIdentity,
 			vk::CompositeAlphaFlagBitsKHR::eOpaque,
 			present_mode,
@@ -431,23 +425,18 @@ void SystemWindow::EndFrame()
 
 	const vk::PipelineStageFlags wait_dst_stage_mask= vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	const vk::SubmitInfo vk_submit_info(
-		1u,
-		&*current_frame_data_->image_available_semaphore,
+		1u, &*current_frame_data_->image_available_semaphore,
 		&wait_dst_stage_mask,
-		1u,
-		&*current_frame_data_->command_buffer,
-		1u,
-		&*current_frame_data_->rendering_finished_semaphore);
+		1u, &*current_frame_data_->command_buffer,
+		1u, &*current_frame_data_->rendering_finished_semaphore);
 	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), *current_frame_data_->submit_fence);
 
 	vk_queue_.presentKHR(
-	vk::PresentInfoKHR(
-		1u,
-		&*current_frame_data_->rendering_finished_semaphore,
-		1u,
-		&*vk_swapchain_,
-		&current_swapchain_image_index_,
-		nullptr));
+		vk::PresentInfoKHR(
+			1u, &*current_frame_data_->rendering_finished_semaphore,
+			1u, &*vk_swapchain_,
+			&current_swapchain_image_index_,
+			nullptr));
 }
 
 void SystemWindow::ClearScreen(const vk::CommandBuffer command_buffer)

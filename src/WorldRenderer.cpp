@@ -52,19 +52,15 @@ WorldRenderer::WorldRenderer(
 	const vk::SubpassDescription vk_subpass_description(
 		vk::SubpassDescriptionFlags(),
 		vk::PipelineBindPoint::eGraphics,
-		0u,
-		nullptr,
-		1u,
-		&vk_attachment_reference);
+		0u, nullptr,
+		1u, &vk_attachment_reference);
 
 	vk_render_pass_=
 		vk_device_.createRenderPassUnique(
 			vk::RenderPassCreateInfo(
 				vk::RenderPassCreateFlags(),
-				1u,
-				&vk_attachment_description,
-				1u,
-				&vk_subpass_description));
+				1u, &vk_attachment_description,
+				1u, &vk_subpass_description));
 
 	vk_framebuffers_.resize(swapchain_image_views.size());
 	for(size_t i= 0u; i < swapchain_image_views.size(); ++i)
@@ -156,10 +152,8 @@ WorldRenderer::WorldRenderer(
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
 		vk::PipelineVertexInputStateCreateFlags(),
-		1u,
-		&vk_vertex_input_binding_description,
-		uint32_t(std::size(vk_vertex_input_attribute_description)),
-		vk_vertex_input_attribute_description);
+		1u, &vk_vertex_input_binding_description,
+		uint32_t(std::size(vk_vertex_input_attribute_description)), vk_vertex_input_attribute_description);
 
 	const vk::PipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info(
 		vk::PipelineInputAssemblyStateCreateFlags(),
@@ -170,10 +164,8 @@ WorldRenderer::WorldRenderer(
 
 	const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
 		vk::PipelineViewportStateCreateFlags(),
-		1u,
-		&vk_viewport,
-		1u,
-		&vk_scissor);
+		1u, &vk_viewport,
+		1u, &vk_scissor);
 
 	const vk::PipelineRasterizationStateCreateInfo vk_pipilane_rasterization_state_create_info(
 		vk::PipelineRasterizationStateCreateFlags(),
@@ -187,20 +179,15 @@ WorldRenderer::WorldRenderer(
 
 	const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
 		VK_FALSE,
-		vk::BlendFactor::eOne,
-		vk::BlendFactor::eZero,
-		vk::BlendOp::eAdd,
-		vk::BlendFactor::eOne,
-		vk::BlendFactor::eZero,
-		vk::BlendOp::eAdd,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
 	const vk::PipelineColorBlendStateCreateInfo vk_pipeline_color_blend_state_create_info(
 		vk::PipelineColorBlendStateCreateFlags(),
 		VK_FALSE,
 		vk::LogicOp::eCopy,
-		1u,
-		&vk_pipeline_color_blend_attachment_state);
+		1u, &vk_pipeline_color_blend_attachment_state);
 
 	vk_pipeline_=
 		vk_device_.createGraphicsPipelineUnique(
@@ -309,8 +296,7 @@ void WorldRenderer::Draw(
 			*vk_render_pass_,
 			*vk_framebuffers_[swapchain_image_index],
 			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
-			1u,
-			&clear_value),
+			1u, &clear_value),
 			vk::SubpassContents::eInline);
 
 	{
