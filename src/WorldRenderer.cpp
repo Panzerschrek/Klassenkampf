@@ -293,6 +293,8 @@ WorldRenderer::WorldRenderer(
 
 WorldRenderer::~WorldRenderer()
 {
+	// Sync before destruction.
+	vk_device_.waitIdle();
 }
 
 void WorldRenderer::Draw(

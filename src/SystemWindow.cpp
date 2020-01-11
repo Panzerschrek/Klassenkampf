@@ -302,7 +302,7 @@ SystemWindow::SystemWindow()
 			vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
 			queue_family_index));
 
-	frames_data_.resize(16u); // TODO - maybe use less frame data?
+	frames_data_.resize(3u); // Use tripple buffering for command buffers.
 	for(FrameData& frame_data : frames_data_)
 	{
 		frame_data.command_buffer=
@@ -315,6 +315,7 @@ SystemWindow::SystemWindow()
 
 		frame_data.image_available_semaphore= vk_device_->createSemaphoreUnique(vk::SemaphoreCreateInfo());
 		frame_data.rendering_finished_semaphore= vk_device_->createSemaphoreUnique(vk::SemaphoreCreateInfo());
+		frame_data.submit_fence= vk_device_->createFenceUnique(vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled));
 	}
 
 	memory_properties_= physical_device.getMemoryProperties();
@@ -322,6 +323,8 @@ SystemWindow::SystemWindow()
 
 SystemWindow::~SystemWindow()
 {
+	// Sync before destruction.
+	vk_device_->waitIdle();
 }
 
 SystemEvents SystemWindow::ProcessEvents()
@@ -399,6 +402,13 @@ vk::CommandBuffer SystemWindow::BeginFrame()
 	current_frame_data_= &frames_data_[frame_count_ % frames_data_.size()];
 	++frame_count_;
 
+	vk_device_->waitForFences(
+		1u, &*current_frame_data_->submit_fence,
+		VK_TRUE,
+		std::numeric_limits<uint64_t>::max());
+
+	vk_device_->resetFences(1u, &*current_frame_data_->submit_fence);
+
 	current_swapchain_image_index_=
 		vk_device_->acquireNextImageKHR(
 			*vk_swapchain_,
@@ -428,7 +438,7 @@ void SystemWindow::EndFrame()
 		&*current_frame_data_->command_buffer,
 		1u,
 		&*current_frame_data_->rendering_finished_semaphore);
-	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), vk::Fence());
+	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), *current_frame_data_->submit_fence);
 
 	vk_queue_.presentKHR(
 	vk::PresentInfoKHR(
@@ -438,8 +448,6 @@ void SystemWindow::EndFrame()
 		&*vk_swapchain_,
 		&current_swapchain_image_index_,
 		nullptr));
-
-	vk_device_->waitIdle();
 }
 
 void SystemWindow::ClearScreen(const vk::CommandBuffer command_buffer)

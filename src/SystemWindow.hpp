@@ -31,6 +31,7 @@ private:
 		vk::UniqueCommandBuffer command_buffer;
 		vk::UniqueSemaphore image_available_semaphore;
 		vk::UniqueSemaphore rendering_finished_semaphore;
+		vk::UniqueFence submit_fence;
 	};
 
 	// Use wrapper, because we needs to destroy window in last moment, after destruction of all vulkan objects.
