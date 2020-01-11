@@ -1,5 +1,5 @@
 #pragma once
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.hpp>
 #include <vector>
 
 
@@ -10,34 +10,34 @@ class WorldRenderer final
 {
 public:
 	WorldRenderer(
-		VkDevice vk_device,
-		VkFormat surface_format,
-		VkExtent2D viewport_size,
-		const VkPhysicalDeviceMemoryProperties& memory_properties,
-		const std::vector<VkImageView>& swapchain_image_views);
+		vk::Device vk_device,
+		vk::Format surface_format,
+		vk::Extent2D viewport_size,
+		const vk::PhysicalDeviceMemoryProperties& memory_properties,
+		const std::vector<vk::UniqueImageView>& swapchain_image_views);
 
 	~WorldRenderer();
 
-	void Draw(VkCommandBuffer command_buffer, size_t swapchain_image_index, float frame_time_s);
+	void Draw(vk::CommandBuffer command_buffer, size_t swapchain_image_index, float frame_time_s);
 
 private:
-	const VkDevice vk_device_;
-	const VkExtent2D viewport_size_;
+	const vk::Device vk_device_;
+	const vk::Extent2D viewport_size_;
 
-	VkRenderPass vk_render_pass_= nullptr;
-	std::vector<VkFramebuffer> vk_framebuffers_;
+	vk::UniqueRenderPass vk_render_pass_;
+	std::vector<vk::UniqueFramebuffer> vk_framebuffers_;
 
-	VkShaderModule shader_vert_= nullptr;
-	VkShaderModule shader_frag_= nullptr;
-	VkDescriptorSetLayout vk_decriptor_set_layout_= nullptr;
-	VkPipelineLayout vk_pipeline_layout_= nullptr;
-	VkPipeline vk_pipeline_= nullptr;
+	vk::UniqueShaderModule shader_vert_;
+	vk::UniqueShaderModule shader_frag_;
+	vk::UniqueDescriptorSetLayout vk_decriptor_set_layout_;
+	vk::UniquePipelineLayout vk_pipeline_layout_;
+	vk::UniquePipeline vk_pipeline_;
 
-	VkBuffer vk_vertex_buffer_= nullptr;
-	VkDeviceMemory vk_vertex_buffer_memory_= nullptr;
+	vk::UniqueBuffer vk_vertex_buffer_;
+	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
 
-	VkBuffer vk_index_buffer_= nullptr;
-	VkDeviceMemory vk_index_buffer_memory_= nullptr;
+	vk::UniqueBuffer vk_index_buffer_;
+	vk::UniqueDeviceMemory vk_index_buffer_memory_;
 };
 
 } // namespace KK

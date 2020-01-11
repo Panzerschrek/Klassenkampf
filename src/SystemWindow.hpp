@@ -1,7 +1,7 @@
 #pragma once
 #include "SystemEvent.hpp"
 #include <SDL_video.h>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.hpp>
 
 
 namespace KK
@@ -15,41 +15,41 @@ public:
 
 	SystemEvents ProcessEvents();
 
-	VkCommandBuffer BeginFrame();
+	vk::CommandBuffer BeginFrame();
 	void EndFrame();
 
-	VkDevice GetVulkanDevice() const;
-	VkFormat GetSurfaceFormat() const;
-	VkExtent2D GetViewportSize() const;
-	const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const;
-	const std::vector<VkImageView>& GetSwapchainImagesViews() const;
+	vk::Device GetVulkanDevice() const;
+	vk::Format GetSurfaceFormat() const;
+	vk::Extent2D GetViewportSize() const;
+	const vk::PhysicalDeviceMemoryProperties& GetMemoryProperties() const;
+	const std::vector<vk::UniqueImageView>& GetSwapchainImagesViews() const;
 	size_t GetCurrentSwapchainImageIndex() const;
 
 private:
 	struct FrameData
 	{
-		VkCommandBuffer command_buffer;
-		VkSemaphore image_available_semaphore;
-		VkSemaphore rendering_finished_semaphore;
+		vk::UniqueCommandBuffer command_buffer;
+		vk::UniqueSemaphore image_available_semaphore;
+		vk::UniqueSemaphore rendering_finished_semaphore;
 	};
 
 private:
-	void ClearScreen(VkCommandBuffer command_buffer);
+	void ClearScreen(vk::CommandBuffer command_buffer);
 
 private:
 	SDL_Window* window_= nullptr;
-	VkInstance vk_instance_= nullptr;
-	VkSurfaceKHR vk_surface_= nullptr;
-	VkDevice vk_device_= nullptr;
-	VkQueue vk_queue_= nullptr;
+	vk::UniqueInstance vk_instance_;
+	vk::UniqueSurfaceKHR vk_surface_;
+	vk::UniqueDevice vk_device_;
+	vk::Queue vk_queue_= nullptr;
 	uint32_t vk_queue_familiy_index_= ~0u;
-	VkExtent2D viewport_size_{};
-	VkPhysicalDeviceMemoryProperties memory_properties_;
-	VkSwapchainKHR vk_swapchain_= nullptr;
-	std::vector<VkImage> vk_swapchain_images_;
-	std::vector<VkImageView> vk_swapchain_images_view_;
-	VkFormat swapchain_image_format_= VK_FORMAT_UNDEFINED;
-	VkCommandPool vk_command_pool_= nullptr;
+	vk::Extent2D viewport_size_;
+	vk::PhysicalDeviceMemoryProperties memory_properties_;
+	vk::UniqueSwapchainKHR vk_swapchain_;
+	std::vector<vk::Image> vk_swapchain_images_;
+	std::vector<vk::UniqueImageView> vk_swapchain_images_view_;
+	vk::Format swapchain_image_format_= vk::Format::eUndefined;
+	vk::UniqueCommandPool vk_command_pool_;
 
 	std::vector<FrameData> frames_data_;
 	const FrameData* current_frame_data_= nullptr;
