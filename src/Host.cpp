@@ -6,12 +6,9 @@ namespace KK
 {
 
 Host::Host()
-	: system_window_()
-	, world_renderer_(
-		system_window_.GetVulkanDevice(),
-		system_window_.GetViewportSize(),
-		system_window_.GetRenderPass(),
-		system_window_.GetMemoryProperties())
+	: system_window_(SystemWindow::GAPISupport::Vulkan)
+	, window_vulkan_(system_window_)
+	, world_renderer_(window_vulkan_)
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {
@@ -30,12 +27,12 @@ bool Host::Loop()
 
 	}
 
-	const auto command_buffer= system_window_.BeginFrame();
+	const auto command_buffer= window_vulkan_.BeginFrame();
 	world_renderer_.Draw(
 		command_buffer,
-		system_window_.GetCurrentFramebuffer(),
+		window_vulkan_.GetCurrentFramebuffer(),
 		float(std::chrono::duration_cast<std::chrono::milliseconds>(tick_start_time - init_time_).count()) / 1000.0f);
-	system_window_.EndFrame();
+	window_vulkan_.EndFrame();
 
 	const Clock::time_point tick_end_time= Clock::now();
 	const auto frame_dt= tick_start_time - tick_end_time;

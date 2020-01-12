@@ -27,15 +27,13 @@ const uint32_t g_tex_uniform_binding= 0u;
 
 } // namespace
 
-WorldRenderer::WorldRenderer(
-	const vk::Device vk_device,
-	const vk::Extent2D viewport_size,
-	const vk::RenderPass render_pass,
-	const vk::PhysicalDeviceMemoryProperties& memory_properties)
-	: vk_device_(vk_device)
-	, viewport_size_(viewport_size)
-	, vk_render_pass_(render_pass)
+WorldRenderer::WorldRenderer(const WindowVulkan& window_vulkan)
+	: vk_device_(window_vulkan.GetVulkanDevice())
+	, viewport_size_(window_vulkan.GetViewportSize())
+	, vk_render_pass_(window_vulkan.GetRenderPass())
 {
+	const auto memory_properties= window_vulkan.GetMemoryProperties();
+
 	// Create shaders
 	shader_vert_=
 		vk_device_.createShaderModuleUnique(
@@ -152,7 +150,7 @@ WorldRenderer::WorldRenderer(
 		vk::PipelineInputAssemblyStateCreateFlags(),
 		vk::PrimitiveTopology::eTriangleList);
 
-	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size_.width), float(viewport_size.height), 0.0f, 1.0f);
+	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size_.width), float(viewport_size_.height), 0.0f, 1.0f);
 	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size_);
 
 	const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(

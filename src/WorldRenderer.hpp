@@ -1,6 +1,5 @@
 #pragma once
-#include <vulkan/vulkan.hpp>
-#include <vector>
+#include "WindowVulkan.hpp"
 
 
 namespace KK
@@ -9,11 +8,7 @@ namespace KK
 class WorldRenderer final
 {
 public:
-	WorldRenderer(
-		vk::Device vk_device,
-		vk::Extent2D viewport_size,
-		vk::RenderPass render_pass,
-		const vk::PhysicalDeviceMemoryProperties& memory_properties);
+	explicit WorldRenderer(const WindowVulkan& window_vulkan);
 
 	~WorldRenderer();
 
