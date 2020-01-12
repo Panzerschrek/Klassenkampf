@@ -42,7 +42,11 @@ private:
 	};
 
 private:
-	void ClearScreen(vk::CommandBuffer command_buffer);
+	void ChangeImageLayout(
+		vk::CommandBuffer command_buffer,
+		vk::Image image,
+		vk::ImageLayout from,
+		vk::ImageLayout to);
 
 private:
 	// Keep here order of construction.

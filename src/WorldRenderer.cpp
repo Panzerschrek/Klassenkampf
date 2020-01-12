@@ -44,8 +44,8 @@ WorldRenderer::WorldRenderer(
 		vk::AttachmentStoreOp::eStore,
 		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eDontCare,
-		vk::ImageLayout::ePresentSrcKHR,
-		vk::ImageLayout::ePresentSrcKHR);
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eColorAttachmentOptimal);
 
 	const vk::AttachmentReference vk_attachment_reference(
 		0u,

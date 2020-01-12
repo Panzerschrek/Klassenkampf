@@ -432,15 +432,29 @@ vk::CommandBuffer SystemWindow::BeginFrame()
 
 	command_buffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-	ClearScreen(command_buffer);
+	// Swap current swapchain image format to optimal for "color attachment".
+	ChangeImageLayout(
+		*current_frame_data_->command_buffer,
+		vk_swapchain_images_[current_swapchain_image_index_],
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::eColorAttachmentOptimal);
 
 	return command_buffer;
 }
 
 void SystemWindow::EndFrame()
 {
+	// Swap current swapchain image format to optimal for "present".
+	ChangeImageLayout(
+		*current_frame_data_->command_buffer,
+		vk_swapchain_images_[current_swapchain_image_index_],
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::ePresentSrcKHR);
+
+	// End command buffer.
 	current_frame_data_->command_buffer->end();
 
+	// Submit command buffer.
 	const vk::PipelineStageFlags wait_dst_stage_mask= vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	const vk::SubmitInfo vk_submit_info(
 		1u, &*current_frame_data_->image_available_semaphore,
@@ -449,33 +463,13 @@ void SystemWindow::EndFrame()
 		1u, &*current_frame_data_->rendering_finished_semaphore);
 	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), *current_frame_data_->submit_fence);
 
+	// Present queue.
 	vk_queue_.presentKHR(
 		vk::PresentInfoKHR(
 			1u, &*current_frame_data_->rendering_finished_semaphore,
 			1u, &*vk_swapchain_,
 			&current_swapchain_image_index_,
 			nullptr));
-}
-
-void SystemWindow::ClearScreen(const vk::CommandBuffer command_buffer)
-{
-	const vk::ImageMemoryBarrier vk_image_memory_barrier(
-		vk::AccessFlagBits::eTransferWrite,
-		vk::AccessFlagBits::eMemoryRead,
-		vk::ImageLayout::eUndefined,
-		vk::ImageLayout::ePresentSrcKHR,
-		vk_queue_familiy_index_,
-		vk_queue_familiy_index_,
-		vk_swapchain_images_[current_swapchain_image_index_],
-		vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-	command_buffer.pipelineBarrier(
-		vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &vk_image_memory_barrier);
 }
 
 vk::Device SystemWindow::GetVulkanDevice() const
@@ -506,6 +500,30 @@ const std::vector<vk::UniqueImageView>& SystemWindow::GetSwapchainImagesViews() 
 size_t SystemWindow::GetCurrentSwapchainImageIndex() const
 {
 	return current_swapchain_image_index_;
+}
+
+void SystemWindow::ChangeImageLayout(
+	const vk::CommandBuffer command_buffer,
+	const vk::Image image,
+	const vk::ImageLayout from,
+	const vk::ImageLayout to)
+{
+	const vk::ImageMemoryBarrier vk_image_memory_barrier(
+		vk::AccessFlagBits::eTransferWrite,
+		vk::AccessFlagBits::eMemoryRead,
+		from, to,
+		vk_queue_familiy_index_,
+		vk_queue_familiy_index_,
+		image,
+		vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+
+	command_buffer.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eBottomOfPipe,
+		vk::DependencyFlags(),
+		0u, nullptr,
+		0u, nullptr,
+		1u, &vk_image_memory_barrier);
 }
 
 } // namespace KK
