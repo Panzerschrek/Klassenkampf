@@ -1,4 +1,6 @@
 #include "WorldRenderer.hpp"
+#include "Assert.hpp"
+#include "Image.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -270,28 +272,16 @@ WorldRenderer::WorldRenderer(const WindowVulkan& window_vulkan)
 
 	// Create texture.
 	{
-		std::vector<uint32_t> texture_data;
-		uint32_t texture_size[2]{24, 16};
-		texture_data.resize(texture_size[0] * texture_size[1]);
-		for(uint32_t y= 0u; y < texture_size[1]; ++y)
-		for(uint32_t x= 0u; x < texture_size[0]; ++x)
-		{
-			const uint32_t color_mask= (x&1u) + (y&1u) * 2u;
-			const uint32_t brightness= 255u * (x + y * texture_size[0]) / (texture_size[0] * texture_size[1]);
-			const uint32_t value=
-				0x01000000u * (color_mask == 0u ? brightness : 0u) +
-				0x00010000u * (color_mask == 1u ? brightness : 0u) +
-				0x00000100u * (color_mask == 2u ? brightness : 0u) +
-				0x00000001u * (color_mask == 3u ? brightness : 0u);
-			texture_data[x + y * texture_size[0]]= value;
-		}
+		const auto image_loaded_opt= Image::Load("test_image.png");
+		KK_ASSERT(image_loaded_opt != std::nullopt);
+		const Image& image_loaded= *image_loaded_opt;
 
 		vk_image_= vk_device_.createImageUnique(
 			vk::ImageCreateInfo(
 				vk::ImageCreateFlags(),
 				vk::ImageType::e2D,
 				vk::Format::eR8G8B8A8Unorm,
-				vk::Extent3D(texture_size[0], texture_size[1], 1u),
+				vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u),
 				1u,
 				1u,
 				vk::SampleCountFlagBits::e1,
@@ -323,11 +313,11 @@ WorldRenderer::WorldRenderer(const WindowVulkan& window_vulkan)
 		void* texture_data_gpu_size= nullptr;
 		vk_device_.mapMemory(*vk_image_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
 
-		for(uint32_t y= 0u; y < texture_size[1u]; ++y)
+		for(uint32_t y= 0u; y < image_loaded.GetHeight(); ++y)
 			std::memcpy(
 				static_cast<char*>(texture_data_gpu_size) + y * image_layout.rowPitch,
-				texture_data.data() + y * texture_size[0u],
-				texture_size[0] * sizeof(uint32_t));
+				image_loaded.GetData() + y * image_loaded.GetWidth(),
+				image_loaded.GetWidth() * sizeof(uint32_t));
 
 		vk_device_.unmapMemory(*vk_image_memory_);
 
