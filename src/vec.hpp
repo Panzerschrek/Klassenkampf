@@ -8,8 +8,7 @@ class m_Vec2
 public:
 	static constexpr size_t size= 2;
 
-	float x, y;
-
+public:
 	m_Vec2()= default;
 	m_Vec2(const m_Vec2& v)= default;
 	m_Vec2(float in_x, float in_y);
@@ -32,19 +31,20 @@ public:
 	m_Vec2  operator/ (float a) const;
 	m_Vec2& operator/=(float a);
 
+public:
+	float x;
+	float y;
 };
 
 bool operator==(const m_Vec2& v1, const m_Vec2& v2);
 bool operator!=(const m_Vec2& v1, const m_Vec2& v2);
 
-float mVec2Cross(const m_Vec2& v1, const m_Vec2 v2 );
+float mVec2Cross(const m_Vec2& v1, const m_Vec2 v2);
 
 class m_Vec3
 {
 public:
 	static constexpr size_t size= 3;
-
-	float x, y, z;
 
 	m_Vec3()= default;
 	m_Vec3(const m_Vec3& v)= default;
@@ -72,6 +72,11 @@ public:
 	m_Vec2 xy() const;
 	m_Vec2 xz() const;
 	m_Vec2 yz() const;
+
+public:
+	float x;
+	float y;
+	float z;
 };
 
 bool operator==(const m_Vec3& v1, const m_Vec3& v2);
@@ -250,7 +255,7 @@ inline m_Vec3& m_Vec3::operator-=(const m_Vec3& v)
 
 inline m_Vec3 m_Vec3::operator*(const float a) const
 {
-	return m_Vec3( x * a, y * a, z * a );
+	return m_Vec3(x * a, y * a, z * a);
 }
 
 inline m_Vec3& m_Vec3::operator*=(const float a)
@@ -299,10 +304,10 @@ inline bool operator!=(const m_Vec3& v0, const m_Vec3& v1)
 	return !(v0 == v1);
 }
 
-inline m_Vec3 mVec3Cross( const m_Vec3& v1, const m_Vec3& v2 )
+inline m_Vec3 mVec3Cross(const m_Vec3& v1, const m_Vec3& v2)
 {
 	return m_Vec3(
 		v1.y * v2.z - v1.z * v2.y,
 		v1.z * v2.x - v1.x * v2.z,
-		v1.x * v2.y - v1.y * v2.x );
+		v1.x * v2.y - v1.y * v2.x);
 }
