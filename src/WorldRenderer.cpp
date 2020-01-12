@@ -316,12 +316,18 @@ WorldRenderer::WorldRenderer(
 	// Create texture.
 	{
 		std::vector<uint32_t> texture_data;
-		uint32_t texture_size[2]{32, 32};
+		uint32_t texture_size[2]{24, 16};
 		texture_data.resize(texture_size[0] * texture_size[1]);
 		for(uint32_t y= 0u; y < texture_size[1]; ++y)
 		for(uint32_t x= 0u; x < texture_size[0]; ++x)
 		{
-			const uint32_t value= ((((x >> 0u) ^ (y >> 0u)) & 1u) == 0u) ? 0u : ~0u;
+			const uint32_t color_mask= (x&1u) + (y&1u) * 2u;
+			const uint32_t brightness= 255u * (x + y * texture_size[0]) / (texture_size[0] * texture_size[1]);
+			const uint32_t value=
+				0x01000000u * (color_mask == 0u ? brightness : 0u) +
+				0x00010000u * (color_mask == 1u ? brightness : 0u) +
+				0x00000100u * (color_mask == 2u ? brightness : 0u) +
+				0x00000001u * (color_mask == 3u ? brightness : 0u);
 			texture_data[x + y * texture_size[0]]= value;
 		}
 
@@ -334,11 +340,11 @@ WorldRenderer::WorldRenderer(
 				1u,
 				1u,
 				vk::SampleCountFlagBits::e1,
-				vk::ImageTiling::eOptimal,
+				vk::ImageTiling::eLinear,
 				vk::ImageUsageFlagBits::eSampled,
 				vk::SharingMode::eExclusive,
 				0u, nullptr,
-				vk::ImageLayout::eGeneral));
+				vk::ImageLayout::ePreinitialized));
 
 		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*vk_image_);
 
@@ -354,6 +360,22 @@ WorldRenderer::WorldRenderer(
 		vk_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindImageMemory(*vk_image_, *vk_image_memory_, 0u);
 
+		const vk::SubresourceLayout image_layout=
+			vk_device_.getImageSubresourceLayout(
+				*vk_image_,
+				vk::ImageSubresource(vk::ImageAspectFlagBits::eColor, 0u, 0u));
+
+		void* texture_data_gpu_size= nullptr;
+		vk_device_.mapMemory(*vk_image_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
+
+		for(uint32_t y= 0u; y < texture_size[1u]; ++y)
+			std::memcpy(
+				static_cast<char*>(texture_data_gpu_size) + y * image_layout.rowPitch,
+				texture_data.data() + y * texture_size[0u],
+				texture_size[0] * sizeof(uint32_t));
+
+		vk_device_.unmapMemory(*vk_image_memory_);
+
 		vk_image_view_= vk_device_.createImageViewUnique(
 			vk::ImageViewCreateInfo(
 				vk::ImageViewCreateFlags(),
@@ -362,11 +384,6 @@ WorldRenderer::WorldRenderer(
 				vk::Format::eR8G8B8A8Unorm,
 				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
-
-		void* texture_data_gpu_size= nullptr;
-		vk_device_.mapMemory(*vk_image_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
-		std::memcpy(texture_data_gpu_size, texture_data.data(), texture_data.size() * sizeof(uint32_t));
-		vk_device_.unmapMemory(*vk_image_memory_);
 	}
 
 	// Create descriptor set pool.
