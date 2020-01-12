@@ -24,7 +24,6 @@ bool Host::Loop()
 	{
 		if(std::get_if<SystemEventTypes::QuitEvent>(&system_event) != nullptr)
 			return true;
-
 	}
 
 	const auto command_buffer= window_vulkan_.BeginFrame();
@@ -35,7 +34,7 @@ bool Host::Loop()
 	window_vulkan_.EndFrame();
 
 	const Clock::time_point tick_end_time= Clock::now();
-	const auto frame_dt= tick_start_time - tick_end_time;
+	const auto frame_dt= tick_end_time - tick_start_time;
 	const std::chrono::milliseconds min_frame_duration(5);
 	if(frame_dt <= min_frame_duration)
 	{
