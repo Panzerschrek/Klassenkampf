@@ -23,6 +23,8 @@ struct WorldVertex
 	uint8_t color[4];
 };
 
+const uint32_t g_tex_uniform_binding= 0u;
+
 } // namespace
 
 WorldRenderer::WorldRenderer(
@@ -92,20 +94,54 @@ WorldRenderer::WorldRenderer(
 				std::size(Shaders::c_triangle_frag_file_content),
 				reinterpret_cast<const uint32_t*>(Shaders::c_triangle_frag_file_content)));
 
+	// Create image sampler
+
+	vk_image_sampler_=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eNearest,
+				vk::Filter::eNearest,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
 	// Create pipeline layout
 
-	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_binding(
-		0u,
-		vk::DescriptorType::eUniformBuffer,
-		1u,
-		vk::ShaderStageFlagBits::eVertex);
+	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
+	{
+		/*
+		{
+			0u,
+			vk::DescriptorType::eUniformBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eVertex
+		},
+		*/
+		{
+			g_tex_uniform_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*vk_image_sampler_,
+		},
+	};
 
 	vk_decriptor_set_layout_=
 		vk_device_.createDescriptorSetLayoutUnique(
 			vk::DescriptorSetLayoutCreateInfo(
 				vk::DescriptorSetLayoutCreateFlags(),
-				1u,
-				&vk_descriptor_set_layout_binding));
+				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
@@ -276,6 +312,98 @@ WorldRenderer::WorldRenderer(
 		std::memcpy(vertex_data_gpu_size, world_indeces.data(), world_indeces.size() * sizeof(uint16_t));
 		vk_device_.unmapMemory(*vk_index_buffer_memory_);
 	}
+
+	// Create texture.
+	{
+		std::vector<uint32_t> texture_data;
+		uint32_t texture_size[2]{32, 32};
+		texture_data.resize(texture_size[0] * texture_size[1]);
+		for(uint32_t y= 0u; y < texture_size[1]; ++y)
+		for(uint32_t x= 0u; x < texture_size[0]; ++x)
+		{
+			const uint32_t value= ((((x >> 0u) ^ (y >> 0u)) & 1u) == 0u) ? 0u : ~0u;
+			texture_data[x + y * texture_size[0]]= value;
+		}
+
+		vk_image_= vk_device_.createImageUnique(
+			vk::ImageCreateInfo(
+				vk::ImageCreateFlags(),
+				vk::ImageType::e2D,
+				vk::Format::eR8G8B8A8Unorm,
+				vk::Extent3D(texture_size[0], texture_size[1], 1u),
+				1u,
+				1u,
+				vk::SampleCountFlagBits::e1,
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eSampled,
+				vk::SharingMode::eExclusive,
+				0u, nullptr,
+				vk::ImageLayout::eGeneral));
+
+		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*vk_image_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vk_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindImageMemory(*vk_image_, *vk_image_memory_, 0u);
+
+		vk_image_view_= vk_device_.createImageViewUnique(
+			vk::ImageViewCreateInfo(
+				vk::ImageViewCreateFlags(),
+				*vk_image_,
+				vk::ImageViewType::e2D,
+				vk::Format::eR8G8B8A8Unorm,
+				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
+
+		void* texture_data_gpu_size= nullptr;
+		vk_device_.mapMemory(*vk_image_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
+		std::memcpy(texture_data_gpu_size, texture_data.data(), texture_data.size() * sizeof(uint32_t));
+		vk_device_.unmapMemory(*vk_image_memory_);
+	}
+
+	// Create descriptor set pool.
+	const vk::DescriptorPoolSize vk_descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 1u);
+	vk_descriptor_pool_=
+		vk_device_.createDescriptorPoolUnique(
+			vk::DescriptorPoolCreateInfo(
+				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+				4u, // max sets.
+				1u, &vk_descriptor_pool_size));
+
+	// Create descriptor set.
+	vk_descriptor_set_=
+		std::move(
+		vk_device_.allocateDescriptorSetsUnique(
+			vk::DescriptorSetAllocateInfo(
+				*vk_descriptor_pool_,
+				1u, &*vk_decriptor_set_layout_)).front());
+
+	// Write descriptor set.
+	const vk::DescriptorImageInfo descriptor_image_info(
+		vk::Sampler(),
+		*vk_image_view_,
+		vk::ImageLayout::eGeneral);
+
+	const vk::WriteDescriptorSet write_descriptor_set(
+		*vk_descriptor_set_,
+		g_tex_uniform_binding,
+		0u,
+		1u,
+		vk::DescriptorType::eCombinedImageSampler,
+		&descriptor_image_info,
+		nullptr,
+		nullptr);
+	vk_device_.updateDescriptorSets(
+		1u, &write_descriptor_set,
+		0u, nullptr);
 }
 
 WorldRenderer::~WorldRenderer()
@@ -303,6 +431,12 @@ void WorldRenderer::Draw(
 		const vk::DeviceSize offsets= 0u;
 		command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
 		command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*vk_pipeline_layout_,
+			0u,
+			1u, &*vk_descriptor_set_,
+			0u, nullptr);
 
 		float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
 

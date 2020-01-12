@@ -33,11 +33,19 @@ private:
 	vk::UniquePipelineLayout vk_pipeline_layout_;
 	vk::UniquePipeline vk_pipeline_;
 
+	vk::UniqueDescriptorPool vk_descriptor_pool_;
+	vk::UniqueDescriptorSet vk_descriptor_set_;
+
 	vk::UniqueBuffer vk_vertex_buffer_;
 	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
 
 	vk::UniqueBuffer vk_index_buffer_;
 	vk::UniqueDeviceMemory vk_index_buffer_memory_;
+
+	vk::UniqueImage vk_image_;
+	vk::UniqueDeviceMemory vk_image_memory_;
+	vk::UniqueImageView vk_image_view_;
+	vk::UniqueSampler vk_image_sampler_;
 };
 
 } // namespace KK
