@@ -3,6 +3,9 @@
 #include <cstddef>
 
 
+namespace KK
+{
+
 class m_Vec2
 {
 public:
@@ -311,3 +314,5 @@ inline m_Vec3 mVec3Cross(const m_Vec3& v1, const m_Vec3& v2)
 		v1.z * v2.x - v1.x * v2.z,
 		v1.x * v2.y - v1.y * v2.x);
 }
+
+} // namespace KK

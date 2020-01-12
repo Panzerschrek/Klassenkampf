@@ -2,6 +2,9 @@
 #include "Vec.hpp"
 
 
+namespace KK
+{
+
 class m_Mat4
 {
 public:
@@ -42,3 +45,5 @@ public:
 
 	float value[16];
 };
+
+} // namespace KK

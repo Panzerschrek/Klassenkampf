@@ -2,6 +2,9 @@
 #include "Vec.hpp"
 
 
+namespace KK
+{
+
 class m_Plane2
 {
 public:
@@ -93,3 +96,5 @@ inline float m_Plane3::GetSignedDistance(const m_Vec3& point) const
 {
 	return point * normal + dist;
 }
+
+} // namespace KK

@@ -2,6 +2,9 @@
 #include <cstring>
 
 
+namespace KK
+{
+
 namespace
 {
 
@@ -277,3 +280,5 @@ m_Vec3 operator*(const m_Vec3& v, const m_Mat4& m)
 		v.x * m.value[1] + v.y * m.value[5] + v.z * m.value[9] + m.value[13],
 		v.x * m.value[2] + v.y * m.value[6] + v.z * m.value[10]+ m.value[14]);
 }
+
+} // namespace KK
