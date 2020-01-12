@@ -1,5 +1,5 @@
 #pragma once
-#include "vec.hpp"
+#include "Vec.hpp"
 
 
 class m_Mat4

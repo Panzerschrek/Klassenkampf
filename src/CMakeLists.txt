@@ -14,7 +14,7 @@ endif()
 
 find_package(SDL2 REQUIRED)
 
-file(GLOB SOURCES "*.cpp" "*.hpp")
+file(GLOB_RECURSE SOURCES "*.cpp" "*.hpp")
 
 add_executable(Klassenkampf ${SOURCES})
 target_include_directories(Klassenkampf PRIVATE ${SDL2_INCLUDE_DIRS})
