@@ -262,7 +262,6 @@ SystemWindow::SystemWindow()
 			break;
 		}
 	}
-	swapchain_image_format_= surface_format.format;
 
 	// Select present mode. Prefer usage of tripple buffering, than double buffering.
 	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(vk_surface_);
@@ -290,21 +289,57 @@ SystemWindow::SystemWindow()
 			vk::CompositeAlphaFlagBitsKHR::eOpaque,
 			present_mode));
 
-	// Get images and create images view (for further framebuffers creation).
-	vk_swapchain_images_= vk_device_->getSwapchainImagesKHR(*vk_swapchain_);
+	// Create render pass and framebuffers for drawing into screen.
 
-	vk_swapchain_images_view_.resize(vk_swapchain_images_.size());
-	for(size_t i= 0u; i < vk_swapchain_images_.size(); ++i)
+	const vk::AttachmentDescription vk_attachment_description(
+		vk::AttachmentDescriptionFlags(),
+		surface_format.format,
+		vk::SampleCountFlagBits::e1,
+		vk::AttachmentLoadOp::eClear,
+		vk::AttachmentStoreOp::eStore,
+		vk::AttachmentLoadOp::eDontCare,
+		vk::AttachmentStoreOp::eDontCare,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eColorAttachmentOptimal);
+
+	const vk::AttachmentReference vk_attachment_reference(
+		0u,
+		vk::ImageLayout::eColorAttachmentOptimal);
+
+	const vk::SubpassDescription vk_subpass_description(
+		vk::SubpassDescriptionFlags(),
+		vk::PipelineBindPoint::eGraphics,
+		0u, nullptr,
+		1u, &vk_attachment_reference);
+
+	vk_render_pass_=
+		vk_device_->createRenderPassUnique(
+			vk::RenderPassCreateInfo(
+				vk::RenderPassCreateFlags(),
+				1u, &vk_attachment_description,
+				1u, &vk_subpass_description));
+
+	const std::vector<vk::Image> swapchain_images= vk_device_->getSwapchainImagesKHR(*vk_swapchain_);
+	framebuffers_.resize(swapchain_images.size());
+	for(size_t i= 0u; i < framebuffers_.size(); ++i)
 	{
-		vk_swapchain_images_view_[i]=
+		framebuffers_[i].image= swapchain_images[i];
+		framebuffers_[i].image_view=
 			vk_device_->createImageViewUnique(
 				vk::ImageViewCreateInfo(
 					vk::ImageViewCreateFlags(),
-					vk_swapchain_images_[i],
+					framebuffers_[i].image,
 					vk::ImageViewType::e2D,
-					swapchain_image_format_,
+					surface_format.format,
 					vk::ComponentMapping(),
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
+		framebuffers_[i].framebuffer=
+			vk_device_->createFramebufferUnique(
+				vk::FramebufferCreateInfo(
+					vk::FramebufferCreateFlags(),
+					*vk_render_pass_,
+					1u, &*framebuffers_[i].image_view,
+					viewport_size_.width , viewport_size_.height, 1u));
 	}
 
 	// Create command pull.
@@ -314,8 +349,8 @@ SystemWindow::SystemWindow()
 			queue_family_index));
 
 	// Create command buffers and it's synchronization primitives.
-	frames_data_.resize(3u); // Use tripple buffering for command buffers.
-	for(FrameData& frame_data : frames_data_)
+	command_buffers_.resize(3u); // Use tripple buffering for command buffers.
+	for(CommandBufferData& frame_data : command_buffers_)
 	{
 		frame_data.command_buffer=
 			std::move(
@@ -411,31 +446,31 @@ SystemEvents SystemWindow::ProcessEvents()
 
 vk::CommandBuffer SystemWindow::BeginFrame()
 {
-	current_frame_data_= &frames_data_[frame_count_ % frames_data_.size()];
+	current_frame_command_buffer_= &command_buffers_[frame_count_ % command_buffers_.size()];
 	++frame_count_;
 
 	vk_device_->waitForFences(
-		1u, &*current_frame_data_->submit_fence,
+		1u, &*current_frame_command_buffer_->submit_fence,
 		VK_TRUE,
 		std::numeric_limits<uint64_t>::max());
 
-	vk_device_->resetFences(1u, &*current_frame_data_->submit_fence);
+	vk_device_->resetFences(1u, &*current_frame_command_buffer_->submit_fence);
 
 	current_swapchain_image_index_=
 		vk_device_->acquireNextImageKHR(
 			*vk_swapchain_,
 			std::numeric_limits<uint64_t>::max(),
-			*current_frame_data_->image_available_semaphore,
+			*current_frame_command_buffer_->image_available_semaphore,
 			vk::Fence()).value;
 
-	const vk::CommandBuffer command_buffer= *current_frame_data_->command_buffer;
+	const vk::CommandBuffer command_buffer= *current_frame_command_buffer_->command_buffer;
 
 	command_buffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
 	// Swap current swapchain image format to optimal for "color attachment".
 	ChangeImageLayout(
-		*current_frame_data_->command_buffer,
-		vk_swapchain_images_[current_swapchain_image_index_],
+		*current_frame_command_buffer_->command_buffer,
+		framebuffers_[current_swapchain_image_index_].image,
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal);
 
@@ -446,27 +481,27 @@ void SystemWindow::EndFrame()
 {
 	// Swap current swapchain image format to optimal for "present".
 	ChangeImageLayout(
-		*current_frame_data_->command_buffer,
-		vk_swapchain_images_[current_swapchain_image_index_],
+		*current_frame_command_buffer_->command_buffer,
+		framebuffers_[current_swapchain_image_index_].image,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::ePresentSrcKHR);
 
 	// End command buffer.
-	current_frame_data_->command_buffer->end();
+	current_frame_command_buffer_->command_buffer->end();
 
 	// Submit command buffer.
 	const vk::PipelineStageFlags wait_dst_stage_mask= vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	const vk::SubmitInfo vk_submit_info(
-		1u, &*current_frame_data_->image_available_semaphore,
+		1u, &*current_frame_command_buffer_->image_available_semaphore,
 		&wait_dst_stage_mask,
-		1u, &*current_frame_data_->command_buffer,
-		1u, &*current_frame_data_->rendering_finished_semaphore);
-	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), *current_frame_data_->submit_fence);
+		1u, &*current_frame_command_buffer_->command_buffer,
+		1u, &*current_frame_command_buffer_->rendering_finished_semaphore);
+	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), *current_frame_command_buffer_->submit_fence);
 
 	// Present queue.
 	vk_queue_.presentKHR(
 		vk::PresentInfoKHR(
-			1u, &*current_frame_data_->rendering_finished_semaphore,
+			1u, &*current_frame_command_buffer_->rendering_finished_semaphore,
 			1u, &*vk_swapchain_,
 			&current_swapchain_image_index_,
 			nullptr));
@@ -477,14 +512,14 @@ vk::Device SystemWindow::GetVulkanDevice() const
 	return *vk_device_;
 }
 
-vk::Format SystemWindow::GetSurfaceFormat() const
-{
-	return swapchain_image_format_;
-}
-
 vk::Extent2D SystemWindow::GetViewportSize() const
 {
 	return viewport_size_;
+}
+
+vk::RenderPass SystemWindow::GetRenderPass() const
+{
+	return *vk_render_pass_;
 }
 
 const vk::PhysicalDeviceMemoryProperties& SystemWindow::GetMemoryProperties() const
@@ -492,14 +527,9 @@ const vk::PhysicalDeviceMemoryProperties& SystemWindow::GetMemoryProperties() co
 	return memory_properties_;
 }
 
-const std::vector<vk::UniqueImageView>& SystemWindow::GetSwapchainImagesViews() const
+vk::Framebuffer SystemWindow::GetCurrentFramebuffer() const
 {
-	return vk_swapchain_images_view_;
-}
-
-size_t SystemWindow::GetCurrentSwapchainImageIndex() const
-{
-	return current_swapchain_image_index_;
+	return *framebuffers_[current_swapchain_image_index_].framebuffer;
 }
 
 void SystemWindow::ChangeImageLayout(

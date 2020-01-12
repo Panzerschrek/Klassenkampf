@@ -19,19 +19,25 @@ public:
 	void EndFrame();
 
 	vk::Device GetVulkanDevice() const;
-	vk::Format GetSurfaceFormat() const;
 	vk::Extent2D GetViewportSize() const;
+	vk::RenderPass GetRenderPass() const; // Render pass for rendering directly into screen.
 	const vk::PhysicalDeviceMemoryProperties& GetMemoryProperties() const;
-	const std::vector<vk::UniqueImageView>& GetSwapchainImagesViews() const;
-	size_t GetCurrentSwapchainImageIndex() const;
+	vk::Framebuffer GetCurrentFramebuffer() const; // Current screen framebuffer.
 
 private:
-	struct FrameData
+	struct CommandBufferData
 	{
 		vk::UniqueCommandBuffer command_buffer;
 		vk::UniqueSemaphore image_available_semaphore;
 		vk::UniqueSemaphore rendering_finished_semaphore;
 		vk::UniqueFence submit_fence;
+	};
+
+	struct SwapchainFramebufferData
+	{
+		vk::Image image;
+		vk::UniqueImageView image_view;
+		vk::UniqueFramebuffer framebuffer;
 	};
 
 	// Use wrapper, because we needs to destroy window in last moment, after destruction of all vulkan objects.
@@ -59,13 +65,14 @@ private:
 	vk::Extent2D viewport_size_;
 	vk::PhysicalDeviceMemoryProperties memory_properties_;
 	vk::UniqueSwapchainKHR vk_swapchain_;
-	std::vector<vk::Image> vk_swapchain_images_;
-	std::vector<vk::UniqueImageView> vk_swapchain_images_view_;
-	vk::Format swapchain_image_format_= vk::Format::eUndefined;
+
+	vk::UniqueRenderPass vk_render_pass_;
+	std::vector<SwapchainFramebufferData> framebuffers_; // one framebuffer for each swapchain image.
+
 	vk::UniqueCommandPool vk_command_pool_;
 
-	std::vector<FrameData> frames_data_;
-	const FrameData* current_frame_data_= nullptr;
+	std::vector<CommandBufferData> command_buffers_;
+	const CommandBufferData* current_frame_command_buffer_= nullptr;
 	size_t frame_count_= 0u;
 	uint32_t current_swapchain_image_index_= ~0u;
 };

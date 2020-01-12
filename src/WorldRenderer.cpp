@@ -29,56 +29,13 @@ const uint32_t g_tex_uniform_binding= 0u;
 
 WorldRenderer::WorldRenderer(
 	const vk::Device vk_device,
-	const vk::Format surface_format,
 	const vk::Extent2D viewport_size,
-	const vk::PhysicalDeviceMemoryProperties& memory_properties,
-	const std::vector<vk::UniqueImageView>& swapchain_image_views)
+	const vk::RenderPass render_pass,
+	const vk::PhysicalDeviceMemoryProperties& memory_properties)
 	: vk_device_(vk_device)
 	, viewport_size_(viewport_size)
+	, vk_render_pass_(render_pass)
 {
-	const vk::AttachmentDescription vk_attachment_description(
-		vk::AttachmentDescriptionFlags(),
-		surface_format,
-		vk::SampleCountFlagBits::e1,
-		vk::AttachmentLoadOp::eClear,
-		vk::AttachmentStoreOp::eStore,
-		vk::AttachmentLoadOp::eDontCare,
-		vk::AttachmentStoreOp::eDontCare,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::ImageLayout::eColorAttachmentOptimal);
-
-	const vk::AttachmentReference vk_attachment_reference(
-		0u,
-		vk::ImageLayout::eColorAttachmentOptimal);
-
-	const vk::SubpassDescription vk_subpass_description(
-		vk::SubpassDescriptionFlags(),
-		vk::PipelineBindPoint::eGraphics,
-		0u, nullptr,
-		1u, &vk_attachment_reference);
-
-	vk_render_pass_=
-		vk_device_.createRenderPassUnique(
-			vk::RenderPassCreateInfo(
-				vk::RenderPassCreateFlags(),
-				1u, &vk_attachment_description,
-				1u, &vk_subpass_description));
-
-	vk_framebuffers_.resize(swapchain_image_views.size());
-	for(size_t i= 0u; i < swapchain_image_views.size(); ++i)
-	{
-		vk_framebuffers_[i]=
-			vk_device_.createFramebufferUnique(
-				vk::FramebufferCreateInfo(
-					vk::FramebufferCreateFlags(),
-					*vk_render_pass_,
-					1u,
-					&swapchain_image_views[i].get(),
-					viewport_size_.width ,
-					viewport_size_.height,
-					1u));
-	}
-
 	// Create shaders
 	shader_vert_=
 		vk_device_.createShaderModuleUnique(
@@ -242,7 +199,7 @@ WorldRenderer::WorldRenderer(
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
 				*vk_pipeline_layout_,
-				*vk_render_pass_,
+				vk_render_pass_,
 				0u));
 
 	// Create vertex buffer
@@ -431,15 +388,15 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::Draw(
 	const vk::CommandBuffer command_buffer,
-	const size_t swapchain_image_index,
+	const vk::Framebuffer framebuffer,
 	const float frame_time_s)
 {
 	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
 
 	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
-			*vk_render_pass_,
-			*vk_framebuffers_[swapchain_image_index],
+			vk_render_pass_,
+			framebuffer,
 			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
 			1u, &clear_value),
 			vk::SubpassContents::eInline);

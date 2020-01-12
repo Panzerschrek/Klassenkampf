@@ -11,21 +11,18 @@ class WorldRenderer final
 public:
 	WorldRenderer(
 		vk::Device vk_device,
-		vk::Format surface_format,
 		vk::Extent2D viewport_size,
-		const vk::PhysicalDeviceMemoryProperties& memory_properties,
-		const std::vector<vk::UniqueImageView>& swapchain_image_views);
+		vk::RenderPass render_pass,
+		const vk::PhysicalDeviceMemoryProperties& memory_properties);
 
 	~WorldRenderer();
 
-	void Draw(vk::CommandBuffer command_buffer, size_t swapchain_image_index, float frame_time_s);
+	void Draw(vk::CommandBuffer command_buffer, vk::Framebuffer framebuffer, float frame_time_s);
 
 private:
 	const vk::Device vk_device_;
 	const vk::Extent2D viewport_size_;
-
-	vk::UniqueRenderPass vk_render_pass_;
-	std::vector<vk::UniqueFramebuffer> vk_framebuffers_;
+	const vk::RenderPass vk_render_pass_;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;
