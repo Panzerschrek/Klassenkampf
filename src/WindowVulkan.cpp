@@ -55,7 +55,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	if(use_debug_extensions_and_layers)
 	{
 		const std::vector<vk::LayerProperties> vk_layer_properties= vk::enumerateInstanceLayerProperties();
-		const char* const possible_validation_layers[]
+		static const char* const possible_validation_layers[]
 		{
 			"VK_LAYER_LUNARG_core_validation",
 			"VK_LAYER_KHRONOS_validation",
