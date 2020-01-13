@@ -166,7 +166,9 @@ WorldRenderer::WorldRenderer(const WindowVulkan& window_vulkan)
 		VK_FALSE,
 		vk::PolygonMode::eFill,
 		vk::CullModeFlagBits::eNone,
-		vk::FrontFace::eCounterClockwise);
+		vk::FrontFace::eCounterClockwise,
+		VK_FALSE, 0.0f, 0.0f, 0.0f,
+		1.0f);
 
 	const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
 

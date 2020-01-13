@@ -120,10 +120,11 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	}
 	vk_queue_familiy_index_= queue_family_index;
 
+	const float queue_priority= 1.0f;
 	const vk::DeviceQueueCreateInfo vk_device_queue_create_info(
 		vk::DeviceQueueCreateFlags(),
 		queue_family_index,
-		1u);
+		1u, &queue_priority);
 
 	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	const vk::DeviceCreateInfo vk_device_create_info(
