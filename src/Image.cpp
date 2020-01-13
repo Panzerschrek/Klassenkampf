@@ -1,13 +1,19 @@
 #include "Image.hpp"
 
-// This is single place, where this library included.
-// So, we can include implementation here.
+#ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
+
+// This is single place, where this library included.
+// So, we can include implementation here.
 #define STB_IMAGE_IMPLEMENTATION
 #include "../stb/stb_image.h"
+
+#ifdef __GNUC__
 #pragma GCC diagnostic pop
+#endif
 
 namespace KK
 {
