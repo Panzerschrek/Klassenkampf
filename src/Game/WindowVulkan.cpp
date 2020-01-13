@@ -224,7 +224,10 @@ WindowVulkan::WindowVulkan(
 	vk::Device vk_device_tmp;
 	if((physical_device.createDevice(&vk_device_create_info, nullptr, &vk_device_tmp)) != vk::Result::eSuccess)
 		Log::FatalError("Could not create Vulkan device");
-	vk_device_.reset(vk_device_tmp);
+	vk_device_=
+		vk::UniqueDevice(
+			vk_device_tmp,
+			vk::ObjectDestroy<vk::NoParent, vk::DispatchLoaderStatic>(nullptr, VULKAN_HPP_DEFAULT_DISPATCHER));
 	Log::Info("Vulkan logical device created");
 
 	vk_queue_= vk_device_->getQueue(queue_family_index, 0u);
