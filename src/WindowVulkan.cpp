@@ -118,7 +118,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	{
 		std::exit(-1);
 	}
-	vk_queue_familiy_index_= queue_family_index;
+	vk_queue_family_index_= queue_family_index;
 
 	const float queue_priority= 1.0f;
 	const vk::DeviceQueueCreateInfo vk_device_queue_create_info(
@@ -341,6 +341,11 @@ vk::Extent2D WindowVulkan::GetViewportSize() const
 	return viewport_size_;
 }
 
+uint32_t WindowVulkan::GetQueueFamilyIndex() const
+{
+	return vk_queue_family_index_;
+}
+
 vk::RenderPass WindowVulkan::GetRenderPass() const
 {
 	return *vk_render_pass_;
@@ -366,8 +371,8 @@ void WindowVulkan::ChangeImageLayout(
 		vk::AccessFlagBits::eTransferWrite,
 		vk::AccessFlagBits::eMemoryRead,
 		from, to,
-		vk_queue_familiy_index_,
-		vk_queue_familiy_index_,
+		vk_queue_family_index_,
+		vk_queue_family_index_,
 		image,
 		vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 

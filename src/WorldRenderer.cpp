@@ -29,7 +29,7 @@ const uint32_t g_tex_uniform_binding= 0u;
 
 } // namespace
 
-WorldRenderer::WorldRenderer(const WindowVulkan& window_vulkan)
+WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, vk_render_pass_(window_vulkan.GetRenderPass())
@@ -331,6 +331,28 @@ WorldRenderer::WorldRenderer(const WindowVulkan& window_vulkan)
 				vk::Format::eR8G8B8A8Unorm,
 				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
+
+		// Make image layout transition.
+		const vk::CommandBuffer command_buffer= window_vulkan.BeginFrame();
+
+		const vk::ImageMemoryBarrier vk_image_memory_barrier(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::ePreinitialized, vk::ImageLayout::eGeneral,
+			window_vulkan.GetQueueFamilyIndex(),
+			window_vulkan.GetQueueFamilyIndex(),
+			*vk_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &vk_image_memory_barrier);
+
+		window_vulkan.EndFrame();
 	}
 
 	// Create descriptor set pool.

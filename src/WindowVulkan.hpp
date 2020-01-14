@@ -17,6 +17,7 @@ public:
 
 	vk::Device GetVulkanDevice() const;
 	vk::Extent2D GetViewportSize() const;
+	uint32_t GetQueueFamilyIndex() const;
 	vk::RenderPass GetRenderPass() const; // Render pass for rendering directly into screen.
 	const vk::PhysicalDeviceMemoryProperties& GetMemoryProperties() const;
 	vk::Framebuffer GetCurrentFramebuffer() const; // Current screen framebuffer.
@@ -50,7 +51,7 @@ private:
 	vk::SurfaceKHR vk_surface_;
 	vk::UniqueDevice vk_device_;
 	vk::Queue vk_queue_= nullptr;
-	uint32_t vk_queue_familiy_index_= ~0u;
+	uint32_t vk_queue_family_index_= ~0u;
 	vk::Extent2D viewport_size_;
 	vk::PhysicalDeviceMemoryProperties memory_properties_;
 	vk::UniqueSwapchainKHR vk_swapchain_;

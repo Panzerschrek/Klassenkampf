@@ -8,7 +8,7 @@ namespace KK
 class WorldRenderer final
 {
 public:
-	explicit WorldRenderer(const WindowVulkan& window_vulkan);
+	explicit WorldRenderer(WindowVulkan& window_vulkan);
 
 	~WorldRenderer();
 
