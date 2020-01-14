@@ -1,5 +1,8 @@
+#include "Assert.hpp"
 #include "SystemWindow.hpp"
 #include <SDL.h>
+#include <algorithm>
+#include <cstring>
 
 
 namespace KK
@@ -93,23 +96,30 @@ uint16_t TranslateKeyModifiers(const Uint16 modifiers)
 
 } // namespace
 
-SystemWindow::SystemWindow()
+SystemWindow::SystemWindow(const GAPISupport gapi_support)
 {
 	// TODO - check errors.
 	SDL_Init(SDL_INIT_VIDEO);
+
+	Uint32 window_flags= SDL_WINDOW_SHOWN;
+	switch(gapi_support)
+	{
+	case GAPISupport::Vulkan:
+		window_flags|= SDL_WINDOW_VULKAN;
+		break;
+	};
 
 	window_=
 		SDL_CreateWindow(
 			"Klassenkampf",
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 			800, 600,
-			SDL_WINDOW_SHOWN);
+			window_flags);
 }
 
 SystemWindow::~SystemWindow()
 {
 	SDL_DestroyWindow(window_);
-	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
 SystemEvents SystemWindow::ProcessEvents()
@@ -182,13 +192,9 @@ SystemEvents SystemWindow::ProcessEvents()
 	return result_events;
 }
 
-void SystemWindow::BeginFrame()
+SDL_Window* SystemWindow::GetSDLWindow() const
 {
-}
-
-void SystemWindow::EndFrame()
-{
-	SDL_UpdateWindowSurface(window_);
+	return window_;
 }
 
 } // namespace KK

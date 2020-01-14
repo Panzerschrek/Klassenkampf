@@ -9,16 +9,20 @@ namespace KK
 class SystemWindow final
 {
 public:
-	SystemWindow();
+	enum class GAPISupport
+	{
+		Vulkan,
+	};
+
+public:
+	explicit SystemWindow(GAPISupport gapi_support);
 	~SystemWindow();
 
 	SystemEvents ProcessEvents();
 
-	void BeginFrame();
-	void EndFrame();
+	SDL_Window* GetSDLWindow() const;
 
 private:
-
 	SDL_Window* window_= nullptr;
 };
 
