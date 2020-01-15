@@ -264,7 +264,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 
 	// Create vertex buffer.
 	// Use device local memory and ise "vkCmdUpdateBuffer, which have limit of 65536 bytes.
-	max_glyphs_in_buffer_= 1024u;
+	max_glyphs_in_buffer_= 65535u / (sizeof(TextVertex) * 4u);
 	{
 		vertex_buffer_=
 			vk_device_.createBufferUnique(
@@ -385,68 +385,61 @@ void TextOut::AddText(
 }
 
 void TextOut::AddTextPixelCoords(
-	float x,
-	float y,
-	float size/*in pixels*/,
+	const float x,
+	const float y,
+	const float size/*in pixels*/,
 	const uint8_t* const color,
 	const char* const text)
 {
+	float cur_x= +2.0f * x / float(viewport_size_.width ) - 1.0f;
+	float cur_y= +2.0f * y / float(viewport_size_.height) - 1.0f;
+	const float x0= cur_x;
+
+	const float dx= 2.0f * size * float(glyph_size_[0]) / float(viewport_size_.width * glyph_size_[1]);
+	const float dy= 2.0f * size / float(viewport_size_.height);
+
 	const char* str= text;
-
-	float x0;
-	float dx, dy;
-
-	x= +2.0f * x / float(viewport_size_.width ) - 1.0f;
-	y= -2.0f * y / float(viewport_size_.height) + 1.0f;
-
-	x0= x;
-
-	dx= 2.0f * size * float(glyph_size_[0]) / float(viewport_size_.width * glyph_size_[1]);
-	dy= 2.0f * size / float(viewport_size_.height);
-
-	y-= dy;
-
-	while( *str != 0 )
+	while( *str != '\0')
 	{
 		if( *str == '\n' )
 		{
-			x= x0;
-			y-=dy;
-			str++;
+			cur_x= x0;
+			cur_y+=dy;
+			++str;
 			continue;
 		}
 
 		vertices_data_.resize(vertices_data_.size() + 4u);
 		TextVertex* const v= vertices_data_.data() + vertices_data_.size() - 4u;
 
-		int symb_pos= (*str-32);
-		v[0].pos[0]= x;
-		v[0].pos[1]= y;
+		const uint8_t sym_pos= uint8_t(*str-32);
+		v[0].pos[0]= cur_x;
+		v[0].pos[1]= cur_y;
 		v[0].tex_coord[0]= 0;
-		v[0].tex_coord[1]= symb_pos;
+		v[0].tex_coord[1]= sym_pos;
 
-		v[1].pos[0]= x;
-		v[1].pos[1]= y + dy;
+		v[1].pos[0]= cur_x;
+		v[1].pos[1]= cur_y + dy;
 		v[1].tex_coord[0]= 0;
-		v[1].tex_coord[1]= symb_pos + 1;
+		v[1].tex_coord[1]= sym_pos + 1;
 
-		v[2].pos[0]= x + dx;
-		v[2].pos[1]= y + dy;
+		v[2].pos[0]= cur_x + dx;
+		v[2].pos[1]= cur_y + dy;
 		v[2].tex_coord[0]= 1;
-		v[2].tex_coord[1]= symb_pos + 1;
+		v[2].tex_coord[1]= sym_pos + 1;
 
-		v[3].pos[0]= x + dx;
-		v[3].pos[1]= y;
+		v[3].pos[0]= cur_x + dx;
+		v[3].pos[1]= cur_y;
 		v[3].tex_coord[0]= 1;
-		v[3].tex_coord[1]= symb_pos;
+		v[3].tex_coord[1]= sym_pos;
 
 		std::memcpy(v[0].color, color, 4u);
 		std::memcpy(v[1].color, color, 4u);
 		std::memcpy(v[2].color, color, 4u);
 		std::memcpy(v[3].color, color, 4u);
 
-		x+= dx;
-		str++;
+		cur_x+= dx;
+		++str;
 	}
 }
 
@@ -454,10 +447,12 @@ void TextOut::Draw(
 	const vk::CommandBuffer command_buffer,
 	const vk::Framebuffer framebuffer)
 {
+	const size_t vertex_count= std::min(vertices_data_.size(), max_glyphs_in_buffer_ * 4u);
+
 	command_buffer.updateBuffer(
 		*vertex_buffer_,
 		0u,
-		vertices_data_.size() * sizeof(TextVertex),
+		vertex_count * sizeof(TextVertex),
 		vertices_data_.data());
 
 	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
@@ -482,7 +477,7 @@ void TextOut::Draw(
 			0u, nullptr);
 
 		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
-		command_buffer.drawIndexed(uint32_t(vertices_data_.size() / 4u * 6u), 1u, 0u, 0u, 0u);
+		command_buffer.drawIndexed(uint32_t(vertex_count / 4u * 6u), 1u, 0u, 0u, 0u);
 	}
 	command_buffer.endRenderPass();
 
