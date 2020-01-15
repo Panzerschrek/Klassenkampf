@@ -1,5 +1,6 @@
 #pragma once
 #include "SystemWindow.hpp"
+#include "TextOut.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldRenderer.hpp"
 #include <chrono>
@@ -22,6 +23,7 @@ private:
 	SystemWindow system_window_;
 	WindowVulkan window_vulkan_;
 	WorldRenderer world_renderer_;
+	TextOut text_out_;
 
 	const Clock::time_point init_time_;
 	Clock::time_point prev_tick_time_;

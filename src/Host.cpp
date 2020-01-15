@@ -9,6 +9,7 @@ Host::Host()
 	: system_window_(SystemWindow::GAPISupport::Vulkan)
 	, window_vulkan_(system_window_)
 	, world_renderer_(window_vulkan_)
+	, text_out_(window_vulkan_)
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {
@@ -26,11 +27,18 @@ bool Host::Loop()
 			return true;
 	}
 
+	const uint8_t color[4]={ 255, 255, 255, 128 };
+	text_out_.AddText( 5.0f, 5.0f, 1.0f, color, "lorem ipsum" );
+
 	const auto command_buffer= window_vulkan_.BeginFrame();
+
 	world_renderer_.Draw(
 		command_buffer,
 		window_vulkan_.GetCurrentFramebuffer(),
 		float(std::chrono::duration_cast<std::chrono::milliseconds>(tick_start_time - init_time_).count()) / 1000.0f);
+
+	text_out_.Draw(command_buffer,  window_vulkan_.GetCurrentFramebuffer());
+
 	window_vulkan_.EndFrame();
 
 	const Clock::time_point tick_end_time= Clock::now();
