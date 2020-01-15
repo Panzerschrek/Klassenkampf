@@ -184,7 +184,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 	vk::UniqueBuffer image_staging_buffer;
 	vk::UniqueDeviceMemory image_staging_buffer_memory;
 	{
-		const auto image_loaded_opt= Image::Load("mono_font_sdf.tga");
+		const auto image_loaded_opt= Image::Load("mono_font_sdf.png");
 		KK_ASSERT(image_loaded_opt != std::nullopt);
 		const Image& image_loaded= *image_loaded_opt;
 
