@@ -112,7 +112,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 	{
 		{0u, 0u, vk::Format::eR32G32Sfloat , offsetof(TextVertex, pos      )},
 		{1u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(TextVertex, color    )},
-		{2u, 0u, vk::Format::eR8G8Unorm    , offsetof(TextVertex, tex_coord)},
+		{2u, 0u, vk::Format::eR8G8Uscaled  , offsetof(TextVertex, tex_coord)},
 	};
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
@@ -145,8 +145,8 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 	const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
 
 	const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
-		VK_FALSE,
-		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		VK_TRUE,
+		vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
 		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
@@ -419,7 +419,7 @@ void TextOut::AddTextPixelCoords(
 		vertices_data_.resize(vertices_data_.size() + 4u);
 		TextVertex* const v= vertices_data_.data() + vertices_data_.size() - 4u;
 
-		int symb_pos= 95 - (*str-32);
+		int symb_pos= (*str-32);
 		v[0].pos[0]= x;
 		v[0].pos[1]= y;
 		v[0].tex_coord[0]= 0;
