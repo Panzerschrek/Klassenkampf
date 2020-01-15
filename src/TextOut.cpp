@@ -44,12 +44,12 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
-				vk::Filter::eNearest,
-				vk::Filter::eNearest,
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
 				vk::SamplerMipmapMode::eNearest,
-				vk::SamplerAddressMode::eRepeat,
-				vk::SamplerAddressMode::eRepeat,
-				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
 				0.0f,
 				VK_FALSE,
 				0.0f,
