@@ -27,8 +27,8 @@ bool Host::Loop()
 			return true;
 	}
 
-	const uint8_t color[4]={ 128, 255, 128, 220};
-	text_out_.AddText( 0.0f, 0.0f, 0.5f, color, "lorem ipsum\n one 66 ! {}" );
+	const uint8_t color[4]={ 255, 255, 255, 255 };
+	text_out_.AddText( 0.0f, 0.0f, 0.25f, color, "lorem ipsum\n one 66 ! {}" );
 
 	const auto command_buffer= window_vulkan_.BeginFrame();
 

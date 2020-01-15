@@ -46,7 +46,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				vk::SamplerCreateFlags(),
 				vk::Filter::eLinear,
 				vk::Filter::eLinear,
-				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerMipmapMode::eLinear,
 				vk::SamplerAddressMode::eClampToEdge,
 				vk::SamplerAddressMode::eClampToEdge,
 				vk::SamplerAddressMode::eClampToEdge,
@@ -56,7 +56,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				VK_FALSE,
 				vk::CompareOp::eNever,
 				0.0f,
-				0.0f,
+				100.0f,
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
@@ -191,17 +191,19 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		glyph_size_[0]= image_loaded.GetWidth();
 		glyph_size_[1]= image_loaded.GetHeight() / 96u;
 
+		const uint32_t mip_levels= 4u; // 4 Should be enough.
+
 		font_image_= vk_device_.createImageUnique(
 			vk::ImageCreateInfo(
 				vk::ImageCreateFlags(),
 				vk::ImageType::e2D,
 				vk::Format::eR8G8B8A8Unorm,
 				vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u),
-				1u,
+				mip_levels,
 				1u,
 				vk::SampleCountFlagBits::e1,
 				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
 				vk::SharingMode::eExclusive,
 				0u, nullptr,
 				vk::ImageLayout::eUndefined));
@@ -247,28 +249,23 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		vk_device_.unmapMemory(*image_staging_buffer_memory);
 
 		// Copy staging bufer content into image.
-		const auto transit_image_lauout=
-		[&](const vk::ImageLayout src_layout, const vk::ImageLayout dst_layout)
-		{
-			const vk::ImageMemoryBarrier vk_image_memory_barrier(
-				vk::AccessFlagBits::eTransferWrite,
-				vk::AccessFlagBits::eMemoryRead,
-				src_layout, dst_layout,
-				window_vulkan.GetQueueFamilyIndex(),
-				window_vulkan.GetQueueFamilyIndex(),
-				*font_image_,
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-			command_buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eBottomOfPipe,
-				vk::DependencyFlags(),
-				0u, nullptr,
-				0u, nullptr,
-				1u, &vk_image_memory_barrier);
-		};
+		const vk::ImageMemoryBarrier vk_image_memory_transfer_init(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+			window_vulkan.GetQueueFamilyIndex(),
+			window_vulkan.GetQueueFamilyIndex(),
+			*font_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-		transit_image_lauout(vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &vk_image_memory_transfer_init);
 
 		const vk::BufferImageCopy copy_region(
 			0u,
@@ -283,8 +280,111 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 			vk::ImageLayout::eTransferDstOptimal,
 			1u, &copy_region);
 
-		// TODO - maybe use eShaderReadOnlyOptimal layout as final?
-		transit_image_lauout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eGeneral);
+		for( uint32_t i= 1u; i < mip_levels; ++i)
+		{
+			// Transform previous mip level layout from dst_optimal to src_optimal
+			const vk::ImageMemoryBarrier vk_image_memory_barrier_src(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
+				window_vulkan.GetQueueFamilyIndex(),
+				window_vulkan.GetQueueFamilyIndex(),
+				*font_image_,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i - 1u, 1u, 0u, 1u));
+
+			command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier_src);
+
+			const vk::ImageMemoryBarrier vk_image_memory_barrier_dst(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+				window_vulkan.GetQueueFamilyIndex(),
+				window_vulkan.GetQueueFamilyIndex(),
+				*font_image_,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i, 1u, 0u, 1u));
+
+			command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier_dst);
+
+			std::array<vk::Offset3D, 2> src_offsets;
+			std::array<vk::Offset3D, 2> dst_offsets;
+
+			src_offsets[0]= 0u;
+			src_offsets[0]= 0u;
+			src_offsets[0]= 0u;
+			src_offsets[1].x= image_loaded.GetWidth () >> (i-1u);
+			src_offsets[1].y= image_loaded.GetHeight() >> (i-1u);
+			src_offsets[1].z= 1u;
+
+			dst_offsets[0]= 0u;
+			dst_offsets[0]= 0u;
+			dst_offsets[0]= 0u;
+			dst_offsets[1].x= image_loaded.GetWidth () >> i;
+			dst_offsets[1].y= image_loaded.GetHeight() >> i;
+			dst_offsets[1].z= 1;
+
+			vk::ImageBlit image_blit(
+				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 1u, 0u, 1u),
+				src_offsets,
+				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 0u, 0u, 1u),
+				dst_offsets);
+
+			command_buffer.blitImage(
+				*font_image_,
+				vk::ImageLayout::eTransferSrcOptimal,
+				*font_image_,
+				vk::ImageLayout::eTransferDstOptimal,
+				1u, &image_blit,
+				vk::Filter::eLinear);
+
+			const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eGeneral,
+				window_vulkan.GetQueueFamilyIndex(),
+				window_vulkan.GetQueueFamilyIndex(),
+				*font_image_,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i - 1u, 1u, 0u, 1u));
+
+			command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier_src_final);
+
+			if(i + 1u == mip_levels)
+			{
+				const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+					vk::AccessFlagBits::eTransferWrite,
+					vk::AccessFlagBits::eMemoryRead,
+					vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eGeneral,
+					window_vulkan.GetQueueFamilyIndex(),
+					window_vulkan.GetQueueFamilyIndex(),
+					*font_image_,
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i, 1u, 0u, 1u));
+
+				command_buffer.pipelineBarrier(
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eBottomOfPipe,
+					vk::DependencyFlags(),
+					0u, nullptr,
+					0u, nullptr,
+					1u, &vk_image_memory_barrier_src_final);
+			}
+		}
 
 		// Create image view.
 		font_image_view_= vk_device_.createImageViewUnique(
@@ -294,7 +394,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				vk::ImageViewType::e2D,
 				vk::Format::eR8G8B8A8Unorm,
 				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
 
 	// Use device local memory and ise "vkCmdUpdateBuffer, which have limit of 65536  bytes.
