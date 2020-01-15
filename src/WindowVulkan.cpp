@@ -79,7 +79,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	{
 		std::exit(-1);
 	}
-	vk_surface_= vk_tmp_surface;
+	vk_surface_= vk::UniqueSurfaceKHR(vk_tmp_surface, vk::ObjectDestroy<vk::Instance>(*vk_instance_));
 
 	SDL_Vulkan_GetDrawableSize(system_window.GetSDLWindow(), reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
 
@@ -104,7 +104,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	uint32_t queue_family_index= ~0u;
 	for(uint32_t i= 0u; i < queue_family_properties.size(); ++i)
 	{
-		const VkBool32 supported= physical_device.getSurfaceSupportKHR(i, vk_surface_);
+		const VkBool32 supported= physical_device.getSurfaceSupportKHR(i, *vk_surface_);
 		if(supported != 0 &&
 			queue_family_properties[i].queueCount > 0 &&
 			(queue_family_properties[i].queueFlags & vk::QueueFlagBits::eGraphics) != vk::QueueFlagBits(0))
@@ -146,7 +146,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	vk_queue_= vk_device_->getQueue(queue_family_index, 0u);
 
 	// Select surface format. Prefer usage of normalized rbga32.
-	const std::vector<vk::SurfaceFormatKHR> surface_formats= physical_device.getSurfaceFormatsKHR(vk_surface_);
+	const std::vector<vk::SurfaceFormatKHR> surface_formats= physical_device.getSurfaceFormatsKHR(*vk_surface_);
 	vk::SurfaceFormatKHR surface_format= surface_formats.back();
 	for(const vk::SurfaceFormatKHR& surface_format_variant : surface_formats)
 	{
@@ -158,19 +158,19 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	}
 
 	// Select present mode. Prefer usage of tripple buffering, than double buffering.
-	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(vk_surface_);
+	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(*vk_surface_);
 	vk::PresentModeKHR present_mode= present_modes.front();
 	if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eMailbox) != present_modes.end())
 		present_mode= vk::PresentModeKHR::eMailbox; // Use tripple buffering.
 	else if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eFifo) != present_modes.end())
 		present_mode= vk::PresentModeKHR::eFifo; // Use double buffering.
 
-	const vk::SurfaceCapabilitiesKHR surface_capabilities= physical_device.getSurfaceCapabilitiesKHR(vk_surface_);
+	const vk::SurfaceCapabilitiesKHR surface_capabilities= physical_device.getSurfaceCapabilitiesKHR(*vk_surface_);
 
 	vk_swapchain_= vk_device_->createSwapchainKHRUnique(
 		vk::SwapchainCreateInfoKHR(
 			vk::SwapchainCreateFlagsKHR(),
-			vk_surface_,
+			*vk_surface_,
 			surface_capabilities.minImageCount,
 			surface_format.format,
 			surface_format.colorSpace,

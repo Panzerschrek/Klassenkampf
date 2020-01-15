@@ -48,7 +48,7 @@ private:
 private:
 	// Keep here order of construction.
 	vk::UniqueInstance vk_instance_;
-	vk::SurfaceKHR vk_surface_;
+	vk::UniqueSurfaceKHR vk_surface_;
 	vk::UniqueDevice vk_device_;
 	vk::Queue vk_queue_= nullptr;
 	uint32_t vk_queue_family_index_= ~0u;
