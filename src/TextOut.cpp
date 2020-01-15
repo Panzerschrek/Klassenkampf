@@ -428,13 +428,12 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		std::vector<uint16_t> quad_indeces(max_glyphs_in_buffer_ * 6u);
 		for(uint32_t i= 0u, j= 0u; i < max_glyphs_in_buffer_ * 6; i+= 6u, j+=4u)
 		{
-			quad_indeces[i]= j;
-			quad_indeces[i + 1]= j + 1;
-			quad_indeces[i + 2]= j + 2;
-
-			quad_indeces[i + 3]= j + 2;
-			quad_indeces[i + 4]= j + 3;
-			quad_indeces[i + 5]= j;
+			quad_indeces[i  ]= uint16_t(j  );
+			quad_indeces[i+1]= uint16_t(j+1);
+			quad_indeces[i+2]= uint16_t(j+2);
+			quad_indeces[i+3]= uint16_t(j+2);
+			quad_indeces[i+4]= uint16_t(j+3);
+			quad_indeces[i+5]= uint16_t(j  );
 		}
 
 		index_buffer_=
@@ -560,12 +559,12 @@ void TextOut::AddTextPixelCoords(
 		v[1].pos[0]= cur_x;
 		v[1].pos[1]= cur_y + dy;
 		v[1].tex_coord[0]= 0;
-		v[1].tex_coord[1]= sym_pos + 1;
+		v[1].tex_coord[1]= uint8_t(sym_pos + 1u);
 
 		v[2].pos[0]= cur_x + dx;
 		v[2].pos[1]= cur_y + dy;
 		v[2].tex_coord[0]= 1;
-		v[2].tex_coord[1]= sym_pos + 1;
+		v[2].tex_coord[1]= uint8_t(sym_pos + 1u);
 
 		v[3].pos[0]= cur_x + dx;
 		v[3].pos[1]= cur_y;
