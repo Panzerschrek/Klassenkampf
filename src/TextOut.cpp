@@ -262,9 +262,10 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 			1u, &vk_image_memory_barrier);
 	}
 
+	// Use device local memory and ise "vkCmdUpdateBuffer, which have limit of 65536  bytes.
+	max_glyphs_in_buffer_= 65536u / std::max(sizeof(TextVertex) * 4u, sizeof(uint16_t) * 6u);
+
 	// Create vertex buffer.
-	// Use device local memory and ise "vkCmdUpdateBuffer, which have limit of 65536 bytes.
-	max_glyphs_in_buffer_= 65535u / (sizeof(TextVertex) * 4u);
 	{
 		vertex_buffer_=
 			vk_device_.createBufferUnique(
@@ -399,12 +400,12 @@ void TextOut::AddTextPixelCoords(
 	const float dy= 2.0f * size / float(viewport_size_.height);
 
 	const char* str= text;
-	while( *str != '\0')
+	while(*str != '\0')
 	{
-		if( *str == '\n' )
+		if(*str == '\n')
 		{
 			cur_x= x0;
-			cur_y+=dy;
+			cur_y+= dy;
 			++str;
 			continue;
 		}
@@ -412,7 +413,7 @@ void TextOut::AddTextPixelCoords(
 		vertices_data_.resize(vertices_data_.size() + 4u);
 		TextVertex* const v= vertices_data_.data() + vertices_data_.size() - 4u;
 
-		const uint8_t sym_pos= uint8_t(*str-32);
+		const uint8_t sym_pos= uint8_t(std::max(0, *str-32));
 		v[0].pos[0]= cur_x;
 		v[0].pos[1]= cur_y;
 		v[0].tex_coord[0]= 0;
