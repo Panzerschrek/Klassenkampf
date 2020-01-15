@@ -181,6 +181,8 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 	const vk::CommandBuffer command_buffer= window_vulkan.BeginFrame();
 
 	// Create font image
+	vk::UniqueBuffer image_staging_buffer;
+	vk::UniqueDeviceMemory image_staging_buffer_memory;
 	{
 		const auto image_loaded_opt= Image::Load("mono_font_sdf.tga");
 		KK_ASSERT(image_loaded_opt != std::nullopt);
@@ -198,11 +200,11 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				1u,
 				1u,
 				vk::SampleCountFlagBits::e1,
-				vk::ImageTiling::eLinear,
-				vk::ImageUsageFlagBits::eSampled,
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 				vk::SharingMode::eExclusive,
 				0u, nullptr,
-				vk::ImageLayout::ePreinitialized));
+				vk::ImageLayout::eUndefined));
 
 		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*font_image_);
 
@@ -210,30 +212,81 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
 		{
 			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
 		font_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindImageMemory(*font_image_, *font_image_memory_, 0u);
 
-		const vk::SubresourceLayout image_layout=
-			vk_device_.getImageSubresourceLayout(
-				*font_image_,
-				vk::ImageSubresource(vk::ImageAspectFlagBits::eColor, 0u, 0u));
+		// Prepare staging buffer.
+		image_staging_buffer=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					image_memory_requirements.size,
+					vk::BufferUsageFlagBits::eTransferSrc));
+
+		const vk::MemoryRequirements staging_memory_requirements= vk_device_.getBufferMemoryRequirements(*image_staging_buffer);
+
+		vk::MemoryAllocateInfo staging_buffer_allocate_info(staging_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((staging_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible ) != vk::MemoryPropertyFlags() &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				staging_buffer_allocate_info.memoryTypeIndex= i;
+		}
+
+		image_staging_buffer_memory= vk_device_.allocateMemoryUnique(staging_buffer_allocate_info);
+		vk_device_.bindBufferMemory(*image_staging_buffer, *image_staging_buffer_memory, 0u);
 
 		void* texture_data_gpu_size= nullptr;
-		vk_device_.mapMemory(*font_image_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
+		vk_device_.mapMemory(*image_staging_buffer_memory, 0u, staging_buffer_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
+		std::memcpy(texture_data_gpu_size, image_loaded.GetData(), image_loaded.GetWidth() * image_loaded.GetHeight() * sizeof(Image::PixelType));
+		vk_device_.unmapMemory(*image_staging_buffer_memory);
 
-		for(uint32_t y= 0u; y < image_loaded.GetHeight(); ++y)
-			std::memcpy(
-				static_cast<char*>(texture_data_gpu_size) + y * image_layout.rowPitch,
-				image_loaded.GetData() + y * image_loaded.GetWidth(),
-				image_loaded.GetWidth() * sizeof(uint32_t));
+		// Copy staging bufer content into image.
+		const auto transit_image_lauout=
+		[&](const vk::ImageLayout src_layout, const vk::ImageLayout dst_layout)
+		{
+			const vk::ImageMemoryBarrier vk_image_memory_barrier(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				src_layout, dst_layout,
+				window_vulkan.GetQueueFamilyIndex(),
+				window_vulkan.GetQueueFamilyIndex(),
+				*font_image_,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-		vk_device_.unmapMemory(*font_image_memory_);
+			command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier);
+		};
 
+		transit_image_lauout(vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+
+		const vk::BufferImageCopy copy_region(
+			0u,
+			image_loaded.GetWidth(), image_loaded.GetHeight(),
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
+			vk::Offset3D(0, 0, 0),
+			vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u));
+
+		command_buffer.copyBufferToImage(
+			*image_staging_buffer,
+			*font_image_,
+			vk::ImageLayout::eTransferDstOptimal,
+			1u, &copy_region);
+
+		// TODO - maybe use eShaderReadOnlyOptimal layout as final?
+		transit_image_lauout(vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eGeneral);
+
+		// Create image view.
 		font_image_view_= vk_device_.createImageViewUnique(
 			vk::ImageViewCreateInfo(
 				vk::ImageViewCreateFlags(),
@@ -242,24 +295,6 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				vk::Format::eR8G8B8A8Unorm,
 				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
-
-		// Make image layout transition.
-		const vk::ImageMemoryBarrier vk_image_memory_barrier(
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::ePreinitialized, vk::ImageLayout::eGeneral,
-			window_vulkan.GetQueueFamilyIndex(),
-			window_vulkan.GetQueueFamilyIndex(),
-			*font_image_,
-			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-		command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &vk_image_memory_barrier);
 	}
 
 	// Use device local memory and ise "vkCmdUpdateBuffer, which have limit of 65536  bytes.
@@ -362,6 +397,9 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		0u, nullptr);
 
 	window_vulkan.EndFrame();
+
+	// Wait for image buffer copying.
+	vk_device_.waitIdle();
 }
 
 TextOut::~TextOut()
