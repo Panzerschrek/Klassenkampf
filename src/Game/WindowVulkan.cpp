@@ -142,7 +142,10 @@ WindowVulkan::WindowVulkan(
 	VkSurfaceKHR vk_tmp_surface;
 	if(!SDL_Vulkan_CreateSurface(system_window.GetSDLWindow(), *vk_instance_, &vk_tmp_surface))
 		Log::FatalError("Could not create Vulkan surface");
-	vk_surface_= vk::UniqueSurfaceKHR(vk_tmp_surface, vk::ObjectDestroy<vk::Instance>(*vk_instance_));
+	vk_surface_=
+		vk::UniqueSurfaceKHR(
+			vk_tmp_surface,
+			vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>(*vk_instance_, nullptr, VULKAN_HPP_DEFAULT_DISPATCHER));
 
 	SDL_Vulkan_GetDrawableSize(system_window.GetSDLWindow(), reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
 
