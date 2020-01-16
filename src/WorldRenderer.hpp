@@ -12,7 +12,8 @@ public:
 
 	~WorldRenderer();
 
-	void Draw(vk::CommandBuffer command_buffer, vk::Framebuffer framebuffer, float frame_time_s);
+	void BeginFrame(vk::CommandBuffer command_buffer);
+	void EndFrame(vk::CommandBuffer command_buffer, float frame_time_s);
 
 private:
 	const vk::Device vk_device_;

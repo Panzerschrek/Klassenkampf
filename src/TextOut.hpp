@@ -29,7 +29,8 @@ public:
 		const uint8_t* color,
 		const char* text);
 
-	void Draw(vk::CommandBuffer command_buffer, vk::Framebuffer framebuffer);
+	void BeginFrame(vk::CommandBuffer command_buffer);
+	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
 	struct TextVertex

@@ -495,7 +495,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		1u, &write_descriptor_set,
 		0u, nullptr);
 
-	window_vulkan.EndFrame();
+	window_vulkan.EndFrame({});
 
 	// Wait for image buffer copying.
 	vk_device_.waitIdle();
@@ -581,43 +581,32 @@ void TextOut::AddTextPixelCoords(
 	}
 }
 
-void TextOut::Draw(
-	const vk::CommandBuffer command_buffer,
-	const vk::Framebuffer framebuffer)
+void TextOut::BeginFrame(const vk::CommandBuffer command_buffer)
 {
 	const size_t vertex_count= std::min(vertices_data_.size(), max_glyphs_in_buffer_ * 4u);
-
 	command_buffer.updateBuffer(
 		*vertex_buffer_,
 		0u,
 		vertex_count * sizeof(TextVertex),
 		vertices_data_.data());
+}
 
-	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
+void TextOut::EndFrame(const vk::CommandBuffer command_buffer)
+{
+	const size_t vertex_count= std::min(vertices_data_.size(), max_glyphs_in_buffer_ * 4u);
 
-	command_buffer.beginRenderPass(
-		vk::RenderPassBeginInfo(
-			render_pass_,
-			framebuffer,
-			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
-			1u, &clear_value),
-			vk::SubpassContents::eInline);
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*vertex_buffer_, &offsets);
+	command_buffer.bindIndexBuffer(*index_buffer_, 0u, vk::IndexType::eUint16);
+	command_buffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*pipeline_layout_,
+		0u,
+		1u, &*descriptor_set_,
+		0u, nullptr);
 
-	{
-		const vk::DeviceSize offsets= 0u;
-		command_buffer.bindVertexBuffers(0u, 1u, &*vertex_buffer_, &offsets);
-		command_buffer.bindIndexBuffer(*index_buffer_, 0u, vk::IndexType::eUint16);
-		command_buffer.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*pipeline_layout_,
-			0u,
-			1u, &*descriptor_set_,
-			0u, nullptr);
-
-		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
-		command_buffer.drawIndexed(uint32_t(vertex_count / 4u * 6u), 1u, 0u, 0u, 0u);
-	}
-	command_buffer.endRenderPass();
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+	command_buffer.drawIndexed(uint32_t(vertex_count / 4u * 6u), 1u, 0u, 0u, 0u);
 
 	vertices_data_.clear();
 }

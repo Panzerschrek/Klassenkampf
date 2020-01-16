@@ -1,6 +1,7 @@
 #pragma once
 #include "SystemWindow.hpp"
 #include <vulkan/vulkan.hpp>
+#include <functional>
 
 
 namespace KK
@@ -9,11 +10,15 @@ namespace KK
 class WindowVulkan final
 {
 public:
+	using DrawFunction= std::function<void(vk::CommandBuffer)>;
+	using DrawFunctions= std::vector<DrawFunction>;
+
+public:
 	explicit WindowVulkan(const SystemWindow& system_window);
 	~WindowVulkan();
 
 	vk::CommandBuffer BeginFrame();
-	void EndFrame();
+	void EndFrame(const DrawFunctions& draw_functions);
 
 	vk::Device GetVulkanDevice() const;
 	vk::Extent2D GetViewportSize() const;

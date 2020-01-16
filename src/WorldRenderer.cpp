@@ -352,7 +352,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 			0u, nullptr,
 			1u, &vk_image_memory_barrier);
 
-		window_vulkan.EndFrame();
+		window_vulkan.EndFrame({});
 	}
 
 	// Create descriptor set pool.
@@ -398,40 +398,30 @@ WorldRenderer::~WorldRenderer()
 	vk_device_.waitIdle();
 }
 
-void WorldRenderer::Draw(
+
+void WorldRenderer::BeginFrame(vk::CommandBuffer)
+{}
+
+void WorldRenderer::EndFrame(
 	const vk::CommandBuffer command_buffer,
-	const vk::Framebuffer framebuffer,
 	const float frame_time_s)
 {
-	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
+	command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
+	command_buffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*vk_pipeline_layout_,
+		0u,
+		1u, &*vk_descriptor_set_,
+		0u, nullptr);
 
-	command_buffer.beginRenderPass(
-		vk::RenderPassBeginInfo(
-			vk_render_pass_,
-			framebuffer,
-			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
-			1u, &clear_value),
-			vk::SubpassContents::eInline);
+	float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
 
-	{
-		const vk::DeviceSize offsets= 0u;
-		command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
-		command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
-		command_buffer.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*vk_pipeline_layout_,
-			0u,
-			1u, &*vk_descriptor_set_,
-			0u, nullptr);
+	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(pos_delta), &pos_delta);
 
-		float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
-
-		command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(pos_delta), &pos_delta);
-
-		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
-		command_buffer.drawIndexed(6u, 1u, 0u, 0u, 0u);
-	}
-	command_buffer.endRenderPass();
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
+	command_buffer.drawIndexed(6u, 1u, 0u, 0u, 0u);
 }
 
 } // namespace KK
