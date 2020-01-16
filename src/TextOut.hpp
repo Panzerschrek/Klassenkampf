@@ -1,5 +1,7 @@
 #pragma once
 #include "WindowVulkan.hpp"
+#include <string_view>
+
 
 // Hack! Shitty windows.h defines it
 #ifdef TextOut
@@ -21,13 +23,13 @@ public:
 		float row,
 		float size/*in letters*/,
 		const uint8_t* color,
-		const char* text);
+		std::string_view text);
 	void AddTextPixelCoords(
 		float x,
 		float y,
 		float size/*in pixels*/,
 		const uint8_t* color,
-		const char* text);
+		std::string_view text);
 
 	void BeginFrame(vk::CommandBuffer command_buffer);
 	void EndFrame(vk::CommandBuffer command_buffer);

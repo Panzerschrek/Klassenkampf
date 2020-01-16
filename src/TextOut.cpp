@@ -512,7 +512,7 @@ void TextOut::AddText(
 	const float row,
 	const float size/*in letters*/,
 	const uint8_t* const color,
-	const char* const text)
+	const std::string_view text)
 {
 	AddTextPixelCoords(
 		size * float(glyph_size_[0]) * column,
@@ -527,7 +527,7 @@ void TextOut::AddTextPixelCoords(
 	const float y,
 	const float size/*in pixels*/,
 	const uint8_t* const color,
-	const char* const text)
+	const std::string_view text)
 {
 	float cur_x= +2.0f * x / float(viewport_size_.width ) - 1.0f;
 	float cur_y= +2.0f * y / float(viewport_size_.height) - 1.0f;
@@ -536,21 +536,19 @@ void TextOut::AddTextPixelCoords(
 	const float dx= 2.0f * size * float(glyph_size_[0]) / float(viewport_size_.width * glyph_size_[1]);
 	const float dy= 2.0f * size / float(viewport_size_.height);
 
-	const char* str= text;
-	while(*str != '\0')
+	for(const char c : text)
 	{
-		if(*str == '\n')
+		if(c == '\n')
 		{
 			cur_x= x0;
 			cur_y+= dy;
-			++str;
 			continue;
 		}
 
 		vertices_data_.resize(vertices_data_.size() + 4u);
 		TextVertex* const v= vertices_data_.data() + vertices_data_.size() - 4u;
 
-		const uint8_t sym_pos= uint8_t(std::max(0, *str-32));
+		const uint8_t sym_pos= uint8_t(std::max(0, c-32));
 		v[0].pos[0]= cur_x;
 		v[0].pos[1]= cur_y;
 		v[0].tex_coord[0]= 0;
@@ -577,7 +575,6 @@ void TextOut::AddTextPixelCoords(
 		std::memcpy(v[3].color, color, 4u);
 
 		cur_x+= dx;
-		++str;
 	}
 }
 
