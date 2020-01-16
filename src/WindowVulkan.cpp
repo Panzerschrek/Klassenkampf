@@ -17,6 +17,8 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	const bool use_debug_extensions_and_layers= true;
 	#endif
 
+	const bool vsync= true; // TODO - read from settings.
+
 	// Get vulkan extensiion, needed by SDL.
 	unsigned int extension_names_count= 0;
 	if( !SDL_Vulkan_GetInstanceExtensions(system_window.GetSDLWindow(), &extension_names_count, nullptr) )
@@ -160,10 +162,16 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	// Select present mode. Prefer usage of tripple buffering, than double buffering.
 	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(*vk_surface_);
 	vk::PresentModeKHR present_mode= present_modes.front();
-	if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eMailbox) != present_modes.end())
-		present_mode= vk::PresentModeKHR::eMailbox; // Use tripple buffering.
-	else if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eFifo) != present_modes.end())
-		present_mode= vk::PresentModeKHR::eFifo; // Use double buffering.
+	if(vsync)
+	{
+		if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eFifo) != present_modes.end())
+			present_mode= vk::PresentModeKHR::eFifo;
+	}
+	else
+	{
+		if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eMailbox) != present_modes.end())
+			present_mode= vk::PresentModeKHR::eMailbox;
+	}
 
 	const vk::SurfaceCapabilitiesKHR surface_capabilities= physical_device.getSurfaceCapabilitiesKHR(*vk_surface_);
 

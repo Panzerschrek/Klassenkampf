@@ -61,7 +61,7 @@ bool Host::Loop()
 
 	const Clock::time_point tick_end_time= Clock::now();
 	const auto frame_dt= tick_end_time - tick_start_time;
-	const std::chrono::milliseconds min_frame_duration(5);
+	const std::chrono::milliseconds min_frame_duration(10);
 	if(frame_dt <= min_frame_duration)
 	{
 		std::this_thread::sleep_for(min_frame_duration - frame_dt);
