@@ -1,6 +1,7 @@
 #pragma once
 #include "SystemWindow.hpp"
 #include "TextOut.hpp"
+#include "TicksCounter.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldRenderer.hpp"
 #include <chrono>
@@ -20,6 +21,7 @@ public:
 private:
 	using Clock= std::chrono::steady_clock;
 
+	TicksCounter ticks_counter_;
 	SystemWindow system_window_;
 	WindowVulkan window_vulkan_;
 	WorldRenderer world_renderer_;
