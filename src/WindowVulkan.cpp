@@ -295,6 +295,8 @@ vk::CommandBuffer WindowVulkan::BeginFrame()
 
 void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 {
+	const vk::CommandBuffer command_buffer= *current_frame_command_buffer_->command_buffer;
+
 	// Get next swapchain image.
 	current_swapchain_image_index_=
 		vk_device_->acquireNextImageKHR(
@@ -305,7 +307,7 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 
 	// Begin render pass.
 	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
-	current_frame_command_buffer_->command_buffer->beginRenderPass(
+	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
 			*vk_render_pass_,
 			*framebuffers_[current_swapchain_image_index_].framebuffer,
@@ -316,23 +318,23 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 	// Draw into framebuffer.
 	for(const DrawFunction& draw_function : draw_functions)
 	{
-		draw_function(*current_frame_command_buffer_->command_buffer);
+		draw_function(command_buffer);
 	}
 
 	// End render pass.
-	current_frame_command_buffer_->command_buffer->endRenderPass();
+	command_buffer.endRenderPass();
 
 	// End command buffer.
-	current_frame_command_buffer_->command_buffer->end();
+	command_buffer.end();
 
 	// Submit command buffer.
 	const vk::PipelineStageFlags wait_dst_stage_mask= vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	const vk::SubmitInfo vk_submit_info(
 		1u, &*current_frame_command_buffer_->image_available_semaphore,
 		&wait_dst_stage_mask,
-		1u, &*current_frame_command_buffer_->command_buffer,
+		1u, &command_buffer,
 		1u, &*current_frame_command_buffer_->rendering_finished_semaphore);
-	vk_queue_.submit(vk::ArrayProxy<const vk::SubmitInfo>(vk_submit_info), *current_frame_command_buffer_->submit_fence);
+	vk_queue_.submit(vk_submit_info, *current_frame_command_buffer_->submit_fence);
 
 	// Present queue.
 	vk_queue_.presentKHR(
@@ -366,11 +368,6 @@ vk::RenderPass WindowVulkan::GetRenderPass() const
 const vk::PhysicalDeviceMemoryProperties& WindowVulkan::GetMemoryProperties() const
 {
 	return memory_properties_;
-}
-
-vk::Framebuffer WindowVulkan::GetCurrentFramebuffer() const
-{
-	return *framebuffers_[current_swapchain_image_index_].framebuffer;
 }
 
 } // namespace KK

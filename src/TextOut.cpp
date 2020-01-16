@@ -22,7 +22,6 @@ namespace Shaders
 TextOut::TextOut(WindowVulkan& window_vulkan)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
-	, render_pass_(window_vulkan.GetRenderPass())
 {
 	// Create shaders
 	shader_vert_=

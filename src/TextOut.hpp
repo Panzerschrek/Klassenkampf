@@ -47,7 +47,6 @@ private:
 private:
 	const vk::Device vk_device_;
 	const vk::Extent2D viewport_size_;
-	const vk::RenderPass render_pass_;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;

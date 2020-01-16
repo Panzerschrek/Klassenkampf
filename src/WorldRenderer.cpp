@@ -31,8 +31,6 @@ const uint32_t g_tex_uniform_binding= 0u;
 
 WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	: vk_device_(window_vulkan.GetVulkanDevice())
-	, viewport_size_(window_vulkan.GetViewportSize())
-	, vk_render_pass_(window_vulkan.GetRenderPass())
 {
 	const auto memory_properties= window_vulkan.GetMemoryProperties();
 
@@ -152,8 +150,9 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 		vk::PipelineInputAssemblyStateCreateFlags(),
 		vk::PrimitiveTopology::eTriangleList);
 
-	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size_.width), float(viewport_size_.height), 0.0f, 1.0f);
-	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size_);
+	const vk::Extent2D viewport_size= window_vulkan.GetViewportSize();
+	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
+	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
 
 	const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
 		vk::PipelineViewportStateCreateFlags(),
@@ -201,7 +200,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
 				*vk_pipeline_layout_,
-				vk_render_pass_,
+				window_vulkan.GetRenderPass(),
 				0u));
 
 	// Create vertex buffer
