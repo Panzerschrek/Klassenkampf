@@ -201,8 +201,8 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 		vk::AttachmentStoreOp::eStore,
 		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eDontCare,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::ImageLayout::eColorAttachmentOptimal);
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::ePresentSrcKHR);
 
 	const vk::AttachmentReference vk_attachment_reference(
 		0u,
@@ -303,13 +303,6 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 			*current_frame_command_buffer_->image_available_semaphore,
 			vk::Fence()).value;
 
-	// Swap current swapchain image format to optimal for "color attachment".
-	ChangeImageLayout(
-		*current_frame_command_buffer_->command_buffer,
-		framebuffers_[current_swapchain_image_index_].image,
-		vk::ImageLayout::eUndefined,
-		vk::ImageLayout::eColorAttachmentOptimal);
-
 	// Begin render pass.
 	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
 	current_frame_command_buffer_->command_buffer->beginRenderPass(
@@ -328,13 +321,6 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 
 	// End render pass.
 	current_frame_command_buffer_->command_buffer->endRenderPass();
-
-	// Swap current swapchain image format to optimal for "present".
-	ChangeImageLayout(
-		*current_frame_command_buffer_->command_buffer,
-		framebuffers_[current_swapchain_image_index_].image,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::ImageLayout::ePresentSrcKHR);
 
 	// End command buffer.
 	current_frame_command_buffer_->command_buffer->end();
@@ -385,30 +371,6 @@ const vk::PhysicalDeviceMemoryProperties& WindowVulkan::GetMemoryProperties() co
 vk::Framebuffer WindowVulkan::GetCurrentFramebuffer() const
 {
 	return *framebuffers_[current_swapchain_image_index_].framebuffer;
-}
-
-void WindowVulkan::ChangeImageLayout(
-	const vk::CommandBuffer command_buffer,
-	const vk::Image image,
-	const vk::ImageLayout from,
-	const vk::ImageLayout to)
-{
-	const vk::ImageMemoryBarrier vk_image_memory_barrier(
-		vk::AccessFlagBits::eTransferWrite,
-		vk::AccessFlagBits::eMemoryRead,
-		from, to,
-		vk_queue_family_index_,
-		vk_queue_family_index_,
-		image,
-		vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-	command_buffer.pipelineBarrier(
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eBottomOfPipe,
-		vk::DependencyFlags(),
-		0u, nullptr,
-		0u, nullptr,
-		1u, &vk_image_memory_barrier);
 }
 
 } // namespace KK

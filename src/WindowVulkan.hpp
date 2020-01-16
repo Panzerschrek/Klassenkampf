@@ -44,13 +44,6 @@ private:
 	};
 
 private:
-	void ChangeImageLayout(
-		vk::CommandBuffer command_buffer,
-		vk::Image image,
-		vk::ImageLayout from,
-		vk::ImageLayout to);
-
-private:
 	// Keep here order of construction.
 	vk::UniqueInstance vk_instance_;
 	vk::UniqueSurfaceKHR vk_surface_;
