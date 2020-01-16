@@ -9,6 +9,7 @@ Host::Host()
 	: system_window_(SystemWindow::GAPISupport::Vulkan)
 	, window_vulkan_(system_window_)
 	, world_renderer_(window_vulkan_)
+	, text_out_(window_vulkan_)
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {
@@ -27,11 +28,23 @@ bool Host::Loop()
 	}
 
 	const auto command_buffer= window_vulkan_.BeginFrame();
-	world_renderer_.Draw(
-		command_buffer,
-		window_vulkan_.GetCurrentFramebuffer(),
-		float(std::chrono::duration_cast<std::chrono::milliseconds>(tick_start_time - init_time_).count()) / 1000.0f);
-	window_vulkan_.EndFrame();
+
+	world_renderer_.BeginFrame(command_buffer);
+	text_out_.BeginFrame(command_buffer);
+
+	window_vulkan_.EndFrame(
+		{
+			[&](const vk::CommandBuffer command_buffer)
+			{
+				world_renderer_.EndFrame(
+					command_buffer,
+					float(std::chrono::duration_cast<std::chrono::milliseconds>(tick_start_time - init_time_).count()) / 1000.0f);
+			},
+			[&](const vk::CommandBuffer command_buffer)
+			{
+				text_out_.EndFrame(command_buffer);
+			},
+		});
 
 	const Clock::time_point tick_end_time= Clock::now();
 	const auto frame_dt= tick_end_time - tick_start_time;

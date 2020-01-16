@@ -280,16 +280,20 @@ vk::CommandBuffer WindowVulkan::BeginFrame()
 
 	vk_device_->resetFences(1u, &*current_frame_command_buffer_->submit_fence);
 
+	const vk::CommandBuffer command_buffer= *current_frame_command_buffer_->command_buffer;
+	command_buffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+	return command_buffer;
+}
+
+void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
+{
+	// Get next swapchain image.
 	current_swapchain_image_index_=
 		vk_device_->acquireNextImageKHR(
 			*vk_swapchain_,
 			std::numeric_limits<uint64_t>::max(),
 			*current_frame_command_buffer_->image_available_semaphore,
 			vk::Fence()).value;
-
-	const vk::CommandBuffer command_buffer= *current_frame_command_buffer_->command_buffer;
-
-	command_buffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
 	// Swap current swapchain image format to optimal for "color attachment".
 	ChangeImageLayout(
@@ -298,11 +302,25 @@ vk::CommandBuffer WindowVulkan::BeginFrame()
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal);
 
-	return command_buffer;
-}
+	// Begin render pass.
+	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
+	current_frame_command_buffer_->command_buffer->beginRenderPass(
+		vk::RenderPassBeginInfo(
+			*vk_render_pass_,
+			*framebuffers_[current_swapchain_image_index_].framebuffer,
+			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
+			1u, &clear_value),
+		vk::SubpassContents::eInline);
 
-void WindowVulkan::EndFrame()
-{
+	// Draw into framebuffer.
+	for(const DrawFunction& draw_function : draw_functions)
+	{
+		draw_function(*current_frame_command_buffer_->command_buffer);
+	}
+
+	// End render pass.
+	current_frame_command_buffer_->command_buffer->endRenderPass();
+
 	// Swap current swapchain image format to optimal for "present".
 	ChangeImageLayout(
 		*current_frame_command_buffer_->command_buffer,
