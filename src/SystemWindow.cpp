@@ -192,6 +192,29 @@ SystemEvents SystemWindow::ProcessEvents()
 	return result_events;
 }
 
+InputState SystemWindow::GetInputState()
+{
+	InputState result;
+	result.keyboard.reset();
+	result.mouse.reset();
+
+	int key_count= 0;
+	const Uint8* const keyboard_state= SDL_GetKeyboardState(&key_count);
+
+	for(int i= 0; i < key_count; ++i)
+	{
+		const SystemEventTypes::KeyCode code= TranslateKey(SDL_Scancode(i));
+		if(code < SystemEventTypes::KeyCode::KeyCount && code != SystemEventTypes::KeyCode::Unknown)
+			result.keyboard[size_t(code)]= keyboard_state[i] != 0;
+	}
+
+	const Uint32 mouse_state= SDL_GetMouseState(nullptr, nullptr);
+	for(int i= SDL_BUTTON_LEFT; i <= SDL_BUTTON_RIGHT; ++i)
+		result.mouse[ size_t(TranslateMouseButton(i))]= (SDL_BUTTON(i) & mouse_state) != 0u;
+
+	return result;
+}
+
 SDL_Window* SystemWindow::GetSDLWindow() const
 {
 	return window_;
