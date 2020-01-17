@@ -101,7 +101,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
 		0u,
-		sizeof(float) * 2);
+		sizeof(m_Mat4));
 
 	vk_pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
@@ -207,10 +207,10 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 
 	const std::vector<WorldVertex> world_vertices
 	{
-		{ { -0.5f, -0.5f, 0.0f }, { 255, 0, 0, 0 }, },
-		{ { +0.5f, -0.5f, 0.0f }, { 0, 255, 0, 0 }, },
-		{ { +0.5f, +0.5f, 0.0f }, { 0, 0, 255, 0 }, },
-		{ { -0.5f, +0.5f, 0.0f }, { 0, 0, 0,   0 }, },
+		{ { -0.5f, 2.0f, -0.5f }, { 255, 0, 0, 0 }, },
+		{ { +0.5f, 2.0f, -0.5f }, { 0, 255, 0, 0 }, },
+		{ { +0.5f, 2.0f, +0.5, }, { 0, 0, 255, 0 }, },
+		{ { -0.5f, 2.0f, +0.5f }, { 0, 0, 0,   0 }, },
 	};
 
 	const std::vector<uint16_t> world_indeces{ 0, 1, 2, 0, 2, 3 };
@@ -403,7 +403,7 @@ void WorldRenderer::BeginFrame(vk::CommandBuffer)
 
 void WorldRenderer::EndFrame(
 	const vk::CommandBuffer command_buffer,
-	const float frame_time_s)
+	 const m_Mat4& view_matrix)
 {
 	const vk::DeviceSize offsets= 0u;
 	command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
@@ -415,9 +415,7 @@ void WorldRenderer::EndFrame(
 		1u, &*vk_descriptor_set_,
 		0u, nullptr);
 
-	float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
-
-	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(pos_delta), &pos_delta);
+	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(view_matrix), &view_matrix);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
 	command_buffer.drawIndexed(6u, 1u, 0u, 0u, 0u);

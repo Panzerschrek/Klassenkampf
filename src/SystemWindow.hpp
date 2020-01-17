@@ -20,6 +20,8 @@ public:
 
 	SystemEvents ProcessEvents();
 
+	InputState GetInputState();
+
 	SDL_Window* GetSDLWindow() const;
 
 private:

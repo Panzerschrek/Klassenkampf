@@ -1,4 +1,5 @@
 #pragma once
+#include "CameraController.hpp"
 #include "SystemWindow.hpp"
 #include "TextOut.hpp"
 #include "TicksCounter.hpp"
@@ -26,6 +27,7 @@ private:
 	WindowVulkan window_vulkan_;
 	WorldRenderer world_renderer_;
 	TextOut text_out_;
+	CameraController camera_controller_;
 
 	const Clock::time_point init_time_;
 	Clock::time_point prev_tick_time_;

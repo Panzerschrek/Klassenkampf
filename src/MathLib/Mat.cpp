@@ -30,10 +30,10 @@ m_Mat4 m_Mat4::operator*(const m_Mat4& m) const
 	for(size_t j= 0u; j < 4u; ++j)
 	{
 		r.value[i + j]=
-			value[j  ] * m.value[i   ] +
-			value[j+1] * m.value[i+ 4] +
-			value[j+2] * m.value[i+ 8] +
-			value[j+3] * m.value[i+12];
+			value[i  ] * m.value[j   ] +
+			value[i+1] * m.value[j+ 4] +
+			value[i+2] * m.value[j+ 8] +
+			value[i+3] * m.value[j+12];
 	}
 
 	return r;

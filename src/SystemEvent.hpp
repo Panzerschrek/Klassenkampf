@@ -118,7 +118,8 @@ bool KeyCanBeUsedForControl(SystemEventTypes::KeyCode key_code);
 
 } // namespace SystemEventTypes
 
-using SystemEvent = SystemEventTypes::SystemEvent;
-using SystemEvents = SystemEventTypes::SystemEvents;
+using SystemEvent= SystemEventTypes::SystemEvent;
+using SystemEvents= SystemEventTypes::SystemEvents;
+using InputState= SystemEventTypes::InputState;
 
 } // namespace KK
