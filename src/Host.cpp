@@ -5,6 +5,16 @@
 namespace KK
 {
 
+namespace
+{
+
+float CalculateAspect(const vk::Extent2D& viewport_size)
+{
+	return float(viewport_size.width) / float(viewport_size.height);
+}
+
+} // namespace
+
 Host::Host()
 	: ticks_counter_(std::chrono::milliseconds(500))
 	, system_window_(SystemWindow::GAPISupport::Vulkan)
@@ -12,6 +22,7 @@ Host::Host()
 	, world_renderer_(window_vulkan_)
 	, text_out_(window_vulkan_)
 	, init_time_(Clock::now())
+	, camera_controller_(CalculateAspect(window_vulkan_.GetViewportSize()))
 	, prev_tick_time_(init_time_)
 {
 }
@@ -22,11 +33,15 @@ bool Host::Loop()
 	const auto dt= tick_start_time - prev_tick_time_;
 	prev_tick_time_ = tick_start_time;
 
+	const float dt_s= float(dt.count()) * float(Clock::duration::period::num) / float(Clock::duration::period::den);
+
 	for(const SystemEvent& system_event : system_window_.ProcessEvents())
 	{
 		if(std::get_if<SystemEventTypes::QuitEvent>(&system_event) != nullptr)
 			return true;
 	}
+
+	camera_controller_.Update(dt_s, system_window_.GetInputState());
 
 	ticks_counter_.Tick();
 	{
@@ -51,7 +66,7 @@ bool Host::Loop()
 			{
 				world_renderer_.EndFrame(
 					command_buffer,
-					float(std::chrono::duration_cast<std::chrono::milliseconds>(tick_start_time - init_time_).count()) / 1000.0f);
+					camera_controller_.CalculateViewMatrix());
 			},
 			[&](const vk::CommandBuffer command_buffer)
 			{

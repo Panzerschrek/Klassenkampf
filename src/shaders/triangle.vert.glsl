@@ -14,6 +14,6 @@ layout(location= 1) out vec2 f_tex_coord;
 void main()
 {
 	f_color= color;
-	f_tex_coord= pos.xy + vec2(0.5, 0.5);
+	f_tex_coord= vec2(pos.x, 1.0 - pos.z) + vec2(0.5, 0.5);
 	gl_Position= mat * vec4(pos, 1.0);
 }

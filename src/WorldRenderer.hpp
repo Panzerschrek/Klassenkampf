@@ -1,4 +1,5 @@
 #pragma once
+#include "MathLib/Mat.hpp"
 #include "WindowVulkan.hpp"
 
 
@@ -13,7 +14,7 @@ public:
 	~WorldRenderer();
 
 	void BeginFrame(vk::CommandBuffer command_buffer);
-	void EndFrame(vk::CommandBuffer command_buffer, float frame_time_s);
+	void EndFrame(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
 
 private:
 	const vk::Device vk_device_;
