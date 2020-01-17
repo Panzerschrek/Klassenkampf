@@ -1,6 +1,7 @@
 #include "WorldRenderer.hpp"
 #include "Assert.hpp"
 #include "Image.hpp"
+#include "MathLib/Mat.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -101,7 +102,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
 		0u,
-		sizeof(float) * 2);
+		sizeof(m_Mat4));
 
 	vk_pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
@@ -415,9 +416,10 @@ void WorldRenderer::EndFrame(
 		1u, &*vk_descriptor_set_,
 		0u, nullptr);
 
-	float pos_delta[2]= { std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f };
+	m_Mat4 mat;
+	mat.Translate(m_Vec3(std::sin(frame_time_s) * 0.5f , std::cos(frame_time_s) * 0.5f, 0.0f));
 
-	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(pos_delta), &pos_delta);
+	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(mat), &mat);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
 	command_buffer.drawIndexed(6u, 1u, 0u, 0u, 0u);
