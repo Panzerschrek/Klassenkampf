@@ -21,8 +21,8 @@ Host::Host()
 	, window_vulkan_(system_window_)
 	, world_renderer_(window_vulkan_)
 	, text_out_(window_vulkan_)
-	, init_time_(Clock::now())
 	, camera_controller_(CalculateAspect(window_vulkan_.GetViewportSize()))
+	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {
 }
