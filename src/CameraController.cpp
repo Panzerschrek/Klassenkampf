@@ -1,14 +1,22 @@
 #include "CameraController.hpp"
+#include <algorithm>
 
 
 namespace KK
 {
 
+namespace
+{
+
+const float g_pi= 3.1415926535f;
+
+} // namespace
+
 CameraController::CameraController(const float aspect)
 	: aspect_(std::move(aspect))
 {}
 
-void CameraController::Update(float time_delta_s, const InputState& input_state)
+void CameraController::Update(const float time_delta_s, const InputState& input_state)
 {
 	const float speed= 1.0f;
 	const float jump_speed= 0.8f;
@@ -47,15 +55,22 @@ void CameraController::Update(float time_delta_s, const InputState& input_state)
 		elevation_+= time_delta_s * angle_speed;
 	if(input_state.keyboard[size_t(KeyCode::Down)])
 		elevation_-= time_delta_s * angle_speed;
+
+	while(azimuth_ > +g_pi)
+		azimuth_-= 2.0f * g_pi;
+	while(azimuth_ < -g_pi)
+		azimuth_+= 2.0f * g_pi;
+
+	elevation_= std::max(-0.5f * g_pi, std::min(elevation_, +0.5f * g_pi));
 }
 
 m_Mat4 CameraController::CalculateViewMatrix() const
 {
-	const float fov= 3.1415926535f / 2.0f;
+	const float fov= g_pi / 2.0f;
 	const float z_near= 0.125f;
 	const float z_far= 128.0f;
 
-	m_Mat4 translate, rotate_x, rotate_z, basis_change, perspective;
+	m_Mat4 translate, rotate_z, rotate_x, basis_change, perspective;
 	translate.Translate(-pos_);
 	rotate_x.RotateX(-elevation_);
 	rotate_z.RotateZ(-azimuth_);
