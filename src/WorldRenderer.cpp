@@ -22,6 +22,7 @@ namespace Shaders
 struct WorldVertex
 {
 	float pos[3];
+	float tex_coord[2];
 	uint8_t color[4];
 };
 
@@ -55,8 +56,8 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
-				vk::Filter::eNearest,
-				vk::Filter::eNearest,
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
 				vk::SamplerMipmapMode::eNearest,
 				vk::SamplerAddressMode::eRepeat,
 				vk::SamplerAddressMode::eRepeat,
@@ -135,10 +136,11 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 		sizeof(WorldVertex),
 		vk::VertexInputRate::eVertex);
 
-	const vk::VertexInputAttributeDescription vk_vertex_input_attribute_description[2]
+	const vk::VertexInputAttributeDescription vk_vertex_input_attribute_description[]
 	{
-		{0u, 0u, vk::Format::eR32G32B32Sfloat, 0u},
-		{1u, 0u, vk::Format::eR8G8B8A8Unorm, sizeof(float) * 3},
+		{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
+		{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, tex_coord)},
+		{2u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(WorldVertex, color)},
 	};
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
@@ -207,10 +209,10 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 
 	const std::vector<WorldVertex> world_vertices
 	{
-		{ { -0.5f, 2.0f, -0.5f }, { 255, 0, 0, 0 }, },
-		{ { +0.5f, 2.0f, -0.5f }, { 0, 255, 0, 0 }, },
-		{ { +0.5f, 2.0f, +0.5, }, { 0, 0, 255, 0 }, },
-		{ { -0.5f, 2.0f, +0.5f }, { 0, 0, 0,   0 }, },
+		{ { -0.5f, 2.0f, -0.5f }, { 0.0f, 1.0f }, { 255, 0, 0, 0 }, },
+		{ { +0.5f, 2.0f, -0.5f }, { 1.0f, 1.0f }, { 0, 255, 0, 0 }, },
+		{ { +0.5f, 2.0f, +0.5, }, { 1.0f, 0.0f }, { 0, 0, 255, 0 }, },
+		{ { -0.5f, 2.0f, +0.5f }, { 0.0f, 0.0f }, { 0, 0, 0,   0 }, },
 	};
 
 	const std::vector<uint16_t> world_indeces{ 0, 1, 2, 0, 2, 3 };
