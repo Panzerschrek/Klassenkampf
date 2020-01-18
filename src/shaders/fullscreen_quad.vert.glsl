@@ -1,6 +1,6 @@
 #version 450
 
-layout(location= 0) out vec2 f_tex_coord;
+layout(location= 0) out noperspective vec2 f_tex_coord;
 
 void main()
 {
