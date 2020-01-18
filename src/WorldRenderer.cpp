@@ -55,7 +55,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 						1u,
 						1u,
 						vk::SampleCountFlagBits::e1,
-						vk::ImageTiling::eLinear,
+						vk::ImageTiling::eOptimal,
 						vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment,
 						vk::SharingMode::eExclusive,
 						0u, nullptr,
@@ -137,7 +137,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 				vk::AttachmentLoadOp::eDontCare,
 				vk::AttachmentStoreOp::eDontCare,
 				vk::ImageLayout::eUndefined,
-				vk::ImageLayout::eGeneral,
+				vk::ImageLayout::eShaderReadOnlyOptimal,
 			},
 			{
 				vk::AttachmentDescriptionFlags(),
@@ -716,7 +716,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 		const vk::DescriptorImageInfo descriptor_image_info(
 			vk::Sampler(),
 			*framebuffer_image_view_,
-			vk::ImageLayout::eGeneral);
+			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::WriteDescriptorSet write_descriptor_set(
 			*tonemapping_descriptor_set_,
