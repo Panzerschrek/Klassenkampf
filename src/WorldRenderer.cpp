@@ -17,6 +17,9 @@ namespace Shaders
 #include "shaders/triangle.vert.sprv.h"
 #include "shaders/triangle.frag.sprv.h"
 
+#include "shaders/fullscreen_quad.vert.sprv.h"
+#include "shaders/tonemapping.frag.sprv.h"
+
 } // namespace Shaders
 
 struct WorldVertex
@@ -53,7 +56,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 						1u,
 						vk::SampleCountFlagBits::e1,
 						vk::ImageTiling::eLinear,
-						vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eColorAttachment,
+						vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment,
 						vk::SharingMode::eExclusive,
 						0u, nullptr,
 						vk::ImageLayout::eUndefined));
@@ -134,7 +137,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 				vk::AttachmentLoadOp::eDontCare,
 				vk::AttachmentStoreOp::eDontCare,
 				vk::ImageLayout::eUndefined,
-				vk::ImageLayout::eTransferSrcOptimal,
+				vk::ImageLayout::eGeneral,
 			},
 			{
 				vk::AttachmentDescriptionFlags(),
@@ -178,194 +181,195 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	}
 
 	// Create shaders
-	shader_vert_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_triangle_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_triangle_vert_file_content)));
-
-	shader_frag_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_triangle_frag_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_triangle_frag_file_content)));
-
-	// Create image sampler
-
-	vk_image_sampler_=
-		vk_device_.createSamplerUnique(
-			vk::SamplerCreateInfo(
-				vk::SamplerCreateFlags(),
-				vk::Filter::eLinear,
-				vk::Filter::eLinear,
-				vk::SamplerMipmapMode::eNearest,
-				vk::SamplerAddressMode::eRepeat,
-				vk::SamplerAddressMode::eRepeat,
-				vk::SamplerAddressMode::eRepeat,
-				0.0f,
-				VK_FALSE,
-				0.0f,
-				VK_FALSE,
-				vk::CompareOp::eNever,
-				0.0f,
-				0.0f,
-				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
-
-	// Create pipeline layout
-
-	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 	{
-		/*
+		shader_vert_=
+			vk_device_.createShaderModuleUnique(
+				vk::ShaderModuleCreateInfo(
+					vk::ShaderModuleCreateFlags(),
+					std::size(Shaders::c_triangle_vert_file_content),
+					reinterpret_cast<const uint32_t*>(Shaders::c_triangle_vert_file_content)));
+
+		shader_frag_=
+			vk_device_.createShaderModuleUnique(
+				vk::ShaderModuleCreateInfo(
+					vk::ShaderModuleCreateFlags(),
+					std::size(Shaders::c_triangle_frag_file_content),
+					reinterpret_cast<const uint32_t*>(Shaders::c_triangle_frag_file_content)));
+
+		// Create image sampler
+
+		vk_image_sampler_=
+			vk_device_.createSamplerUnique(
+				vk::SamplerCreateInfo(
+					vk::SamplerCreateFlags(),
+					vk::Filter::eLinear,
+					vk::Filter::eLinear,
+					vk::SamplerMipmapMode::eNearest,
+					vk::SamplerAddressMode::eRepeat,
+					vk::SamplerAddressMode::eRepeat,
+					vk::SamplerAddressMode::eRepeat,
+					0.0f,
+					VK_FALSE,
+					0.0f,
+					VK_FALSE,
+					vk::CompareOp::eNever,
+					0.0f,
+					0.0f,
+					vk::BorderColor::eFloatTransparentBlack,
+					VK_FALSE));
+
+		// Create pipeline layout
+
+		const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 		{
-			0u,
-			vk::DescriptorType::eUniformBuffer,
-			1u,
-			vk::ShaderStageFlagBits::eVertex
-		},
-		*/
-		{
-			g_tex_uniform_binding,
-			vk::DescriptorType::eCombinedImageSampler,
-			1u,
-			vk::ShaderStageFlagBits::eFragment,
-			&*vk_image_sampler_,
-		},
-	};
-
-	vk_decriptor_set_layout_=
-		vk_device_.createDescriptorSetLayoutUnique(
-			vk::DescriptorSetLayoutCreateInfo(
-				vk::DescriptorSetLayoutCreateFlags(),
-				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
-
-	const vk::PushConstantRange vk_push_constant_range(
-		vk::ShaderStageFlagBits::eVertex,
-		0u,
-		sizeof(m_Mat4));
-
-	vk_pipeline_layout_=
-		vk_device_.createPipelineLayoutUnique(
-			vk::PipelineLayoutCreateInfo(
-				vk::PipelineLayoutCreateFlags(),
+			/*
+			{
+				0u,
+				vk::DescriptorType::eUniformBuffer,
 				1u,
-				&*vk_decriptor_set_layout_,
+				vk::ShaderStageFlagBits::eVertex
+			},
+			*/
+			{
+				g_tex_uniform_binding,
+				vk::DescriptorType::eCombinedImageSampler,
 				1u,
-				&vk_push_constant_range));
+				vk::ShaderStageFlagBits::eFragment,
+				&*vk_image_sampler_,
+			},
+		};
 
-	// Create pipeline.
+		vk_decriptor_set_layout_=
+			vk_device_.createDescriptorSetLayoutUnique(
+				vk::DescriptorSetLayoutCreateInfo(
+					vk::DescriptorSetLayoutCreateFlags(),
+					uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
-	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
-	{
-		{
-			vk::PipelineShaderStageCreateFlags(),
+		const vk::PushConstantRange vk_push_constant_range(
 			vk::ShaderStageFlagBits::eVertex,
-			*shader_vert_,
-			"main"
-		},
+			0u,
+			sizeof(m_Mat4));
+
+		vk_pipeline_layout_=
+			vk_device_.createPipelineLayoutUnique(
+				vk::PipelineLayoutCreateInfo(
+					vk::PipelineLayoutCreateFlags(),
+					1u,
+					&*vk_decriptor_set_layout_,
+					1u,
+					&vk_push_constant_range));
+
+		// Create pipeline.
+
+		const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
 		{
-			vk::PipelineShaderStageCreateFlags(),
-			vk::ShaderStageFlagBits::eFragment,
-			*shader_frag_,
-			"main"
-		},
-	};
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eVertex,
+				*shader_vert_,
+				"main"
+			},
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eFragment,
+				*shader_frag_,
+				"main"
+			},
+		};
 
-	const vk::VertexInputBindingDescription vk_vertex_input_binding_description(
-		0u,
-		sizeof(WorldVertex),
-		vk::VertexInputRate::eVertex);
+		const vk::VertexInputBindingDescription vk_vertex_input_binding_description(
+			0u,
+			sizeof(WorldVertex),
+			vk::VertexInputRate::eVertex);
 
-	const vk::VertexInputAttributeDescription vk_vertex_input_attribute_description[]
-	{
-		{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
-		{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, tex_coord)},
-		{2u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(WorldVertex, color)},
-	};
+		const vk::VertexInputAttributeDescription vk_vertex_input_attribute_description[]
+		{
+			{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
+			{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, tex_coord)},
+			{2u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(WorldVertex, color)},
+		};
 
-	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
-		vk::PipelineVertexInputStateCreateFlags(),
-		1u, &vk_vertex_input_binding_description,
-		uint32_t(std::size(vk_vertex_input_attribute_description)), vk_vertex_input_attribute_description);
+		const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
+			vk::PipelineVertexInputStateCreateFlags(),
+			1u, &vk_vertex_input_binding_description,
+			uint32_t(std::size(vk_vertex_input_attribute_description)), vk_vertex_input_attribute_description);
 
-	const vk::PipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info(
-		vk::PipelineInputAssemblyStateCreateFlags(),
-		vk::PrimitiveTopology::eTriangleList);
+		const vk::PipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info(
+			vk::PipelineInputAssemblyStateCreateFlags(),
+			vk::PrimitiveTopology::eTriangleList);
 
-	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
-	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
+		const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
+		const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
 
-	const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
-		vk::PipelineViewportStateCreateFlags(),
-		1u, &vk_viewport,
-		1u, &vk_scissor);
+		const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
+			vk::PipelineViewportStateCreateFlags(),
+			1u, &vk_viewport,
+			1u, &vk_scissor);
 
-	const vk::PipelineRasterizationStateCreateInfo vk_pipilane_rasterization_state_create_info(
-		vk::PipelineRasterizationStateCreateFlags(),
-		VK_FALSE,
-		VK_FALSE,
-		vk::PolygonMode::eFill,
-		vk::CullModeFlagBits::eNone,
-		vk::FrontFace::eCounterClockwise,
-		VK_FALSE, 0.0f, 0.0f, 0.0f,
-		1.0f);
+		const vk::PipelineRasterizationStateCreateInfo vk_pipilane_rasterization_state_create_info(
+			vk::PipelineRasterizationStateCreateFlags(),
+			VK_FALSE,
+			VK_FALSE,
+			vk::PolygonMode::eFill,
+			vk::CullModeFlagBits::eNone,
+			vk::FrontFace::eCounterClockwise,
+			VK_FALSE, 0.0f, 0.0f, 0.0f,
+			1.0f);
 
-	const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
+		const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
 
-	const vk::PipelineDepthStencilStateCreateInfo vk_pipeline_depth_state_create_info(
-		vk::PipelineDepthStencilStateCreateFlags(),
-		VK_TRUE,
-		VK_TRUE,
-		vk::CompareOp::eLess,
-		VK_FALSE,
-		VK_FALSE,
-		vk::StencilOpState(),
-		vk::StencilOpState(),
-		0.0f,
-		1.0f);
+		const vk::PipelineDepthStencilStateCreateInfo vk_pipeline_depth_state_create_info(
+			vk::PipelineDepthStencilStateCreateFlags(),
+			VK_TRUE,
+			VK_TRUE,
+			vk::CompareOp::eLess,
+			VK_FALSE,
+			VK_FALSE,
+			vk::StencilOpState(),
+			vk::StencilOpState(),
+			0.0f,
+			1.0f);
 
-	const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
-		VK_FALSE,
-		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
+			VK_FALSE,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
-	const vk::PipelineColorBlendStateCreateInfo vk_pipeline_color_blend_state_create_info(
-		vk::PipelineColorBlendStateCreateFlags(),
-		VK_FALSE,
-		vk::LogicOp::eCopy,
-		1u, &vk_pipeline_color_blend_attachment_state);
+		const vk::PipelineColorBlendStateCreateInfo vk_pipeline_color_blend_state_create_info(
+			vk::PipelineColorBlendStateCreateFlags(),
+			VK_FALSE,
+			vk::LogicOp::eCopy,
+			1u, &vk_pipeline_color_blend_attachment_state);
 
-	vk_pipeline_=
-		vk_device_.createGraphicsPipelineUnique(
-			nullptr,
-			vk::GraphicsPipelineCreateInfo(
-				vk::PipelineCreateFlags(),
-				uint32_t(std::size(vk_shader_stage_create_info)),
-				vk_shader_stage_create_info,
-				&vk_pipiline_vertex_input_state_create_info,
-				&vk_pipeline_input_assembly_state_create_info,
+		vk_pipeline_=
+			vk_device_.createGraphicsPipelineUnique(
 				nullptr,
-				&vk_pipieline_viewport_state_create_info,
-				&vk_pipilane_rasterization_state_create_info,
-				&vk_pipeline_multisample_state_create_info,
-				&vk_pipeline_depth_state_create_info,
-				&vk_pipeline_color_blend_state_create_info,
-				nullptr,
-				*vk_pipeline_layout_,
-				*framebuffer_render_pass_,
-				0u));
-
+				vk::GraphicsPipelineCreateInfo(
+					vk::PipelineCreateFlags(),
+					uint32_t(std::size(vk_shader_stage_create_info)),
+					vk_shader_stage_create_info,
+					&vk_pipiline_vertex_input_state_create_info,
+					&vk_pipeline_input_assembly_state_create_info,
+					nullptr,
+					&vk_pipieline_viewport_state_create_info,
+					&vk_pipilane_rasterization_state_create_info,
+					&vk_pipeline_multisample_state_create_info,
+					&vk_pipeline_depth_state_create_info,
+					&vk_pipeline_color_blend_state_create_info,
+					nullptr,
+					*vk_pipeline_layout_,
+					*framebuffer_render_pass_,
+					0u));
+	}
 	// Create vertex buffer
 
 	const std::vector<WorldVertex> world_vertices
 	{
-		{ { -0.5f, 2.5f, -0.5f }, { 0.0f, 1.0f }, { 255, 0, 0, 0 }, },
-		{ { +0.5f, 2.0f, -0.5f }, { 1.0f, 1.0f }, { 0, 255, 0, 0 }, },
-		{ { +0.5f, 2.5f, +0.5f }, { 1.0f, 0.0f }, { 0, 0, 255, 0 }, },
-		{ { -0.5f, 2.0f, +0.5f }, { 0.0f, 0.0f }, { 0, 0, 0,   0 }, },
+		{ { -0.5f, 2.5f, -0.5f }, { 0.0f, 1.0f }, { 255, 128, 128, 0 }, },
+		{ { +0.5f, 2.0f, -0.5f }, { 1.0f, 1.0f }, { 128, 255, 128, 0 }, },
+		{ { +0.5f, 2.5f, +0.5f }, { 1.0f, 0.0f }, { 128, 128, 255, 0 }, },
+		{ { -0.5f, 2.0f, +0.5f }, { 0.0f, 0.0f }, { 128, 128, 128, 0 }, },
 	};
 
 	const std::vector<uint16_t> world_indeces{ 0, 1, 2, 0, 2, 3 };
@@ -509,41 +513,224 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 		window_vulkan.EndFrame({});
 	}
 
-	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 1u);
-	vk_descriptor_pool_=
-		vk_device_.createDescriptorPoolUnique(
-			vk::DescriptorPoolCreateInfo(
-				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				4u, // max sets.
-				1u, &vk_descriptor_pool_size));
+	{
+		// Create descriptor set pool.
+		const vk::DescriptorPoolSize vk_descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 1u);
+		vk_descriptor_pool_=
+			vk_device_.createDescriptorPoolUnique(
+				vk::DescriptorPoolCreateInfo(
+					vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+					4u, // max sets.
+					1u, &vk_descriptor_pool_size));
 
-	// Create descriptor set.
-	vk_descriptor_set_=
-		std::move(
-		vk_device_.allocateDescriptorSetsUnique(
-			vk::DescriptorSetAllocateInfo(
-				*vk_descriptor_pool_,
-				1u, &*vk_decriptor_set_layout_)).front());
+		// Create descriptor set.
+		vk_descriptor_set_=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*vk_descriptor_pool_,
+					1u, &*vk_decriptor_set_layout_)).front());
 
-	// Write descriptor set.
-	const vk::DescriptorImageInfo descriptor_image_info(
-		vk::Sampler(),
-		*vk_image_view_,
-		vk::ImageLayout::eGeneral);
+		// Write descriptor set.
+		const vk::DescriptorImageInfo descriptor_image_info(
+			vk::Sampler(),
+			*vk_image_view_,
+			vk::ImageLayout::eGeneral);
 
-	const vk::WriteDescriptorSet write_descriptor_set(
-		*vk_descriptor_set_,
-		g_tex_uniform_binding,
-		0u,
-		1u,
-		vk::DescriptorType::eCombinedImageSampler,
-		&descriptor_image_info,
-		nullptr,
-		nullptr);
-	vk_device_.updateDescriptorSets(
-		1u, &write_descriptor_set,
-		0u, nullptr);
+		const vk::WriteDescriptorSet write_descriptor_set(
+			*vk_descriptor_set_,
+			g_tex_uniform_binding,
+			0u,
+			1u,
+			vk::DescriptorType::eCombinedImageSampler,
+			&descriptor_image_info,
+			nullptr,
+			nullptr);
+		vk_device_.updateDescriptorSets(
+			1u, &write_descriptor_set,
+			0u, nullptr);
+	}
+
+	{
+		// Create shaders
+		tonemapping_shader_vert_=
+			vk_device_.createShaderModuleUnique(
+				vk::ShaderModuleCreateInfo(
+					vk::ShaderModuleCreateFlags(),
+					std::size(Shaders::c_fullscreen_quad_vert_file_content),
+					reinterpret_cast<const uint32_t*>(Shaders::c_fullscreen_quad_vert_file_content)));
+
+		tonemapping_shader_frag_=
+			vk_device_.createShaderModuleUnique(
+				vk::ShaderModuleCreateInfo(
+					vk::ShaderModuleCreateFlags(),
+					std::size(Shaders::c_tonemapping_frag_file_content),
+					reinterpret_cast<const uint32_t*>(Shaders::c_tonemapping_frag_file_content)));
+
+		// Create image sampler
+
+		vk_image_sampler_=
+			vk_device_.createSamplerUnique(
+				vk::SamplerCreateInfo(
+					vk::SamplerCreateFlags(),
+					vk::Filter::eNearest,
+					vk::Filter::eNearest,
+					vk::SamplerMipmapMode::eNearest,
+					vk::SamplerAddressMode::eRepeat,
+					vk::SamplerAddressMode::eRepeat,
+					vk::SamplerAddressMode::eRepeat,
+					0.0f,
+					VK_FALSE,
+					0.0f,
+					VK_FALSE,
+					vk::CompareOp::eNever,
+					0.0f,
+					0.0f,
+					vk::BorderColor::eFloatTransparentBlack,
+					VK_FALSE));
+
+		// Create pipeline layout
+		const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
+		{
+			{
+				g_tex_uniform_binding,
+				vk::DescriptorType::eCombinedImageSampler,
+				1u,
+				vk::ShaderStageFlagBits::eFragment,
+				&*vk_image_sampler_,
+			},
+		};
+
+		tonemapping_decriptor_set_layout_=
+			vk_device_.createDescriptorSetLayoutUnique(
+				vk::DescriptorSetLayoutCreateInfo(
+					vk::DescriptorSetLayoutCreateFlags(),
+					uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
+
+
+		tonemapping_pipeline_layout_=
+			vk_device_.createPipelineLayoutUnique(
+				vk::PipelineLayoutCreateInfo(
+					vk::PipelineLayoutCreateFlags(),
+					1u, &*vk_decriptor_set_layout_,
+					0u, nullptr));
+
+		// Create pipeline.
+		const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
+		{
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eVertex,
+				*tonemapping_shader_vert_,
+				"main"
+			},
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eFragment,
+				*tonemapping_shader_frag_,
+				"main"
+			},
+		};
+
+		const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
+			vk::PipelineVertexInputStateCreateFlags(),
+			0u, nullptr,
+			0u, nullptr);
+
+		const vk::PipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info(
+			vk::PipelineInputAssemblyStateCreateFlags(),
+			vk::PrimitiveTopology::eTriangleList);
+
+		const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
+		const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
+
+		const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
+			vk::PipelineViewportStateCreateFlags(),
+			1u, &vk_viewport,
+			1u, &vk_scissor);
+
+		const vk::PipelineRasterizationStateCreateInfo vk_pipilane_rasterization_state_create_info(
+			vk::PipelineRasterizationStateCreateFlags(),
+			VK_FALSE,
+			VK_FALSE,
+			vk::PolygonMode::eFill,
+			vk::CullModeFlagBits::eNone,
+			vk::FrontFace::eCounterClockwise,
+			VK_FALSE, 0.0f, 0.0f, 0.0f,
+			1.0f);
+
+		const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
+
+		const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
+			VK_FALSE,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+
+		const vk::PipelineColorBlendStateCreateInfo vk_pipeline_color_blend_state_create_info(
+			vk::PipelineColorBlendStateCreateFlags(),
+			VK_FALSE,
+			vk::LogicOp::eCopy,
+			1u, &vk_pipeline_color_blend_attachment_state);
+
+		tonemapping_pipeline_=
+			vk_device_.createGraphicsPipelineUnique(
+				nullptr,
+				vk::GraphicsPipelineCreateInfo(
+					vk::PipelineCreateFlags(),
+					uint32_t(std::size(vk_shader_stage_create_info)),
+					vk_shader_stage_create_info,
+					&vk_pipiline_vertex_input_state_create_info,
+					&vk_pipeline_input_assembly_state_create_info,
+					nullptr,
+					&vk_pipieline_viewport_state_create_info,
+					&vk_pipilane_rasterization_state_create_info,
+					&vk_pipeline_multisample_state_create_info,
+					nullptr,
+					&vk_pipeline_color_blend_state_create_info,
+					nullptr,
+					*tonemapping_pipeline_layout_,
+					window_vulkan.GetRenderPass(),
+					0u));
+	}
+
+	{
+		// Create descriptor set pool.
+		const vk::DescriptorPoolSize vk_descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 1u);
+		tonemapping_descriptor_pool_=
+			vk_device_.createDescriptorPoolUnique(
+				vk::DescriptorPoolCreateInfo(
+					vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+					1u, // max sets.
+					1u, &vk_descriptor_pool_size));
+
+		// Create descriptor set.
+		tonemapping_descriptor_set_=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*tonemapping_descriptor_pool_,
+					1u, &*tonemapping_decriptor_set_layout_)).front());
+
+		// Write descriptor set.
+		const vk::DescriptorImageInfo descriptor_image_info(
+			vk::Sampler(),
+			*framebuffer_image_view_,
+			vk::ImageLayout::eGeneral);
+
+		const vk::WriteDescriptorSet write_descriptor_set(
+			*tonemapping_descriptor_set_,
+			g_tex_uniform_binding,
+			0u,
+			1u,
+			vk::DescriptorType::eCombinedImageSampler,
+			&descriptor_image_info,
+			nullptr,
+			nullptr);
+		vk_device_.updateDescriptorSets(
+			1u, &write_descriptor_set,
+			0u, nullptr);
+	}
 }
 
 WorldRenderer::~WorldRenderer()
@@ -587,56 +774,17 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 	command_buffer.endRenderPass();
 }
 
-void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer, const vk::Image dst_image)
+void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 {
-
-	std::array<vk::Offset3D, 2> src_offsets;
-	std::array<vk::Offset3D, 2> dst_offsets;
-
-	src_offsets[0]= 0u;
-	src_offsets[0]= 0u;
-	src_offsets[0]= 0u;
-	src_offsets[1].x= viewport_size_.width;
-	src_offsets[1].y= viewport_size_.height;
-	src_offsets[1].z= 1u;
-
-	dst_offsets[0]= 0u;
-	dst_offsets[0]= 0u;
-	dst_offsets[0]= 0u;
-	dst_offsets[1].x= viewport_size_.width;
-	dst_offsets[1].y= viewport_size_.height;
-	dst_offsets[1].z= 1;
-
-	const vk::ImageBlit image_blit(
-		vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
-		src_offsets,
-		vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
-		dst_offsets);
-
-	const vk::ImageMemoryBarrier barrier(
-		vk::AccessFlagBits::eTransferWrite,
-		vk::AccessFlagBits::eMemoryRead,
-		vk::ImageLayout::ePresentSrcKHR, vk::ImageLayout::eTransferDstOptimal,
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *tonemapping_pipeline_);
+	command_buffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*tonemapping_pipeline_layout_,
 		0u,
-		0u,
-		dst_image,
-		vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+		1u, &*tonemapping_descriptor_set_,
+		0u, nullptr);
 
-	command_buffer.pipelineBarrier(
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eBottomOfPipe,
-		vk::DependencyFlags(),
-		0u, nullptr,
-		0u, nullptr,
-		1u, &barrier);
-
-	command_buffer.blitImage(
-		*framebuffer_image_,
-		vk::ImageLayout::eTransferSrcOptimal,
-		dst_image,
-		vk::ImageLayout::eTransferDstOptimal,
-		1u, &image_blit,
-		vk::Filter::eNearest);
+	command_buffer.draw(6u, 1u, 0u, 0u);
 }
 
 } // namespace KK
