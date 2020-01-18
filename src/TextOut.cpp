@@ -350,7 +350,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 			const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
 				vk::AccessFlagBits::eTransferWrite,
 				vk::AccessFlagBits::eMemoryRead,
-				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eGeneral,
+				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
 				window_vulkan.GetQueueFamilyIndex(),
 				window_vulkan.GetQueueFamilyIndex(),
 				*font_image_,
@@ -369,7 +369,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
 					vk::AccessFlagBits::eTransferWrite,
 					vk::AccessFlagBits::eMemoryRead,
-					vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eGeneral,
+					vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
 					window_vulkan.GetQueueFamilyIndex(),
 					window_vulkan.GetQueueFamilyIndex(),
 					*font_image_,
@@ -479,7 +479,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 	const vk::DescriptorImageInfo descriptor_image_info(
 		vk::Sampler(),
 		*font_image_view_,
-		vk::ImageLayout::eGeneral);
+		vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	const vk::WriteDescriptorSet write_descriptor_set(
 		*descriptor_set_,
