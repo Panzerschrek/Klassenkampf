@@ -43,7 +43,32 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	// Create framebuffer with image data.
 	{
 		const auto framebuffer_image_format= vk::Format::eR8G8B8A8Unorm;
-		const auto framebuffer_depth_format= vk::Format::eD16Unorm;
+
+		// Select depth buffer format.
+		const vk::Format depth_formats[]
+		{
+		// Depth formats by priority.
+			vk::Format::eD32Sfloat,
+			vk::Format::eD24UnormS8Uint,
+			vk::Format::eX8D24UnormPack32,
+			vk::Format::eD32SfloatS8Uint,
+			vk::Format::eD16Unorm,
+			vk::Format::eD16UnormS8Uint,
+		};
+		vk::Format framebuffer_depth_format= vk::Format::eD16Unorm;
+		for(const vk::Format depth_format_candidate : depth_formats)
+		{
+			const vk::FormatProperties format_properties=
+				window_vulkan.GetPhysicalDevice().getFormatProperties(depth_format_candidate);
+
+			const vk::FormatFeatureFlags required_falgs= vk::FormatFeatureFlagBits::eDepthStencilAttachment;
+			if((format_properties.optimalTilingFeatures & required_falgs) == required_falgs)
+			{
+				framebuffer_depth_format= depth_format_candidate;
+				break;
+			}
+		}
+
 		{
 			framebuffer_image_=
 				vk_device_.createImageUnique(
