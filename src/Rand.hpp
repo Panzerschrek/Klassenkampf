@@ -6,7 +6,7 @@
 namespace KK
 {
 
-class LongRand final
+class LongRand final // TODO - rename?
 {
 public:
 	using RandResultType= uint32_t;
