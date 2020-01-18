@@ -60,13 +60,11 @@ bool Host::Loop()
 	world_renderer_.BeginFrame(command_buffer, camera_controller_.CalculateViewMatrix());
 	text_out_.BeginFrame(command_buffer);
 
-
 	window_vulkan_.EndFrame(
 		{
 			[&](const vk::CommandBuffer command_buffer)
 			{
 				world_renderer_.EndFrame(command_buffer);
-
 			},
 			[&](const vk::CommandBuffer command_buffer)
 			{

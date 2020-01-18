@@ -184,7 +184,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 			surface_format.colorSpace,
 			surface_capabilities.maxImageExtent,
 			1u,
-			vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst,
+			vk::ImageUsageFlagBits::eColorAttachment,
 			vk::SharingMode::eExclusive,
 			1u, &queue_family_index,
 			vk::SurfaceTransformFlagBitsKHR::eIdentity,
@@ -299,7 +299,7 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 	const vk::CommandBuffer command_buffer= *current_frame_command_buffer_->command_buffer;
 
 	// Get next swapchain image.
-	current_swapchain_image_index_=
+	const uint32_t swapchain_image_index=
 		vk_device_->acquireNextImageKHR(
 			*vk_swapchain_,
 			std::numeric_limits<uint64_t>::max(),
@@ -307,13 +307,12 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 			vk::Fence()).value;
 
 	// Begin render pass.
-	const vk::ClearValue clear_value(vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}));
 	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
 			*vk_render_pass_,
-			*framebuffers_[current_swapchain_image_index_].framebuffer,
+			*framebuffers_[swapchain_image_index].framebuffer,
 			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
-			1u, &clear_value),
+			0u, nullptr),
 		vk::SubpassContents::eInline);
 
 	// Draw into framebuffer.
@@ -342,7 +341,7 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 		vk::PresentInfoKHR(
 			1u, &*current_frame_command_buffer_->rendering_finished_semaphore,
 			1u, &*vk_swapchain_,
-			&current_swapchain_image_index_,
+			&swapchain_image_index,
 			nullptr));
 }
 

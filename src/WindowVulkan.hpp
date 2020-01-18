@@ -63,7 +63,6 @@ private:
 	std::vector<CommandBufferData> command_buffers_;
 	const CommandBufferData* current_frame_command_buffer_= nullptr;
 	size_t frame_count_= 0u;
-	uint32_t current_swapchain_image_index_= ~0u;
 };
 
 } // namespace KK
