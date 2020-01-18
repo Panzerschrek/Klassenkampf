@@ -38,7 +38,6 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 	, viewport_size_(window_vulkan.GetViewportSize())
 {
 	const auto memory_properties= window_vulkan.GetMemoryProperties();
-	const vk::Extent2D viewport_size= window_vulkan.GetViewportSize();
 
 	// Create framebuffer with image data.
 	{
@@ -69,6 +68,12 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 			}
 		}
 
+		// Use bigger framebuffer, because we use lenses distortion effect.
+		framebuffer_size_.width = viewport_size_.width  * 4u / 3u;
+		framebuffer_size_.height= viewport_size_.height * 4u / 3u;
+		framebuffer_size_.width = (framebuffer_size_.width  + 7u) & ~7u;
+		framebuffer_size_.height= (framebuffer_size_.height + 7u) & ~7u;
+
 		{
 			framebuffer_image_=
 				vk_device_.createImageUnique(
@@ -76,7 +81,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 						vk::ImageCreateFlags(),
 						vk::ImageType::e2D,
 						framebuffer_image_format,
-						vk::Extent3D(viewport_size.width, viewport_size.height, 1u),
+						vk::Extent3D(framebuffer_size_.width, framebuffer_size_.height, 1u),
 						1u,
 						1u,
 						vk::SampleCountFlagBits::e1,
@@ -117,7 +122,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 						vk::ImageCreateFlags(),
 						vk::ImageType::e2D,
 						framebuffer_depth_format,
-						vk::Extent3D(viewport_size.width, viewport_size.height, 1u),
+						vk::Extent3D(framebuffer_size_.width, framebuffer_size_.height, 1u),
 						1u,
 						1u,
 						vk::SampleCountFlagBits::e1,
@@ -202,7 +207,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 					vk::FramebufferCreateFlags(),
 					*framebuffer_render_pass_,
 					2u, framebuffer_images,
-					viewport_size.width , viewport_size.height, 1u));
+					framebuffer_size_.width , framebuffer_size_.height, 1u));
 	}
 
 	// Create shaders
@@ -323,8 +328,8 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 			vk::PipelineInputAssemblyStateCreateFlags(),
 			vk::PrimitiveTopology::eTriangleList);
 
-		const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
-		const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
+		const vk::Viewport vk_viewport(0.0f, 0.0f, float(framebuffer_size_.width), float(framebuffer_size_.height), 0.0f, 1.0f);
+		const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), framebuffer_size_);
 
 		const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
 			vk::PipelineViewportStateCreateFlags(),
@@ -594,16 +599,16 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 
 		// Create image sampler
 
-		vk_image_sampler_=
+		framebuffer_image_sampler_=
 			vk_device_.createSamplerUnique(
 				vk::SamplerCreateInfo(
 					vk::SamplerCreateFlags(),
-					vk::Filter::eNearest,
-					vk::Filter::eNearest,
+					vk::Filter::eLinear,
+					vk::Filter::eLinear,
 					vk::SamplerMipmapMode::eNearest,
-					vk::SamplerAddressMode::eRepeat,
-					vk::SamplerAddressMode::eRepeat,
-					vk::SamplerAddressMode::eRepeat,
+					vk::SamplerAddressMode::eClampToEdge,
+					vk::SamplerAddressMode::eClampToEdge,
+					vk::SamplerAddressMode::eClampToEdge,
 					0.0f,
 					VK_FALSE,
 					0.0f,
@@ -622,7 +627,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 				vk::DescriptorType::eCombinedImageSampler,
 				1u,
 				vk::ShaderStageFlagBits::eFragment,
-				&*vk_image_sampler_,
+				&*framebuffer_image_sampler_,
 			},
 		};
 
@@ -632,12 +637,11 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 					vk::DescriptorSetLayoutCreateFlags(),
 					uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
-
 		tonemapping_pipeline_layout_=
 			vk_device_.createPipelineLayoutUnique(
 				vk::PipelineLayoutCreateInfo(
 					vk::PipelineLayoutCreateFlags(),
-					1u, &*vk_decriptor_set_layout_,
+					1u, &*tonemapping_decriptor_set_layout_,
 					0u, nullptr));
 
 		// Create pipeline.
@@ -666,8 +670,8 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 			vk::PipelineInputAssemblyStateCreateFlags(),
 			vk::PrimitiveTopology::eTriangleList);
 
-		const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
-		const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
+		const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size_.width), float(viewport_size_.height), 0.0f, 1.0f);
+		const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size_);
 
 		const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
 			vk::PipelineViewportStateCreateFlags(),
@@ -777,7 +781,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 		vk::RenderPassBeginInfo(
 			*framebuffer_render_pass_,
 			*framebuffer_,
-			vk::Rect2D(vk::Offset2D(0, 0), viewport_size_),
+			vk::Rect2D(vk::Offset2D(0, 0), framebuffer_size_),
 			2u, clear_value),
 		vk::SubpassContents::eInline);
 
@@ -801,7 +805,6 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 {
-	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *tonemapping_pipeline_);
 	command_buffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		*tonemapping_pipeline_layout_,
@@ -809,6 +812,7 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 		1u, &*tonemapping_descriptor_set_,
 		0u, nullptr);
 
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *tonemapping_pipeline_);
 	command_buffer.draw(6u, 1u, 0u, 0u);
 }
 
