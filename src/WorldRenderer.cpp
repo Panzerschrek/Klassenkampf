@@ -598,7 +598,6 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 					reinterpret_cast<const uint32_t*>(Shaders::c_tonemapping_frag_file_content)));
 
 		// Create image sampler
-
 		framebuffer_image_sampler_=
 			vk_device_.createSamplerUnique(
 				vk::SamplerCreateInfo(
@@ -767,7 +766,6 @@ WorldRenderer::~WorldRenderer()
 	// Sync before destruction.
 	vk_device_.waitIdle();
 }
-
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
 {
