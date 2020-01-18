@@ -197,7 +197,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 		vk::AttachmentDescriptionFlags(),
 		surface_format.format,
 		vk::SampleCountFlagBits::e1,
-		vk::AttachmentLoadOp::eClear,
+		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eStore,
 		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eDontCare,
@@ -268,6 +268,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	}
 
 	memory_properties_= physical_device.getMemoryProperties();
+	physical_device_= physical_device;
 }
 
 WindowVulkan::~WindowVulkan()
@@ -368,6 +369,11 @@ vk::RenderPass WindowVulkan::GetRenderPass() const
 const vk::PhysicalDeviceMemoryProperties& WindowVulkan::GetMemoryProperties() const
 {
 	return memory_properties_;
+}
+
+const vk::PhysicalDevice& WindowVulkan::GetPhysicalDevice() const
+{
+	return physical_device_;
 }
 
 } // namespace KK
