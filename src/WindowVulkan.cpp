@@ -197,7 +197,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 		vk::AttachmentDescriptionFlags(),
 		surface_format.format,
 		vk::SampleCountFlagBits::e1,
-		vk::AttachmentLoadOp::eClear,
+		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eStore,
 		vk::AttachmentLoadOp::eDontCare,
 		vk::AttachmentStoreOp::eDontCare,

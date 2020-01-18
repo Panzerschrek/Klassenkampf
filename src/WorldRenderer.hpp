@@ -13,11 +13,23 @@ public:
 
 	~WorldRenderer();
 
-	void BeginFrame(vk::CommandBuffer command_buffer);
-	void EndFrame(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
+	void BeginFrame(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
+	void EndFrame(vk::CommandBuffer command_buffer, vk::Image dst_image);
 
 private:
 	const vk::Device vk_device_;
+	const vk::Extent2D viewport_size_;
+
+	vk::UniqueImage framebuffer_image_;
+	vk::UniqueDeviceMemory framebuffer_image_memory_;
+	vk::UniqueImageView framebuffer_image_view_;
+
+	vk::UniqueImage framebuffer_depth_image_;
+	vk::UniqueDeviceMemory framebuffer_depth_image_memory_;
+	vk::UniqueImageView framebuffer_depth_image_view_;
+
+	vk::UniqueRenderPass framebuffer_render_pass_;
+	vk::UniqueFramebuffer framebuffer_;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;

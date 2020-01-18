@@ -26,6 +26,8 @@ public:
 	vk::RenderPass GetRenderPass() const; // Render pass for rendering directly into screen.
 	const vk::PhysicalDeviceMemoryProperties& GetMemoryProperties() const;
 
+	vk::Image GetCurrentImage() const{ return framebuffers_[current_swapchain_image_index_].image; }
+
 private:
 	struct CommandBufferData
 	{
