@@ -1,6 +1,7 @@
 #pragma once
 #include "MathLib/Mat.hpp"
 #include "WindowVulkan.hpp"
+#include "WorldGenerator.hpp"
 
 
 namespace KK
@@ -9,7 +10,9 @@ namespace KK
 class WorldRenderer final
 {
 public:
-	explicit WorldRenderer(WindowVulkan& window_vulkan);
+	WorldRenderer(
+		WindowVulkan& window_vulkan,
+		const WorldData::World& world);
 
 	~WorldRenderer();
 
@@ -46,6 +49,7 @@ private:
 	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
 
 	vk::UniqueBuffer vk_index_buffer_;
+	size_t index_count_= 0u;
 	vk::UniqueDeviceMemory vk_index_buffer_memory_;
 
 	vk::UniqueImage vk_image_;
