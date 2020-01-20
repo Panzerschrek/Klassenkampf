@@ -1,0 +1,9 @@
+Predpoctiteljnym variantom bylo by samostojateljnoje modelirovanije segmentov urovnej v storonnem 3d redaktore, naprimer, v "Blender".
+
+Zamodelennyje v "Blender" segmenty možno vygružatj v format "COLLADA" (*.dae). Dannyj format predstavläjet soboj obycnyj "XML".
+V Etom formate vygružajetsä geometrija, materialy, istocniki sveta, kamery.
+
+Fajly v formate "COLLADA" možno razbiratj svoim eksportörom (nado jego budet napisatj) i preobrazovyvatj v svoj format.
+Dopolniteljno eksportör možet stroitj razvörtki svetokart, naprimer.
+
+Materialy sami po sebe možno ne bratj iz "Blender" a ispoljzovatj svoi, a v "Blender" obrascatjsä k nim po imenam tekstur.
