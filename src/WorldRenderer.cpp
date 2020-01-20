@@ -178,7 +178,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 				vk::AttachmentLoadOp::eClear,
 				vk::AttachmentStoreOp::eStore,
 				vk::ImageLayout::eUndefined,
-				vk::ImageLayout::eTransferSrcOptimal,
+				vk::ImageLayout::eGeneral,
 			},
 		};
 
