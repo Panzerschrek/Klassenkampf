@@ -1,4 +1,5 @@
 #include "WorldGenerator.hpp"
+#include "Assert.hpp"
 #include "Rand.hpp"
 
 
@@ -80,9 +81,9 @@ private:
 
 			case WorldData::Direction::XMinus:
 				new_corridor.bb_max[0]= segment.bb_min[0];
-				new_corridor.bb_max[0]= segment.bb_min[0] - corridor_length;
-				new_corridor.bb_min[1]= new_corridor.bb_min[1] + 1;
-				new_corridor.bb_max[1]= (segment.bb_min[1] + segment.bb_max[1]) >> 1;
+				new_corridor.bb_min[0]= segment.bb_min[0] - corridor_length;
+				new_corridor.bb_min[1]= (segment.bb_min[1] + segment.bb_max[1]) >> 1;
+				new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
 				break;
 
 			case WorldData::Direction::YPlus:
@@ -99,6 +100,9 @@ private:
 				new_corridor.bb_min[1]= segment.bb_min[1] - corridor_length;
 				break;
 			};
+
+			for(size_t i= 0u; i < 3u; ++i)
+				KK_ASSERT(new_corridor.bb_min[0] < new_corridor.bb_max[0]);
 
 			if(!CanPlace(new_corridor.bb_min, new_corridor.bb_max))
 				return;
@@ -143,18 +147,21 @@ private:
 
 		case WorldData::Direction::YPlus:
 			new_room.bb_min[0]= result_.segments[segment_index].bb_max[0] - (room_size[0] >> 1);
-			new_room.bb_max[0]= new_room.bb_min[1] + room_size[0];
+			new_room.bb_max[0]= new_room.bb_min[0] + room_size[0];
 			new_room.bb_min[1]= result_.segments[segment_index].bb_max[1];
 			new_room.bb_max[1]= result_.segments[segment_index].bb_max[1] + room_size[1];
 			break;
 
 		case WorldData::Direction::YMinus:
 			new_room.bb_min[0]= result_.segments[segment_index].bb_max[0] - (room_size[0] >> 1);
-			new_room.bb_max[0]= new_room.bb_min[1] + room_size[0];
+			new_room.bb_max[0]= new_room.bb_min[0] + room_size[0];
 			new_room.bb_max[1]= result_.segments[segment_index].bb_min[1];
 			new_room.bb_min[1]= result_.segments[segment_index].bb_min[1] - room_size[1];
 			break;
 		};
+
+		for(size_t i= 0u; i < 3u; ++i)
+			KK_ASSERT(new_room.bb_min[0] < new_room.bb_max[0]);
 
 		if(!CanPlace(new_room.bb_min, new_room.bb_max))
 			return;
