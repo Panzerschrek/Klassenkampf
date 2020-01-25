@@ -19,4 +19,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 	add_definitions(-DDEBUG)
 endif()
 
+# Setup TinyXML2 library. Build static library, disable tests.
+set(BUILD_SHARED_LIBS CACHE BOOl "" FORCE)
+set(BUILD_TESTS CACHE BOOl "" FORCE)
+add_subdirectory(tinyxml2)
+
 add_subdirectory(Game)
