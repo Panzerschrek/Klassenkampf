@@ -11,6 +11,21 @@ struct CoordSource
 	size_t vector_size= 0u;
 };
 
+using CoordSources= std::unordered_map<std::string, CoordSource>;
+
+struct VertexCombined
+{
+	float pos[3]{0.0f, 0.0f, 0.0f};
+	float normal[3]{0.0f, 0.0f, 0.0f};
+	float tex_coord[2]{0.0f, 0.0f};
+};
+
+struct TriangleGroup
+{
+	std::vector<VertexCombined> vertices;
+	std::string material;
+};
+
 CoordSource ReadCoordSource(const tinyxml2::XMLElement& source_element)
 {
 	const tinyxml2::XMLElement* const float_array_element= source_element.FirstChildElement("float_array");
@@ -61,6 +76,134 @@ CoordSource ReadCoordSource(const tinyxml2::XMLElement& source_element)
 	return result;
 }
 
+TriangleGroup ReadTriangleGroup(
+	const tinyxml2::XMLElement& triangle_element,
+	const CoordSources& coord_sources)
+{
+	size_t vertex_attrib_count= 0u;
+	size_t vertex_offset= ~0u;
+	size_t normal_offset= ~0u;
+	size_t tex_coord_offset= ~0u;
+
+	const char* vertex_source_name= "";
+	const char* normal_source_name= "";
+	const char* tex_coord_source_name= "";
+
+	for(const tinyxml2::XMLElement* input= triangle_element.FirstChildElement("input");
+		input != nullptr;
+		input= input->NextSiblingElement("input"))
+	{
+		const char* const semantic= input->Attribute("semantic");
+		const char* source= input->Attribute("source");
+		const char* const offset= input->Attribute("offset");
+		if(semantic == nullptr || source == nullptr || offset == nullptr)
+			continue;
+
+		if(source[0] == '#')
+			++source;
+
+		const size_t offset_value= std::atol(offset);
+
+		if(std::strcmp(semantic, "VERTEX") == 0)
+		{
+			vertex_offset= offset_value;
+			vertex_source_name= source;
+			++vertex_attrib_count;
+		}
+		if(std::strcmp(semantic, "NORMAL") == 0)
+		{
+			normal_offset= offset_value;
+			normal_source_name= source;
+			++vertex_attrib_count;
+		}
+		if(std::strcmp(semantic, "TEXCOORD") == 0)
+		{
+			tex_coord_offset= offset_value;
+			tex_coord_source_name= source;
+			++vertex_attrib_count;
+		}
+	}
+
+	if(vertex_attrib_count == 0u || vertex_offset == ~0u)
+		return TriangleGroup();
+
+	if((vertex_offset != ~0u && vertex_offset >= vertex_attrib_count) ||
+		(normal_offset != ~0u && normal_offset >= vertex_attrib_count) ||
+		(tex_coord_offset != ~0u && tex_coord_offset >= vertex_attrib_count))
+		return TriangleGroup();
+
+	const CoordSource* vertex_source= nullptr;
+	const CoordSource* normal_source= nullptr;
+	const CoordSource* tex_coord_source= nullptr;
+
+	const auto vertex_source_it= coord_sources.find(vertex_source_name);
+	if(vertex_source_name[0] != '\0' && vertex_source_it == coord_sources.end())
+		return TriangleGroup();
+	else
+		vertex_source= &vertex_source_it->second;
+
+	const auto normal_source_it= coord_sources.find(normal_source_name);
+	if(normal_source_name[0] != '\0' && normal_source_it == coord_sources.end())
+		return TriangleGroup();
+	else
+		normal_source= &normal_source_it->second;
+
+	const auto tex_coord_source_it= coord_sources.find(tex_coord_source_name);
+	if(tex_coord_source_name[0] != '\0' && tex_coord_source_it == coord_sources.end())
+		return TriangleGroup();
+	else
+		tex_coord_source= &tex_coord_source_it->second;
+
+	const tinyxml2::XMLElement* const p_element= triangle_element.FirstChildElement("p");
+	if(p_element == nullptr)
+		return TriangleGroup();
+
+	std::vector<uint32_t> indices;
+	std::istringstream ss(p_element->GetText());
+	while(!ss.eof())
+	{
+		uint32_t i= 0u;
+		ss >> i;
+		indices.push_back(i);
+	}
+
+	if(indices.size() % vertex_attrib_count != 0u)
+		return TriangleGroup();
+
+	TriangleGroup result;
+
+	for(size_t i= 0u; i < indices.size(); i+= vertex_attrib_count)
+	{
+		VertexCombined out_vertex;
+		if(vertex_source != nullptr)
+		{
+			out_vertex.pos[0]= out_vertex.pos[1]= out_vertex.pos[2]= 0.0f;
+			for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
+				out_vertex.pos[j]= vertex_source->data[ indices[i + vertex_offset] * vertex_source->vector_size + j ];
+		}
+		if(normal_source != nullptr)
+		{
+			out_vertex.normal[0]= out_vertex.normal[1]= out_vertex.normal[2]= 0.0f;
+			for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
+				out_vertex.normal[j]= normal_source->data[ indices[i + normal_offset] * normal_source->vector_size + j ];
+		}
+		if(tex_coord_source != nullptr)
+		{
+			out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
+			for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(2u)); ++j)
+				out_vertex.tex_coord[j]= tex_coord_source->data[ indices[i + tex_coord_offset] * tex_coord_source->vector_size + j ];
+		}
+
+		result.vertices.push_back(out_vertex);
+	}
+
+	const char* const material= triangle_element.Attribute("material");
+	if(material != nullptr)
+		result.material= material;
+
+	return result;
+}
+
 int main()
 {
 	tinyxml2::XMLDocument doc;
@@ -87,7 +230,8 @@ int main()
 			mesh != nullptr;
 			mesh= mesh->NextSiblingElement("mesh"))
 		{
-			std::unordered_map<std::string, CoordSource> coord_sources;
+			CoordSources coord_sources;
+			std::vector<TriangleGroup> triangle_groups;
 
 			for(const tinyxml2::XMLElement* source= mesh->FirstChildElement("source");
 				source != nullptr;
@@ -103,7 +247,41 @@ int main()
 				coord_sources[id]= std::move(coord_source);
 			}
 
-			std::cout << "Mesh " << coord_sources.size() << " sources" << std::endl;
+			for(const tinyxml2::XMLElement* vertices= mesh->FirstChildElement("vertices");
+				vertices != nullptr;
+				vertices= vertices->NextSiblingElement("vertices"))
+			{
+				const char* const id= vertices->Attribute("id");
+				if(id == nullptr)
+					continue;
+
+				const tinyxml2::XMLElement* const input= vertices->FirstChildElement("input");
+				if(input == nullptr)
+					continue;
+				const char* source= input->Attribute("source");
+				if(source == nullptr)
+					continue;
+				if(source[0] == '#')
+					++source;
+
+				const auto source_it= coord_sources.find(source);
+				if(source_it != coord_sources.end())
+				{
+					CoordSource source_alias= source_it->second;
+					coord_sources[id]= std::move(source_alias);
+				}
+			}
+
+			for(const tinyxml2::XMLElement* triangles= mesh->FirstChildElement("triangles");
+				triangles != nullptr;
+				triangles= triangles->NextSiblingElement("triangles"))
+			{
+				TriangleGroup triangle_group= ReadTriangleGroup(*triangles, coord_sources);
+				if(!triangle_group.vertices.empty())
+					triangle_groups.push_back(std::move(triangle_group));
+			}
+
+			std::cout << "Mesh: " << coord_sources.size() << " sources " << triangle_groups.size() << " Triangle groups" << std::endl;
 		}
 	}
 }
