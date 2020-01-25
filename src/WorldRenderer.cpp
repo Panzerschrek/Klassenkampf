@@ -31,9 +31,29 @@ struct WorldVertex
 
 const uint32_t g_tex_uniform_binding= 0u;
 
+const float g_box_vertices[][3]
+{
+	{ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, // -y
+	{ 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, // +y
+	{ 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, // +x
+	{ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, // -x
+	{ 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, // +z
+	{ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, // -z
+};
+
+const uint16_t g_box_indices[]
+{
+	 0,  1,  2,   0,  2,  3,
+	 4,  6,  5,   4,  7,  6,
+	 8,  9, 10,   8, 10, 11,
+	12, 14, 13,  12, 15, 14,
+	16, 17, 18,  16, 18, 19,
+	20, 22, 21,  20, 23, 22,
+};
+
 } // namespace
 
-WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
+WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World& world)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
 {
@@ -341,7 +361,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 			VK_FALSE,
 			VK_FALSE,
 			vk::PolygonMode::eFill,
-			vk::CullModeFlagBits::eNone,
+			vk::CullModeFlagBits::eBack,
 			vk::FrontFace::eCounterClockwise,
 			VK_FALSE, 0.0f, 0.0f, 0.0f,
 			1.0f);
@@ -392,17 +412,47 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan)
 					*framebuffer_render_pass_,
 					0u));
 	}
+
 	// Create vertex buffer
-
-	const std::vector<WorldVertex> world_vertices
+	std::vector<WorldVertex> world_vertices;
+	std::vector<uint16_t> world_indeces;
+	for(const WorldData::Segment& segment : world.segments)
 	{
-		{ { -0.5f, 2.5f, -0.5f }, { 0.0f, 1.0f }, { 255, 128, 128, 0 }, },
-		{ { +0.5f, 2.0f, -0.5f }, { 1.0f, 1.0f }, { 128, 255, 128, 0 }, },
-		{ { +0.5f, 2.5f, +0.5f }, { 1.0f, 0.0f }, { 128, 128, 255, 0 }, },
-		{ { -0.5f, 2.0f, +0.5f }, { 0.0f, 0.0f }, { 128, 128, 128, 0 }, },
-	};
+		const size_t index_offset= world_vertices.size();
 
-	const std::vector<uint16_t> world_indeces{ 0, 1, 2, 0, 2, 3 };
+		const float c_general_scale= 0.25;
+		const float s[3]
+		{
+			c_general_scale * float(segment.bb_max[0] - segment.bb_min[0]),
+			c_general_scale * float(segment.bb_max[1] - segment.bb_min[1]),
+			c_general_scale * float(segment.bb_max[2] - segment.bb_min[2]),
+		};
+		const float d[3]
+		{
+			c_general_scale * float(segment.bb_min[0]),
+			c_general_scale * float(segment.bb_min[1]),
+			c_general_scale * float(segment.bb_min[2]),
+		};
+		for(const auto& in_vertex : g_box_vertices)
+		{
+			const float c_inv_sqr_3= 1.0f / std::sqrt(3.0f);
+			WorldVertex out_vertex;
+			out_vertex.pos[0]= d[0] + in_vertex[0] * s[0];
+			out_vertex.pos[1]= d[1] + in_vertex[1] * s[1];
+			out_vertex.pos[2]= d[2] + in_vertex[2] * s[2];
+			out_vertex.tex_coord[0]= out_vertex.pos[0] - out_vertex.pos[1];
+			out_vertex.tex_coord[1]= out_vertex.pos[0] * c_inv_sqr_3 + out_vertex.pos[1] * c_inv_sqr_3 + out_vertex.pos[2] * c_inv_sqr_3;
+			out_vertex.color[0]= 255u;
+			out_vertex.color[1]= 255u;
+			out_vertex.color[2]= 255u;
+			out_vertex.color[3]= 255u;
+			world_vertices.push_back(out_vertex);
+		}
+
+		for(const uint16_t index : g_box_indices)
+			world_indeces.push_back(uint16_t(index + index_offset));
+	}
+	index_count_= world_indeces.size();
 
 	{
 		vk_vertex_buffer_=
@@ -796,7 +846,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(view_matrix), &view_matrix);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
-	command_buffer.drawIndexed(6u, 1u, 0u, 0u, 0u);
+	command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
 
 	command_buffer.endRenderPass();
 }
