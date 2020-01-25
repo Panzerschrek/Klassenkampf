@@ -435,12 +435,13 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 		};
 		for(const auto& in_vertex : g_box_vertices)
 		{
+			const float c_inv_sqr_3= 1.0f / std::sqrt(3.0f);
 			WorldVertex out_vertex;
 			out_vertex.pos[0]= d[0] + in_vertex[0] * s[0];
 			out_vertex.pos[1]= d[1] + in_vertex[1] * s[1];
 			out_vertex.pos[2]= d[2] + in_vertex[2] * s[2];
-			out_vertex.tex_coord[0]= out_vertex.pos[0];
-			out_vertex.tex_coord[1]= out_vertex.pos[1];
+			out_vertex.tex_coord[0]= out_vertex.pos[0] - out_vertex.pos[1];
+			out_vertex.tex_coord[1]= out_vertex.pos[0] * c_inv_sqr_3 + out_vertex.pos[1] * c_inv_sqr_3 + out_vertex.pos[2] * c_inv_sqr_3;
 			out_vertex.color[0]= 255u;
 			out_vertex.color[1]= 255u;
 			out_vertex.color[2]= 255u;
