@@ -1,3 +1,4 @@
+#include "../Common/SegmentModelFormat.hpp"
 #include <tinyxml2.h>
 #include <iostream>
 #include <sstream>
@@ -204,6 +205,62 @@ TriangleGroup ReadTriangleGroup(
 	return result;
 }
 
+using FileData= std::vector<uint8_t>;
+
+FileData DoExport(const std::vector<TriangleGroup>& triangle_groups)
+{
+	FileData file_data;
+
+	file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::SegmentModelHeader), 0);
+	const auto get_data_file=
+		[&]() -> KK::SegmentModelFormat::SegmentModelHeader& { return *reinterpret_cast<KK::SegmentModelFormat::SegmentModelHeader*>( file_data.data() ); };
+
+	std::memcpy(get_data_file().header, KK::SegmentModelFormat::SegmentModelHeader::c_expected_header, sizeof(get_data_file().header));
+	get_data_file().version= KK::SegmentModelFormat::SegmentModelHeader::c_expected_version;
+
+	const float inf= 1e24f;
+	float bb_min[3] { +inf, +inf, +inf };
+	float bb_max[3] { -inf, -inf, -inf };
+
+	for(const TriangleGroup& triangle_group : triangle_groups)
+	{
+		for(const VertexCombined& vertex : triangle_group.vertices)
+		{
+			for(size_t i= 0u; i < 3u; ++i)
+			{
+				bb_min[i]= std::min(bb_min[i], vertex.pos[i]);
+				bb_max[i]= std::max(bb_max[i], vertex.pos[i]);
+			}
+		}
+	}
+
+	const float c_max_coord_value= 32766.0f;
+	float inv_scale[3];
+	for(size_t i= 0u; i < 3u; ++i)
+		inv_scale[i]= (c_max_coord_value * 2.0f) / (bb_max[i] - bb_min[i]);
+
+	for(size_t i= 0u; i < 3u; ++i)
+	{
+		get_data_file().scale[i]= 1.0f / inv_scale[i];
+		get_data_file().shift[i]= 0.0f; // TODO
+	}
+
+	get_data_file().vertices_offset= uint32_t(file_data.size());
+	for(const TriangleGroup& triangle_group : triangle_groups)
+	{
+		for(const VertexCombined& vertex : triangle_group.vertices)
+		{
+			file_data.resize(file_data.size() +  sizeof(KK::SegmentModelFormat::Vertex));
+			KK::SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<KK::SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(KK::SegmentModelFormat::Vertex));
+			for(size_t i= 0u; i < 3u; ++i)
+				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, vertex.pos[i] * inv_scale[i]), +c_max_coord_value));
+		}
+		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());
+	}
+
+	return file_data;
+}
+
 int main()
 {
 	tinyxml2::XMLDocument doc;
@@ -213,6 +270,8 @@ int main()
 		std::cerr << "XML Parse error: " << doc.ErrorStr() << std::endl;
 		return 1;
 	}
+
+	std::vector<TriangleGroup> triangle_groups;
 
 	const tinyxml2::XMLElement* collada_element= doc.RootElement();//->FirstChildElement("COLLADA");
 	if(std::strcmp(collada_element->Name(), "COLLADA") != 0)
@@ -231,7 +290,6 @@ int main()
 			mesh= mesh->NextSiblingElement("mesh"))
 		{
 			CoordSources coord_sources;
-			std::vector<TriangleGroup> triangle_groups;
 
 			for(const tinyxml2::XMLElement* source= mesh->FirstChildElement("source");
 				source != nullptr;
@@ -280,8 +338,8 @@ int main()
 				if(!triangle_group.vertices.empty())
 					triangle_groups.push_back(std::move(triangle_group));
 			}
-
-			std::cout << "Mesh: " << coord_sources.size() << " sources " << triangle_groups.size() << " Triangle groups" << std::endl;
 		}
 	}
+
+	DoExport(triangle_groups);
 }
