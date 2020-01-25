@@ -49,7 +49,7 @@ struct TriangleGroup
 {
 	uint32_t first_vertex;
 	uint16_t material_id;
-	uint16_t triangle_count;
+	uint16_t index_count;
 };
 static_assert(sizeof(TriangleGroup) == 8u, "Invalid size");
 

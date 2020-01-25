@@ -1,5 +1,6 @@
 #include "../Common/SegmentModelFormat.hpp"
 #include <tinyxml2.h>
+#include <cstddef>
 #include <iostream>
 #include <sstream>
 #include <unordered_map>
@@ -24,6 +25,13 @@ struct VertexCombined
 struct TriangleGroup
 {
 	std::vector<VertexCombined> vertices;
+	std::string material;
+};
+
+struct TriangleGroupIndexed
+{
+	std::vector<VertexCombined> vertices;
+	std::vector<uint16_t> indices;
 	std::string material;
 };
 
@@ -205,13 +213,29 @@ TriangleGroup ReadTriangleGroup(
 	return result;
 }
 
-using FileData= std::vector<uint8_t>;
+TriangleGroupIndexed MakeTriangleGroupIndexed(const TriangleGroup& triangle_group)
+{
+	// TODO - remove duplicated vertices.
 
-FileData DoExport(const std::vector<TriangleGroup>& triangle_groups)
+	TriangleGroupIndexed result;
+	result.material= triangle_group.material;
+
+	for(const VertexCombined& v : triangle_group.vertices)
+	{
+		result.indices.push_back(uint16_t(result.vertices.size()));
+		result.vertices.push_back(v);
+	}
+
+	return result;
+}
+
+using FileData= std::vector<std::byte>;
+
+FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 {
 	FileData file_data;
 
-	file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::SegmentModelHeader), 0);
+	file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::SegmentModelHeader), std::byte(0));
 	const auto get_data_file=
 		[&]() -> KK::SegmentModelFormat::SegmentModelHeader& { return *reinterpret_cast<KK::SegmentModelFormat::SegmentModelHeader*>( file_data.data() ); };
 
@@ -222,7 +246,7 @@ FileData DoExport(const std::vector<TriangleGroup>& triangle_groups)
 	float bb_min[3] { +inf, +inf, +inf };
 	float bb_max[3] { -inf, -inf, -inf };
 
-	for(const TriangleGroup& triangle_group : triangle_groups)
+	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 	{
 		for(const VertexCombined& vertex : triangle_group.vertices)
 		{
@@ -245,17 +269,39 @@ FileData DoExport(const std::vector<TriangleGroup>& triangle_groups)
 		get_data_file().shift[i]= 0.0f; // TODO
 	}
 
+	get_data_file().triangle_groups_offset= uint32_t(file_data.size());
+	const auto get_out_triangle_groups=
+	[&]() -> KK::SegmentModelFormat::TriangleGroup*
+	{
+		return reinterpret_cast<KK::SegmentModelFormat::TriangleGroup*>(file_data.data() + get_data_file().triangle_groups_offset);
+	};
+	file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::TriangleGroup) * triangle_groups.size());
+
 	get_data_file().vertices_offset= uint32_t(file_data.size());
-	for(const TriangleGroup& triangle_group : triangle_groups)
+	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 	{
 		for(const VertexCombined& vertex : triangle_group.vertices)
 		{
-			file_data.resize(file_data.size() +  sizeof(KK::SegmentModelFormat::Vertex));
+			file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::Vertex));
 			KK::SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<KK::SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(KK::SegmentModelFormat::Vertex));
 			for(size_t i= 0u; i < 3u; ++i)
 				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, vertex.pos[i] * inv_scale[i]), +c_max_coord_value));
 		}
+
+		for(const uint16_t index : triangle_group.indices)
+		{
+			file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::IndexType));
+			KK::SegmentModelFormat::IndexType& out_index= *reinterpret_cast<KK::SegmentModelFormat::IndexType*>(file_data.data() + file_data.size() - sizeof(KK::SegmentModelFormat::IndexType));
+			out_index= index;
+		}
+
+		KK::SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
+		out_group.first_vertex= uint32_t(get_data_file().vertex_count);
+		out_group.index_count= uint16_t(triangle_group.vertices.size());
+		++get_data_file().triangle_group_count;
+
 		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());
+		get_data_file().index_count+= uint32_t(triangle_group.indices.size());
 	}
 
 	return file_data;
@@ -271,7 +317,7 @@ int main()
 		return 1;
 	}
 
-	std::vector<TriangleGroup> triangle_groups;
+	std::vector<TriangleGroupIndexed> triangle_groups;
 
 	const tinyxml2::XMLElement* collada_element= doc.RootElement();//->FirstChildElement("COLLADA");
 	if(std::strcmp(collada_element->Name(), "COLLADA") != 0)
@@ -334,9 +380,9 @@ int main()
 				triangles != nullptr;
 				triangles= triangles->NextSiblingElement("triangles"))
 			{
-				TriangleGroup triangle_group= ReadTriangleGroup(*triangles, coord_sources);
+				const TriangleGroup triangle_group= ReadTriangleGroup(*triangles, coord_sources);
 				if(!triangle_group.vertices.empty())
-					triangle_groups.push_back(std::move(triangle_group));
+					triangle_groups.push_back(MakeTriangleGroupIndexed(triangle_group));
 			}
 		}
 	}
