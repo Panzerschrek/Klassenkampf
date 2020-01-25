@@ -15,6 +15,7 @@ enum class SegmentType
 {
 	Room,
 	Corridor,
+	Shaft,
 };
 
 enum class Direction
