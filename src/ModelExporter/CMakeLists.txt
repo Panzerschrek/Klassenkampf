@@ -3,4 +3,5 @@ add_executable(ModelExporter ${SOURCES} ${SHADERS})
 target_link_libraries(
 	ModelExporter
 	Common
+	MathLib
 	tinyxml2)

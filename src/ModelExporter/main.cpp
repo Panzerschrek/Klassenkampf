@@ -1,5 +1,6 @@
 #include "../Common/MemoryMappedFile.hpp"
 #include "../Common/SegmentModelFormat.hpp"
+#include "../MathLib/Mat.hpp"
 #include <tinyxml2.h>
 #include <cstddef>
 #include <iostream>
@@ -31,11 +32,20 @@ struct TriangleGroup
 	std::string material;
 };
 
+using TriangleGroups= std::vector<TriangleGroup>;
+using Geometries= std::unordered_map<std::string, TriangleGroups>;
+
 struct TriangleGroupIndexed
 {
 	std::vector<VertexCombined> vertices;
 	std::vector<uint16_t> indices;
 	std::string material;
+};
+
+struct SceneNode
+{
+	m_Mat4 transform_matrix;
+	std::vector<std::string> geometries_id;
 };
 
 CoordSource ReadCoordSource(const tinyxml2::XMLElement& source_element)
@@ -302,7 +312,10 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Vertex));
 			SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(SegmentModelFormat::Vertex));
 			for(size_t i= 0u; i < 3u; ++i)
-				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, vertex.pos[i] * inv_scale[i]), +c_max_coord_value));
+			{
+				const float pos_transformed= (vertex.pos[i] - bb_min[i]) * inv_scale[i] - c_max_coord_value;
+				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, pos_transformed), +c_max_coord_value));
+			}
 		}
 
 		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());
@@ -345,24 +358,20 @@ void WriteFile(const FileData& content, const char* file_name)
 	} while(write_total < content.size());
 }
 
-std::vector<TriangleGroupIndexed> ReadTriangleGroups(const tinyxml2::XMLDocument& dae_parsed)
+Geometries ReadGeometries(const tinyxml2::XMLElement& collada_element)
 {
-	std::vector<TriangleGroupIndexed> triangle_groups;
+	Geometries geometries;
 
-	const tinyxml2::XMLElement* collada_element= dae_parsed.RootElement();
-	if(std::strcmp(collada_element->Name(), "COLLADA") != 0)
-	{
-		std::cerr << "Document is not in COLLADA format" << std::endl;
-		return {};
-	}
-
-	const tinyxml2::XMLElement* library_geometries= collada_element->FirstChildElement("library_geometries");
+	const tinyxml2::XMLElement* library_geometries= collada_element.FirstChildElement("library_geometries");
 	for(const tinyxml2::XMLElement* geometry= library_geometries->FirstChildElement("geometry");
 		geometry != nullptr;
 		geometry= geometry->NextSiblingElement("geometry"))
 	{
 		const char* const id= geometry->Attribute("id");
-		std::cout << "Geometry " << (id == nullptr ? "" : id) << std::endl;
+		if(id == nullptr)
+			continue;
+
+		TriangleGroups triangle_groups;
 
 		for(const tinyxml2::XMLElement* mesh= geometry->FirstChildElement("mesh");
 			mesh != nullptr;
@@ -413,14 +422,71 @@ std::vector<TriangleGroupIndexed> ReadTriangleGroups(const tinyxml2::XMLDocument
 				triangles != nullptr;
 				triangles= triangles->NextSiblingElement("triangles"))
 			{
-				const TriangleGroup triangle_group= ReadTriangleGroup(*triangles, coord_sources);
+				TriangleGroup triangle_group= ReadTriangleGroup(*triangles, coord_sources);
 				if(!triangle_group.vertices.empty())
-					triangle_groups.push_back(MakeTriangleGroupIndexed(triangle_group));
+					triangle_groups.push_back(std::move(triangle_group));
 			}
+		}
+
+		geometries[id]= std::move(triangle_groups);
+	}
+
+	return geometries;
+}
+
+std::vector<SceneNode> ReadScene(const tinyxml2::XMLElement& collada_element)
+{
+	std::vector<SceneNode> out_nodes;
+
+	const tinyxml2::XMLElement* library_visual_sceles= collada_element.FirstChildElement("library_visual_scenes");
+	if(library_visual_sceles == nullptr)
+		return out_nodes;
+
+	for(const tinyxml2::XMLElement* visual_scene= library_visual_sceles->FirstChildElement("visual_scene");
+		visual_scene != nullptr;
+		visual_scene= visual_scene->NextSiblingElement("visual_scene"))
+	{
+		std::cout << "Scene: " << std::endl;
+		for(const tinyxml2::XMLElement* node= visual_scene->FirstChildElement("node");
+			node != nullptr;
+			node= node->NextSiblingElement("node"))
+		{
+			std::cout << "Node: " << node->Attribute("id") << std::endl;
+
+			SceneNode out_node;
+
+			const tinyxml2::XMLElement* const matrix= node->FirstChildElement("matrix");
+			if(matrix == nullptr)
+				continue;
+
+			size_t i= 0u;
+			std::istringstream ss(matrix->GetText());
+			while(!ss.eof() && i < 16u)
+			{
+				ss >> out_node.transform_matrix.value[i];
+				++i;
+			}
+			if(i != 16u)
+				continue;
+			out_node.transform_matrix.Transpose();
+
+			for(const tinyxml2::XMLElement* instance_geometry= node->FirstChildElement("instance_geometry");
+				instance_geometry != nullptr;
+				instance_geometry= instance_geometry->NextSiblingElement("instance_geometry"))
+			{
+				const char* url= instance_geometry->Attribute("url");
+				if(url == nullptr)
+					continue;
+				if(url[0] == '#')
+					++url;
+				out_node.geometries_id.push_back(url);
+			}
+
+			out_nodes.push_back(std::move(out_node));
 		}
 	}
 
-	return triangle_groups;
+	return out_nodes;
 }
 
 int Main(const int argc, const char* const argv[])
@@ -481,7 +547,42 @@ int Main(const int argc, const char* const argv[])
 		return 1;
 	}
 
-	const std::vector<TriangleGroupIndexed> triangle_groups= ReadTriangleGroups(doc);
+	const tinyxml2::XMLElement* collada_element= doc.RootElement();
+	if(std::strcmp(collada_element->Name(), "COLLADA") != 0)
+	{
+		std::cerr << "Document is not in COLLADA format" << std::endl;
+		return 1;
+	}
+
+	const Geometries geometries= ReadGeometries(*collada_element);
+	const std::vector<SceneNode> scene_nodes= ReadScene(*collada_element);
+
+	std::vector<TriangleGroupIndexed> triangle_groups;
+	for(const SceneNode& node : scene_nodes)
+	{
+		for(const std::string& geometry_id : node.geometries_id)
+		{
+			const auto it= geometries.find(geometry_id);
+			if(it == geometries.end())
+				continue;
+
+			const TriangleGroups& geometry_triangle_groups= it->second;
+			for(const TriangleGroup& geometry_triangle_group : geometry_triangle_groups)
+			{
+				TriangleGroup group_copy= geometry_triangle_group;
+				for(VertexCombined& v : group_copy.vertices)
+				{
+					const m_Vec3 pos(v.pos[0], v.pos[1], v.pos[2]);
+					const m_Vec3 pos_transformed= pos * node.transform_matrix;
+					v.pos[0]= pos_transformed.x;
+					v.pos[1]= pos_transformed.y;
+					v.pos[2]= pos_transformed.z;
+				}
+				triangle_groups.push_back(MakeTriangleGroupIndexed(group_copy));
+			}
+		}
+	}
+
 	const FileData out_file_data= DoExport(triangle_groups);
 	WriteFile(out_file_data, output_file.c_str());
 

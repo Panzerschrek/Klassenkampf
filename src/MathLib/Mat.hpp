@@ -46,4 +46,6 @@ public:
 	float value[16];
 };
 
+m_Vec3 operator*(const m_Vec3& v, const m_Mat4& m);
+
 } // namespace KK
