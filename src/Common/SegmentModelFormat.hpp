@@ -36,7 +36,9 @@ static_assert(sizeof(SegmentModelHeader) == 76u, "Invalid size");
 
 struct Vertex
 {
+	// Scaled and shifted position. See "shift" and "scale" fields in header.
 	int16_t pos[3];
+	// Normalized texture coordinates in 4.12 format.
 	int16_t tex_coord[2];
 	int8_t normal[3];
 	int8_t reserved[3];

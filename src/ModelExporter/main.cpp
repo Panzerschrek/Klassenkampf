@@ -311,11 +311,14 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 		{
 			file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Vertex));
 			SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(SegmentModelFormat::Vertex));
+
 			for(size_t i= 0u; i < 3u; ++i)
 			{
 				const float pos_transformed= (vertex.pos[i] - bb_min[i]) * inv_scale[i] - c_max_coord_value;
 				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, pos_transformed), +c_max_coord_value));
 			}
+			for(size_t i= 0u; i < 2u; ++i)
+				out_vertex.tex_coord[i]= int16_t(vertex.tex_coord[i] * 4096.0f);
 		}
 
 		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());

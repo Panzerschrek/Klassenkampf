@@ -896,7 +896,6 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 
 	// Fill vertex buffer.
 	// TODO - do not use temporary vector, write to mapped GPU memory instead.
-	const float c_inv_sqr_3= 1.0f / std::sqrt(3.0f);
 	std::vector<WorldVertex> out_vertices(header.vertex_count);
 	for(size_t i= 0u; i < out_vertices.size(); ++i)
 	{
@@ -906,10 +905,11 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 		for(size_t j= 0; j < 3u; ++j)
 			out_v.pos[j]= header.shift[j] + header.scale[j] * float(in_v.pos[j]);
 
-		// TODO - read tex_coord, normal
-		out_v.tex_coord[0]= out_v.pos[0] - out_v.pos[1];
-		out_v.tex_coord[1]= out_v.pos[0] * c_inv_sqr_3 + out_v.pos[1] * c_inv_sqr_3 + out_v.pos[2] * c_inv_sqr_3;
+		// TODO - read normal
 		out_v.color[0]= out_v.color[1]= out_v.color[2]= out_v.color[3]= 240u;
+
+		for(size_t j= 0u; j < 2u; ++j)
+			out_v.tex_coord[j]= float(in_v.tex_coord[j]) / 4096.0f;
 	}
 
 	result.vertex_buffer=
