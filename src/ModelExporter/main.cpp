@@ -272,6 +272,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	}
 
 	const float c_max_coord_value= 32766.0f;
+	const float c_max_normal_value= 126.0f;
 	float inv_scale[3];
 	for(size_t i= 0u; i < 3u; ++i)
 		inv_scale[i]= (c_max_coord_value * 2.0f) / (bb_max[i] - bb_min[i]);
@@ -319,6 +320,11 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			}
 			for(size_t i= 0u; i < 2u; ++i)
 				out_vertex.tex_coord[i]= int16_t(vertex.tex_coord[i] * 4096.0f);
+			for(size_t i= 0u; i < 3u; ++i)
+			{
+				const float normal_scaled= c_max_normal_value * vertex.normal[i];
+				out_vertex.normal[i]= int8_t(std::min(std::max(-c_max_normal_value, normal_scaled), +c_max_normal_value));
+			}
 		}
 
 		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());

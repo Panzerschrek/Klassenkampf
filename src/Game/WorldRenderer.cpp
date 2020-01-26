@@ -905,8 +905,8 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 		for(size_t j= 0; j < 3u; ++j)
 			out_v.pos[j]= header.shift[j] + header.scale[j] * float(in_v.pos[j]);
 
-		// TODO - read normal
-		out_v.color[0]= out_v.color[1]= out_v.color[2]= out_v.color[3]= 240u;
+		std::memcpy(out_v.color, in_v.normal, 3);
+		out_v.color[3]= 0;
 
 		for(size_t j= 0u; j < 2u; ++j)
 			out_v.tex_coord[j]= float(in_v.tex_coord[j]) / 4096.0f;
