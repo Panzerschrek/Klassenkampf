@@ -11,7 +11,7 @@ namespace SegmentModelFormat
 struct SegmentModelHeader
 {
 	static constexpr const char c_expected_header[16]= "KK-SegmentModel";
-	static constexpr const uint32_t c_expected_version= 1u; // Change this each time, when "SegmentModelFormat" structs changed.
+	static constexpr const uint32_t c_expected_version= 2u; // Change this each time, when "SegmentModelFormat" structs changed.
 
 	uint8_t header[16];
 	uint32_t version;
@@ -50,10 +50,11 @@ using IndexType= uint16_t;
 struct TriangleGroup
 {
 	uint32_t first_vertex;
+	uint32_t first_index;
 	uint16_t material_id;
 	uint16_t index_count;
 };
-static_assert(sizeof(TriangleGroup) == 8u, "Invalid size");
+static_assert(sizeof(TriangleGroup) == 12u, "Invalid size");
 
 struct Material
 {

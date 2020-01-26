@@ -26,6 +26,7 @@ private:
 		struct TriangleGroup
 		{
 			uint32_t first_vertex;
+			uint32_t first_index;
 			uint32_t index_count;
 		};
 

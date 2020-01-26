@@ -860,7 +860,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 
 		for(const SegmentModel::TriangleGroup& triangle_group : segment_model_.triangle_groups)
 		{
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, 0u, triangle_group.first_vertex, 0u);
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 		}
 	}
 
@@ -890,7 +890,6 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 	const auto* const in_vertices= reinterpret_cast<const SegmentModelFormat::Vertex*>(file_data + header.vertices_offset);
 	const auto* const in_indices= reinterpret_cast<const SegmentModelFormat::IndexType*>(file_data + header.indices_offset);
 	const auto* const in_triangle_groups= reinterpret_cast<const SegmentModelFormat::TriangleGroup*>(file_data + header.triangle_groups_offset);
-
 
 	SegmentModel result;
 
@@ -969,6 +968,7 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 	for(size_t i= 0u; i < result.triangle_groups.size(); ++i)
 	{
 		result.triangle_groups[i].first_vertex= in_triangle_groups[i].first_vertex;
+		result.triangle_groups[i].first_index= in_triangle_groups[i].first_index;
 		result.triangle_groups[i].index_count= in_triangle_groups[i].index_count;
 	}
 

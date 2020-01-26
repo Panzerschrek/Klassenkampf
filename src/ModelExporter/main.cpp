@@ -294,12 +294,15 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 		file_data.resize(file_data.size() + sizeof(SegmentModelFormat::TriangleGroup) * triangle_groups.size());
 
 		size_t total_vertices= 0u;
+		size_t total_indices= 0u;
 		for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 		{
 			SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
 			out_group.first_vertex= uint32_t(total_vertices);
+			out_group.first_index= uint32_t(total_indices);
 			out_group.index_count= uint16_t(triangle_group.vertices.size());
 			total_vertices+= triangle_group.vertices.size();
+			total_indices+= triangle_group.indices.size();
 			++get_data_file().triangle_group_count;
 		}
 	}
