@@ -320,7 +320,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	for(size_t i= 0u; i < 3u; ++i)
 	{
 		get_data_file().scale[i]= 1.0f / inv_scale[i];
-		get_data_file().shift[i]= 0.0f; // TODO
+		get_data_file().shift[i]= bb_min[i] + c_max_coord_value / inv_scale[i];
 	}
 
 	// Write triangle groups.
