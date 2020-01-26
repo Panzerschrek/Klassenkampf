@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace KK
+{
 
 struct CoordSource
 {
@@ -236,12 +238,12 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 {
 	FileData file_data;
 
-	file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::SegmentModelHeader), std::byte(0));
+	file_data.resize(file_data.size() + sizeof(SegmentModelFormat::SegmentModelHeader), std::byte(0));
 	const auto get_data_file=
-		[&]() -> KK::SegmentModelFormat::SegmentModelHeader& { return *reinterpret_cast<KK::SegmentModelFormat::SegmentModelHeader*>( file_data.data() ); };
+		[&]() -> SegmentModelFormat::SegmentModelHeader& { return *reinterpret_cast<SegmentModelFormat::SegmentModelHeader*>( file_data.data() ); };
 
-	std::memcpy(get_data_file().header, KK::SegmentModelFormat::SegmentModelHeader::c_expected_header, sizeof(get_data_file().header));
-	get_data_file().version= KK::SegmentModelFormat::SegmentModelHeader::c_expected_version;
+	std::memcpy(get_data_file().header, SegmentModelFormat::SegmentModelHeader::c_expected_header, sizeof(get_data_file().header));
+	get_data_file().version= SegmentModelFormat::SegmentModelHeader::c_expected_version;
 
 	const float inf= 1e24f;
 	float bb_min[3] { +inf, +inf, +inf };
@@ -274,16 +276,16 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	{
 		get_data_file().triangle_groups_offset= uint32_t(file_data.size());
 		const auto get_out_triangle_groups=
-		[&]() -> KK::SegmentModelFormat::TriangleGroup*
+		[&]() -> SegmentModelFormat::TriangleGroup*
 		{
-			return reinterpret_cast<KK::SegmentModelFormat::TriangleGroup*>(file_data.data() + get_data_file().triangle_groups_offset);
+			return reinterpret_cast<SegmentModelFormat::TriangleGroup*>(file_data.data() + get_data_file().triangle_groups_offset);
 		};
-		file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::TriangleGroup) * triangle_groups.size());
+		file_data.resize(file_data.size() + sizeof(SegmentModelFormat::TriangleGroup) * triangle_groups.size());
 
 		size_t total_vertices= 0u;
 		for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 		{
-			KK::SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
+			SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
 			out_group.first_vertex= uint32_t(total_vertices);
 			out_group.index_count= uint16_t(triangle_group.vertices.size());
 			total_vertices+= triangle_group.vertices.size();
@@ -297,8 +299,8 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	{
 		for(const VertexCombined& vertex : triangle_group.vertices)
 		{
-			file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::Vertex));
-			KK::SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<KK::SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(KK::SegmentModelFormat::Vertex));
+			file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Vertex));
+			SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(SegmentModelFormat::Vertex));
 			for(size_t i= 0u; i < 3u; ++i)
 				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, vertex.pos[i] * inv_scale[i]), +c_max_coord_value));
 		}
@@ -312,8 +314,8 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	{
 		for(const uint16_t index : triangle_group.indices)
 		{
-			file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::IndexType));
-			KK::SegmentModelFormat::IndexType& out_index= *reinterpret_cast<KK::SegmentModelFormat::IndexType*>(file_data.data() + file_data.size() - sizeof(KK::SegmentModelFormat::IndexType));
+			file_data.resize(file_data.size() + sizeof(SegmentModelFormat::IndexType));
+			SegmentModelFormat::IndexType& out_index= *reinterpret_cast<SegmentModelFormat::IndexType*>(file_data.data() + file_data.size() - sizeof(SegmentModelFormat::IndexType));
 			out_index= index;
 		}
 
@@ -343,69 +345,16 @@ void WriteFile(const FileData& content, const char* file_name)
 	} while(write_total < content.size());
 }
 
-int main(int argc, const char* const argv[])
+std::vector<TriangleGroupIndexed> ReadTriangleGroups(const tinyxml2::XMLDocument& dae_parsed)
 {
-	std::vector<std::string> input_files;
-	std::string output_file;
-
-	// Parse command line
-	#define EXPECT_ARG_VALUE if(i + 1 >= argc) { std::cerr << "Expeted name after \"" << argv[i] << "\"" << std::endl; return -1; }
-	for(int i = 1; i < argc;)
-	{
-		if( std::strcmp( argv[i], "-o" ) == 0 )
-		{
-			EXPECT_ARG_VALUE
-			output_file= argv[ i + 1 ];
-			i+= 2;
-		}
-		else if( std::strcmp( argv[i], "-i" ) == 0 )
-		{
-			EXPECT_ARG_VALUE
-			input_files.push_back( argv[ i + 1 ] );
-			i+= 2;
-		}
-		else
-		{
-			std::cout << "unknown option: \"" << argv[i] << "\"" << std::endl;
-			++i;
-		}
-	}
-
-	if(input_files.empty())
-	{
-		std::cerr << "No input files" << std::endl;
-		return -1;
-	}
-	if(input_files.size() > 1u)
-	{
-		std::cout << "Multiple input files not suppored" << std::endl;
-	}
-	if(output_file.empty())
-	{
-		std::cerr << "Output file name not specified" << std::endl;
-		return -1;
-	}
-
-	const KK::MemoryMappedFilePtr input_file_mapped= KK::MemoryMappedFile::Create(input_files.front().c_str());
-	if(input_file_mapped == nullptr)
-		return -1;
-
-	tinyxml2::XMLDocument doc;
-	const tinyxml2::XMLError load_result=
-		doc.Parse(
-			static_cast<const char*>(input_file_mapped->Data()),
-			input_file_mapped->Size());
-	if(load_result != tinyxml2::XML_SUCCESS)
-	{
-		std::cerr << "XML Parse error: " << doc.ErrorStr() << std::endl;
-		return 1;
-	}
-
 	std::vector<TriangleGroupIndexed> triangle_groups;
 
-	const tinyxml2::XMLElement* collada_element= doc.RootElement();//->FirstChildElement("COLLADA");
+	const tinyxml2::XMLElement* collada_element= dae_parsed.RootElement();
 	if(std::strcmp(collada_element->Name(), "COLLADA") != 0)
-		return 1;
+	{
+		std::cerr << "Document is not in COLLADA format" << std::endl;
+		return {};
+	}
 
 	const tinyxml2::XMLElement* library_geometries= collada_element->FirstChildElement("library_geometries");
 	for(const tinyxml2::XMLElement* geometry= library_geometries->FirstChildElement("geometry");
@@ -471,5 +420,77 @@ int main(int argc, const char* const argv[])
 		}
 	}
 
-	WriteFile(DoExport(triangle_groups), output_file.c_str());
+	return triangle_groups;
+}
+
+int Main(const int argc, const char* const argv[])
+{
+	std::vector<std::string> input_files;
+	std::string output_file;
+
+	// Parse command line
+	#define EXPECT_ARG_VALUE if(i + 1 >= argc) { std::cerr << "Expeted name after \"" << argv[i] << "\"" << std::endl; return -1; }
+	for(int i = 1; i < argc;)
+	{
+		if( std::strcmp( argv[i], "-o" ) == 0 )
+		{
+			EXPECT_ARG_VALUE
+			output_file= argv[ i + 1 ];
+			i+= 2;
+		}
+		else if( std::strcmp( argv[i], "-i" ) == 0 )
+		{
+			EXPECT_ARG_VALUE
+			input_files.push_back( argv[ i + 1 ] );
+			i+= 2;
+		}
+		else
+		{
+			std::cout << "unknown option: \"" << argv[i] << "\"" << std::endl;
+			++i;
+		}
+	}
+
+	if(input_files.empty())
+	{
+		std::cerr << "No input files" << std::endl;
+		return -1;
+	}
+	if(input_files.size() > 1u)
+	{
+		std::cout << "Multiple input files not suppored" << std::endl;
+	}
+	if(output_file.empty())
+	{
+		std::cerr << "Output file name not specified" << std::endl;
+		return -1;
+	}
+
+	const MemoryMappedFilePtr input_file_mapped= MemoryMappedFile::Create(input_files.front().c_str());
+	if(input_file_mapped == nullptr)
+		return -1;
+
+	tinyxml2::XMLDocument doc;
+	const tinyxml2::XMLError load_result=
+		doc.Parse(
+			static_cast<const char*>(input_file_mapped->Data()),
+			input_file_mapped->Size());
+	if(load_result != tinyxml2::XML_SUCCESS)
+	{
+		std::cerr << "XML Parse error: " << doc.ErrorStr() << std::endl;
+		return 1;
+	}
+
+	const std::vector<TriangleGroupIndexed> triangle_groups= ReadTriangleGroups(doc);
+	const FileData out_file_data= DoExport(triangle_groups);
+	WriteFile(out_file_data, output_file.c_str());
+
+	return 0;
+}
+
+} // namespace KK
+
+int main(const int argc, const char* const argv[])
+{
+	return KK::Main(argc, argv);
 }
