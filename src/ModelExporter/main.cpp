@@ -572,6 +572,10 @@ int Main(const int argc, const char* const argv[])
 	std::vector<TriangleGroupIndexed> triangle_groups;
 	for(const SceneNode& node : scene_nodes)
 	{
+		m_Mat4 normals_matrix= node.transform_matrix;
+		normals_matrix.value[12]= normals_matrix.value[13]= normals_matrix.value[14]= 0.0f;
+		normals_matrix.Inverse();
+
 		for(const std::string& geometry_id : node.geometries_id)
 		{
 			const auto it= geometries.find(geometry_id);
@@ -589,6 +593,13 @@ int Main(const int argc, const char* const argv[])
 					v.pos[0]= pos_transformed.x;
 					v.pos[1]= pos_transformed.y;
 					v.pos[2]= pos_transformed.z;
+
+					const m_Vec3 normal(v.normal[0], v.normal[1], v.normal[2]);
+					m_Vec3 normal_transformed= normals_matrix * normal;
+					normal_transformed/= normal_transformed.GetLength();
+					v.normal[0]= normal_transformed.x;
+					v.normal[1]= normal_transformed.y;
+					v.normal[2]= normal_transformed.z;
 				}
 				triangle_groups.push_back(MakeTriangleGroupIndexed(group_copy));
 			}
