@@ -307,10 +307,71 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	return file_data;
 }
 
-int main()
+void WriteFile(const FileData& content, const char* file_name)
 {
+	std::FILE* const f= std::fopen(file_name, "wb");
+	if(f == nullptr)
+	{
+		std::cerr << "Error, opening file \"" << file_name << "\"" << std::endl;
+		return;
+	}
+
+	size_t write_total= 0u;
+	do
+	{
+		const size_t write= std::fwrite(content.data() + write_total, 1, content.size() - write_total, f);
+		if(write == 0)
+			break;
+
+		write_total+= write;
+	} while(write_total < content.size());
+}
+
+int main(int argc, const char* const argv[])
+{
+	std::vector<std::string> input_files;
+	std::string output_file;
+
+	// Parse command line
+	#define EXPECT_ARG_VALUE if(i + 1 >= argc) { std::cerr << "Expeted name after \"" << argv[i] << "\"" << std::endl; return -1; }
+	for(int i = 1; i < argc;)
+	{
+		if( std::strcmp( argv[i], "-o" ) == 0 )
+		{
+			EXPECT_ARG_VALUE
+			output_file= argv[ i + 1 ];
+			i+= 2;
+		}
+		else if( std::strcmp( argv[i], "-i" ) == 0 )
+		{
+			EXPECT_ARG_VALUE
+			input_files.push_back( argv[ i + 1 ] );
+			i+= 2;
+		}
+		else
+		{
+			std::cout << "unknown option: \"" << argv[i] << "\"" << std::endl;
+			++i;
+		}
+	}
+
+	if(input_files.empty())
+	{
+		std::cerr << "No input files" << std::endl;
+		return -1;
+	}
+	if(input_files.size() > 1u)
+	{
+		std::cout << "Multiple input files not suppored" << std::endl;
+	}
+	if(output_file.empty())
+	{
+		std::cerr << "Output file name not specified" << std::endl;
+		return -1;
+	}
+
 	tinyxml2::XMLDocument doc;
-	const tinyxml2::XMLError load_result= doc.LoadFile("test_segment.dae");
+	const tinyxml2::XMLError load_result= doc.LoadFile(input_files.front().c_str());
 	if(load_result != tinyxml2::XML_SUCCESS)
 	{
 		std::cerr << "XML Parse error: " << doc.ErrorStr() << std::endl;
@@ -387,5 +448,5 @@ int main()
 		}
 	}
 
-	DoExport(triangle_groups);
+	WriteFile(DoExport(triangle_groups), output_file.c_str());
 }
