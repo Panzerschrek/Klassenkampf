@@ -24,5 +24,6 @@ set(BUILD_SHARED_LIBS CACHE BOOl "" FORCE)
 set(BUILD_TESTS CACHE BOOl "" FORCE)
 add_subdirectory(tinyxml2)
 
+add_subdirectory(Common)
 add_subdirectory(Game)
 add_subdirectory(ModelExporter)

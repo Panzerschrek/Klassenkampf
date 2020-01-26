@@ -1,3 +1,4 @@
+#include "../Common/MemoryMappedFile.hpp"
 #include "../Common/SegmentModelFormat.hpp"
 #include <tinyxml2.h>
 #include <cstddef>
@@ -370,8 +371,15 @@ int main(int argc, const char* const argv[])
 		return -1;
 	}
 
+	const KK::MemoryMappedFilePtr input_file_mapped= KK::MemoryMappedFile::Create(input_files.front().c_str());
+	if(input_file_mapped == nullptr)
+		return -1;
+
 	tinyxml2::XMLDocument doc;
-	const tinyxml2::XMLError load_result= doc.LoadFile(input_files.front().c_str());
+	const tinyxml2::XMLError load_result=
+		doc.Parse(
+			static_cast<const char*>(input_file_mapped->Data()),
+			input_file_mapped->Size());
 	if(load_result != tinyxml2::XML_SUCCESS)
 	{
 		std::cerr << "XML Parse error: " << doc.ErrorStr() << std::endl;

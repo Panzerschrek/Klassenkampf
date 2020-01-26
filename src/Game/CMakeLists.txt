@@ -49,6 +49,7 @@ target_include_directories(
 
 target_link_libraries(
 	Klassenkampf
+		Common
 		${SDL2_LIBRARIES}
 		${Vulkan_LIBRARIES}
 	)
