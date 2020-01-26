@@ -20,8 +20,31 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
+	struct SegmentModel
+	{
+
+		struct TriangleGroup
+		{
+			uint32_t first_vertex;
+			uint32_t index_count;
+		};
+
+		std::vector<TriangleGroup> triangle_groups;
+
+		vk::UniqueBuffer vertex_buffer;
+		vk::UniqueDeviceMemory vertex_buffer_memory;
+
+		vk::UniqueBuffer index_buffer;
+		vk::UniqueDeviceMemory index_buffer_memory;
+	};
+
+private:
+	SegmentModel LoadSegmentModel(const char* const file_name);
+
+private:
 	const vk::Device vk_device_;
 	const vk::Extent2D viewport_size_;
+	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 
 	vk::Extent2D framebuffer_size_;
 	vk::UniqueImage framebuffer_image_;
@@ -65,6 +88,8 @@ private:
 
 	vk::UniqueDescriptorPool tonemapping_descriptor_pool_;
 	vk::UniqueDescriptorSet tonemapping_descriptor_set_;
+
+	SegmentModel segment_model_;
 };
 
 } // namespace KK

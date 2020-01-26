@@ -270,14 +270,28 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 		get_data_file().shift[i]= 0.0f; // TODO
 	}
 
-	get_data_file().triangle_groups_offset= uint32_t(file_data.size());
-	const auto get_out_triangle_groups=
-	[&]() -> KK::SegmentModelFormat::TriangleGroup*
+	// Write triangle groups.
 	{
-		return reinterpret_cast<KK::SegmentModelFormat::TriangleGroup*>(file_data.data() + get_data_file().triangle_groups_offset);
-	};
-	file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::TriangleGroup) * triangle_groups.size());
+		get_data_file().triangle_groups_offset= uint32_t(file_data.size());
+		const auto get_out_triangle_groups=
+		[&]() -> KK::SegmentModelFormat::TriangleGroup*
+		{
+			return reinterpret_cast<KK::SegmentModelFormat::TriangleGroup*>(file_data.data() + get_data_file().triangle_groups_offset);
+		};
+		file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::TriangleGroup) * triangle_groups.size());
 
+		size_t total_vertices= 0u;
+		for(const TriangleGroupIndexed& triangle_group : triangle_groups)
+		{
+			KK::SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
+			out_group.first_vertex= uint32_t(total_vertices);
+			out_group.index_count= uint16_t(triangle_group.vertices.size());
+			total_vertices+= triangle_group.vertices.size();
+			++get_data_file().triangle_group_count;
+		}
+	}
+
+	// Write vertices.
 	get_data_file().vertices_offset= uint32_t(file_data.size());
 	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 	{
@@ -289,6 +303,13 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, vertex.pos[i] * inv_scale[i]), +c_max_coord_value));
 		}
 
+		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());
+	}
+
+	// Write indices.
+	get_data_file().indices_offset= uint32_t(file_data.size());
+	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
+	{
 		for(const uint16_t index : triangle_group.indices)
 		{
 			file_data.resize(file_data.size() + sizeof(KK::SegmentModelFormat::IndexType));
@@ -296,12 +317,6 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			out_index= index;
 		}
 
-		KK::SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
-		out_group.first_vertex= uint32_t(get_data_file().vertex_count);
-		out_group.index_count= uint16_t(triangle_group.vertices.size());
-		++get_data_file().triangle_group_count;
-
-		get_data_file().vertex_count+= uint32_t(triangle_group.vertices.size());
 		get_data_file().index_count+= uint32_t(triangle_group.indices.size());
 	}
 

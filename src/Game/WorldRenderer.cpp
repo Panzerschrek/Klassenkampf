@@ -1,6 +1,8 @@
 #include "WorldRenderer.hpp"
 #include "Assert.hpp"
 #include "Image.hpp"
+#include "../Common/MemoryMappedFile.hpp"
+#include "../Common/SegmentModelFormat.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -56,9 +58,8 @@ const uint16_t g_box_indices[]
 WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World& world)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
+	, memory_properties_(window_vulkan.GetMemoryProperties())
 {
-	const auto memory_properties= window_vulkan.GetMemoryProperties();
-
 	// Create framebuffer with image data.
 	{
 		const auto framebuffer_image_format= vk::Format::eR8G8B8A8Unorm;
@@ -114,10 +115,10 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*framebuffer_image_);
 
 			vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
-			for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+			for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 			{
 				if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-					(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+					(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
 					vk_memory_allocate_info.memoryTypeIndex= i;
 			}
 
@@ -155,10 +156,10 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*framebuffer_depth_image_);
 
 			vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
-			for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+			for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 			{
 				if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-					(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+					(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
 					vk_memory_allocate_info.memoryTypeIndex= i;
 			}
 
@@ -465,11 +466,11 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_vertex_buffer_);
 
 		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 		{
 			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
@@ -493,11 +494,11 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_index_buffer_);
 
 		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 		{
 			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
@@ -534,11 +535,11 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*vk_image_);
 
 		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 		{
 			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
@@ -809,6 +810,8 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			1u, &write_descriptor_set,
 			0u, nullptr);
 	}
+
+	segment_model_= LoadSegmentModel("test_segment.kks");
 }
 
 WorldRenderer::~WorldRenderer()
@@ -833,9 +836,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 			2u, clear_value),
 		vk::SubpassContents::eInline);
 
-	const vk::DeviceSize offsets= 0u;
-	command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
-	command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
+	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(view_matrix), &view_matrix);
 	command_buffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		*vk_pipeline_layout_,
@@ -843,10 +844,25 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 		1u, &*vk_descriptor_set_,
 		0u, nullptr);
 
-	command_buffer.pushConstants(*vk_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, sizeof(view_matrix), &view_matrix);
-
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
-	command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
+
+	{
+		const vk::DeviceSize offsets= 0u;
+		command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
+		command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
+
+		command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
+	}
+	{
+		const vk::DeviceSize offsets= 0u;
+		command_buffer.bindVertexBuffers(0u, 1u, &*segment_model_.vertex_buffer, &offsets);
+		command_buffer.bindIndexBuffer(*segment_model_.index_buffer, 0u, vk::IndexType::eUint16);
+
+		for(const SegmentModel::TriangleGroup& triangle_group : segment_model_.triangle_groups)
+		{
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, 0u, triangle_group.first_vertex, 0u);
+		}
+	}
 
 	command_buffer.endRenderPass();
 }
@@ -862,6 +878,101 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *tonemapping_pipeline_);
 	command_buffer.draw(6u, 1u, 0u, 0u);
+}
+
+WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const file_name)
+{
+	const MemoryMappedFilePtr file_mapped= MemoryMappedFile::Create(file_name);
+	KK_ASSERT(file_mapped != nullptr);
+
+	const char* const file_data= static_cast<const char*>(file_mapped->Data());
+	const auto& header= *reinterpret_cast<const SegmentModelFormat::SegmentModelHeader*>(file_data);
+	const auto* const in_vertices= reinterpret_cast<const SegmentModelFormat::Vertex*>(file_data + header.vertices_offset);
+	const auto* const in_indices= reinterpret_cast<const SegmentModelFormat::IndexType*>(file_data + header.indices_offset);
+	const auto* const in_triangle_groups= reinterpret_cast<const SegmentModelFormat::TriangleGroup*>(file_data + header.triangle_groups_offset);
+
+
+	SegmentModel result;
+
+	// Fill vertex buffer.
+	// TODO - do not use temporary vector, write to mapped GPU memory instead.
+	const float c_inv_sqr_3= 1.0f / std::sqrt(3.0f);
+	std::vector<WorldVertex> out_vertices(header.vertex_count);
+	for(size_t i= 0u; i < out_vertices.size(); ++i)
+	{
+		const SegmentModelFormat::Vertex& in_v= in_vertices[i];
+		WorldVertex& out_v= out_vertices[i];
+
+		for(size_t j= 0; j < 3u; ++j)
+			out_v.pos[j]= header.shift[j] + header.scale[j] * float(in_v.pos[j]);
+
+		// TODO - read tex_coord, normal
+		out_v.tex_coord[0]= out_v.pos[0] - out_v.pos[1];
+		out_v.tex_coord[1]= out_v.pos[0] * c_inv_sqr_3 + out_v.pos[1] * c_inv_sqr_3 + out_v.pos[2] * c_inv_sqr_3;
+		out_v.color[0]= out_v.color[1]= out_v.color[2]= out_v.color[3]= 240u;
+	}
+
+	result.vertex_buffer=
+		vk_device_.createBufferUnique(
+			vk::BufferCreateInfo(
+				vk::BufferCreateFlags(),
+				out_vertices.size() * sizeof(WorldVertex),
+				vk::BufferUsageFlagBits::eVertexBuffer));
+
+	const vk::MemoryRequirements vertex_buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*result.vertex_buffer);
+
+	vk::MemoryAllocateInfo vertex_buffer_memory_allocate_info(vertex_buffer_memory_requirements.size);
+	for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+	{
+		if((vertex_buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+			(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
+			(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+			vertex_buffer_memory_allocate_info.memoryTypeIndex= i;
+	}
+
+	result.vertex_buffer_memory= vk_device_.allocateMemoryUnique(vertex_buffer_memory_allocate_info);
+	vk_device_.bindBufferMemory(*result.vertex_buffer, *result.vertex_buffer_memory, 0u);
+
+	void* vertex_data_gpu_size= nullptr;
+	vk_device_.mapMemory(*result.vertex_buffer_memory, 0u, vertex_buffer_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &vertex_data_gpu_size);
+	std::memcpy(vertex_data_gpu_size, out_vertices.data(), out_vertices.size() * sizeof(WorldVertex));
+	vk_device_.unmapMemory(*result.vertex_buffer_memory);
+
+	// Fill index buffer.
+	result.index_buffer=
+		vk_device_.createBufferUnique(
+			vk::BufferCreateInfo(
+				vk::BufferCreateFlags(),
+				header.index_count * sizeof(SegmentModelFormat::IndexType),
+				vk::BufferUsageFlagBits::eIndexBuffer));
+
+	const vk::MemoryRequirements index_buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*result.index_buffer);
+	vk::MemoryAllocateInfo index_buffer_memory_allocate_info(index_buffer_memory_requirements.size);
+	for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+	{
+		if((index_buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+			(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
+			(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+			index_buffer_memory_allocate_info.memoryTypeIndex= i;
+	}
+
+	result.index_buffer_memory= vk_device_.allocateMemoryUnique(index_buffer_memory_allocate_info);
+	vk_device_.bindBufferMemory(*result.index_buffer, *result.index_buffer_memory, 0u);
+
+	void* index_data_gpu_size= nullptr;
+	vk_device_.mapMemory(*result.index_buffer_memory, 0u, index_buffer_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &index_data_gpu_size);
+	std::memcpy(index_data_gpu_size, in_indices, header.index_count * sizeof(SegmentModelFormat::IndexType));
+	vk_device_.unmapMemory(*result.index_buffer_memory);
+
+	// Read triangle groups.
+	result.triangle_groups.resize(header.triangle_group_count);
+	for(size_t i= 0u; i < result.triangle_groups.size(); ++i)
+	{
+		result.triangle_groups[i].first_vertex= in_triangle_groups[i].first_vertex;
+		result.triangle_groups[i].index_count= in_triangle_groups[i].index_count;
+	}
+
+	return result;
 }
 
 } // namespace KK
