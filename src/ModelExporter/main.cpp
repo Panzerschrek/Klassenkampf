@@ -26,6 +26,37 @@ struct VertexCombined
 	float tex_coord[2]{0.0f, 0.0f};
 };
 
+bool operator==(const VertexCombined& v0, const VertexCombined& v1)
+{
+	return
+		v0.pos[0] == v1.pos[0] &&
+		v0.pos[1] == v1.pos[1] &&
+		v0.pos[2] == v1.pos[2] &&
+		v0.normal[0] == v1.normal[0] &&
+		v0.normal[1] == v1.normal[1] &&
+		v0.normal[2] == v1.normal[2] &&
+		v0.tex_coord[0] == v1.tex_coord[0] &&
+		v0.tex_coord[1] == v1.tex_coord[1];
+}
+
+struct VertexCombinedHasher
+{
+	size_t operator()(const VertexCombined& v) const
+	{
+		const std::hash<float> hf;
+		// TODO - use better hash combine function.
+		return
+			hf(v.pos[0]) ^
+			hf(v.pos[1]) ^
+			hf(v.pos[2]) ^
+			hf(v.normal[0]) ^
+			hf(v.normal[1]) ^
+			hf(v.normal[2]) ^
+			hf(v.tex_coord[0]) ^
+			hf(v.tex_coord[1]);
+	}
+};
+
 struct TriangleGroup
 {
 	std::vector<VertexCombined> vertices;
@@ -228,15 +259,24 @@ TriangleGroup ReadTriangleGroup(
 
 TriangleGroupIndexed MakeTriangleGroupIndexed(const TriangleGroup& triangle_group)
 {
-	// TODO - remove duplicated vertices.
-
 	TriangleGroupIndexed result;
 	result.material= triangle_group.material;
 
+	std::unordered_map<VertexCombined, uint16_t, VertexCombinedHasher> vertex_to_index;
+
 	for(const VertexCombined& v : triangle_group.vertices)
 	{
-		result.indices.push_back(uint16_t(result.vertices.size()));
-		result.vertices.push_back(v);
+		uint16_t index= 65535u;
+		const auto it= vertex_to_index.find(v);
+		if(it == vertex_to_index.end())
+		{
+			index= uint16_t(result.vertices.size());
+			result.vertices.push_back(v);
+			vertex_to_index.emplace(v, index);
+		}
+		else
+			index= it->second;
+		result.indices.push_back(index);
 	}
 
 	return result;
@@ -300,7 +340,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
 			out_group.first_vertex= uint32_t(total_vertices);
 			out_group.first_index= uint32_t(total_indices);
-			out_group.index_count= uint16_t(triangle_group.vertices.size());
+			out_group.index_count= uint16_t(triangle_group.indices.size());
 			total_vertices+= triangle_group.vertices.size();
 			total_indices+= triangle_group.indices.size();
 			++get_data_file().triangle_group_count;
