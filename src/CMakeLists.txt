@@ -25,5 +25,6 @@ set(BUILD_TESTS CACHE BOOl "" FORCE)
 add_subdirectory(tinyxml2)
 
 add_subdirectory(Common)
+add_subdirectory(MathLib)
 add_subdirectory(Game)
 add_subdirectory(ModelExporter)

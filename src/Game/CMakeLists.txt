@@ -50,6 +50,7 @@ target_include_directories(
 target_link_libraries(
 	Klassenkampf
 		Common
+		MathLib
 		${SDL2_LIBRARIES}
 		${Vulkan_LIBRARIES}
 	)

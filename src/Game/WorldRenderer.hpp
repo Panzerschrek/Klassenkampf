@@ -1,5 +1,5 @@
 #pragma once
-#include "MathLib/Mat.hpp"
+#include "../MathLib/Mat.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
 
