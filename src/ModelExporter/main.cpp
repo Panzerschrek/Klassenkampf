@@ -2,6 +2,7 @@
 #include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
 #include <tinyxml2.h>
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <sstream>
@@ -330,7 +331,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 		const auto it= material_name_to_id.find(triangle_group.material);
 		if(it == material_name_to_id.end())
 		{
-			material_name_to_id.emplace(triangle_group.material, material_name_to_id.size());
+			material_name_to_id.emplace(triangle_group.material, uint16_t(material_name_to_id.size()));
 		}
 	}
 	{
