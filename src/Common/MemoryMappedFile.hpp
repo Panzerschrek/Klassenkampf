@@ -21,15 +21,20 @@ public:
 	size_t Size() const { return size_; }
 
 public:
+#ifdef WIN32
+	using FileDescriptor= void*;
+#else
 	using FileDescriptor= int;
+#endif
 
 private:
-	MemoryMappedFile(const void* data, size_t size, FileDescriptor file_descriptor);
+	MemoryMappedFile(const void* data, size_t size, FileDescriptor file_descriptor0, FileDescriptor file_descriptor1);
 
 private:
 	const void* const data_;
 	const size_t size_;
-	FileDescriptor file_descriptor_;
+	const FileDescriptor file_descriptor0_;
+	const FileDescriptor file_descriptor1_;
 };
 
 } // namespace KK
