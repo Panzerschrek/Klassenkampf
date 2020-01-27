@@ -323,6 +323,39 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 		get_data_file().shift[i]= bb_min[i] + c_max_coord_value / inv_scale[i];
 	}
 
+	// Write materials.
+	std::unordered_map<std::string, uint16_t> material_name_to_id;
+	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
+	{
+		const auto it= material_name_to_id.find(triangle_group.material);
+		if(it == material_name_to_id.end())
+		{
+			material_name_to_id.emplace(triangle_group.material, material_name_to_id.size());
+		}
+	}
+	{
+		get_data_file().materials_offset= uint32_t(file_data.size());
+		get_data_file().material_count= uint32_t(material_name_to_id.size());
+		const auto get_out_materials=
+		[&]() -> SegmentModelFormat::Material*
+		{
+			return reinterpret_cast<SegmentModelFormat::Material*>(file_data.data() + get_data_file().materials_offset);
+		};
+		file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Material) * material_name_to_id.size());
+
+		for(const auto& material_pair : material_name_to_id)
+		{
+			std::memset(
+				get_out_materials()[material_pair.second].name,
+				0,
+				sizeof(SegmentModelFormat::Material::name));
+			std::memcpy(
+				get_out_materials()[material_pair.second].name,
+				material_pair.first.data(),
+				std::min(sizeof(SegmentModelFormat::Material::name), material_pair.first.size()));
+		}
+	}
+
 	// Write triangle groups.
 	{
 		get_data_file().triangle_groups_offset= uint32_t(file_data.size());
@@ -340,6 +373,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
 			out_group.first_vertex= uint32_t(total_vertices);
 			out_group.first_index= uint32_t(total_indices);
+			out_group.material_id= material_name_to_id[triangle_group.material];
 			out_group.index_count= uint16_t(triangle_group.indices.size());
 			total_vertices+= triangle_group.vertices.size();
 			total_indices+= triangle_group.indices.size();
