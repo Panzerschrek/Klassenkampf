@@ -70,6 +70,8 @@ void m_Mat4::Transpose()
 	std::swap(value[ 1], value[ 4]);
 	std::swap(value[ 2], value[ 8]);
 	std::swap(value[ 6], value[ 9]);
+	std::swap(value[ 3], value[12]);
+	std::swap(value[ 7], value[13]);
 	std::swap(value[11], value[14]);
 }
 
@@ -277,9 +279,9 @@ void m_Mat4::AxonometricProjection(const float scale_x, const float scale_y, con
 m_Vec3 operator*(const m_Vec3& v, const m_Mat4& m)
 {
 	return m_Vec3(
-		v.x * m.value[0] + v.y * m.value[4] + v.z * m.value[8] + m.value[12],
-		v.x * m.value[1] + v.y * m.value[5] + v.z * m.value[9] + m.value[13],
-		v.x * m.value[2] + v.y * m.value[6] + v.z * m.value[10]+ m.value[14]);
+		v.x * m.value[0] + v.y * m.value[4] + v.z * m.value[ 8] + m.value[12],
+		v.x * m.value[1] + v.y * m.value[5] + v.z * m.value[ 9] + m.value[13],
+		v.x * m.value[2] + v.y * m.value[6] + v.z * m.value[10] + m.value[14]);
 }
 
 } // namespace KK
