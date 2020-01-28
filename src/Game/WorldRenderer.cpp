@@ -811,7 +811,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			0u, nullptr);
 	}
 
-	segment_model_= LoadSegmentModel("test_segment.kks");
+	//segment_model_= LoadSegmentModel("test_segment.kks");
 }
 
 WorldRenderer::~WorldRenderer()
@@ -853,6 +853,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 
 		command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
 	}
+	if(!segment_model_.triangle_groups.empty())
 	{
 		const vk::DeviceSize offsets= 0u;
 		command_buffer.bindVertexBuffers(0u, 1u, &*segment_model_.vertex_buffer, &offsets);
