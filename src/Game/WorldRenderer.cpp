@@ -60,6 +60,8 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 {
+	const vk::SampleCountFlagBits msaa_samples= vk::SampleCountFlagBits::e1;
+
 	// Create framebuffer with image data.
 	{
 		const auto framebuffer_image_format= vk::Format::eR8G8B8A8Unorm;
@@ -105,7 +107,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 						vk::Extent3D(framebuffer_size_.width, framebuffer_size_.height, 1u),
 						1u,
 						1u,
-						vk::SampleCountFlagBits::e1,
+						msaa_samples,
 						vk::ImageTiling::eOptimal,
 						vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment,
 						vk::SharingMode::eExclusive,
@@ -146,7 +148,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 						vk::Extent3D(framebuffer_size_.width, framebuffer_size_.height, 1u),
 						1u,
 						1u,
-						vk::SampleCountFlagBits::e1,
+						msaa_samples,
 						vk::ImageTiling::eOptimal,
 						vk::ImageUsageFlagBits::eDepthStencilAttachment,
 						vk::SharingMode::eExclusive,
@@ -182,7 +184,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			{
 				vk::AttachmentDescriptionFlags(),
 				framebuffer_image_format,
-				vk::SampleCountFlagBits::e1,
+				msaa_samples,
 				vk::AttachmentLoadOp::eClear,
 				vk::AttachmentStoreOp::eStore,
 				vk::AttachmentLoadOp::eDontCare,
@@ -193,7 +195,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			{
 				vk::AttachmentDescriptionFlags(),
 				framebuffer_depth_format,
-				vk::SampleCountFlagBits::e1,
+				msaa_samples,
 				vk::AttachmentLoadOp::eClear,
 				vk::AttachmentStoreOp::eStore,
 				vk::AttachmentLoadOp::eClear,
@@ -367,7 +369,9 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			VK_FALSE, 0.0f, 0.0f, 0.0f,
 			1.0f);
 
-		const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
+		const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info(
+			vk::PipelineMultisampleStateCreateFlags(),
+			msaa_samples);
 
 		const vk::PipelineDepthStencilStateCreateInfo vk_pipeline_depth_state_create_info(
 			vk::PipelineDepthStencilStateCreateFlags(),
