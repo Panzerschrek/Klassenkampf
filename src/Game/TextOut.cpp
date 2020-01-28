@@ -396,7 +396,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
 
-	// Use device local memory and ise "vkCmdUpdateBuffer, which have limit of 65536  bytes.
+	// Use device local memory and use "vkCmdUpdateBuffer, which have limit of 65536  bytes.
 	max_glyphs_in_buffer_= 65536u / std::max(sizeof(TextVertex) * 4u, sizeof(uint16_t) * 6u);
 
 	// Create vertex buffer.

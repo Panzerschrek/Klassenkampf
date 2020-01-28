@@ -369,6 +369,12 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 		0u, nullptr);
 }
 
+Tonemapper::~Tonemapper()
+{
+	// Sync before destruction.
+	vk_device_.waitIdle();
+}
+
 vk::Extent2D Tonemapper::GetFramebufferSize() const
 {
 	return framebuffer_size_;

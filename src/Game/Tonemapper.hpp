@@ -9,6 +9,7 @@ class Tonemapper final
 {
 public:
 	explicit Tonemapper(WindowVulkan& window_vulkan);
+	~Tonemapper();
 
 	vk::Extent2D GetFramebufferSize() const;
 	vk::RenderPass GetRenderPass() const;
