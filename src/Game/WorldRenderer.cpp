@@ -25,7 +25,7 @@ struct WorldVertex
 {
 	float pos[3];
 	float tex_coord[2];
-	uint8_t color[4];
+	int8_t normal[3];
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
@@ -152,7 +152,7 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 	{
 		{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
 		{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, tex_coord)},
-		{2u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(WorldVertex, color)},
+		{2u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, normal)},
 	};
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
@@ -260,10 +260,9 @@ WorldRenderer::WorldRenderer(WindowVulkan& window_vulkan, const WorldData::World
 			out_vertex.pos[2]= d[2] + in_vertex[2] * s[2];
 			out_vertex.tex_coord[0]= out_vertex.pos[0] - out_vertex.pos[1];
 			out_vertex.tex_coord[1]= out_vertex.pos[0] * c_inv_sqr_3 + out_vertex.pos[1] * c_inv_sqr_3 + out_vertex.pos[2] * c_inv_sqr_3;
-			out_vertex.color[0]= 255u;
-			out_vertex.color[1]= 255u;
-			out_vertex.color[2]= 255u;
-			out_vertex.color[3]= 255u;
+			out_vertex.normal[0]= 127;
+			out_vertex.normal[1]= 127;
+			out_vertex.normal[2]= 127;
 			world_vertices.push_back(out_vertex);
 		}
 
@@ -528,9 +527,7 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 		for(size_t j= 0; j < 3u; ++j)
 			out_v.pos[j]= header.shift[j] + header.scale[j] * float(in_v.pos[j]);
 
-		for(size_t j= 0u; j < 3u; ++j)
-			out_v.color[j]= uint8_t(int(in_v.normal[j]) + 127);
-		out_v.color[3]= 0;
+		std::memcpy(out_v.normal, in_v.normal, 3u);
 
 		for(size_t j= 0u; j < 2u; ++j)
 			out_v.tex_coord[j]= float(in_v.tex_coord[j]) / 4096.0f;
