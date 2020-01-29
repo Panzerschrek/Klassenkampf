@@ -513,6 +513,15 @@ Geometries ReadGeometries(const tinyxml2::XMLElement& collada_element)
 				if(!triangle_group.vertices.empty())
 					triangle_groups.push_back(std::move(triangle_group));
 			}
+
+			for(const tinyxml2::XMLElement* polylist= mesh->FirstChildElement("polylist");
+				polylist != nullptr;
+				polylist= polylist->NextSiblingElement("polylist"))
+			{
+				TriangleGroup triangle_group= ReadTriangleGroup(*polylist, coord_sources);
+				if(!triangle_group.vertices.empty())
+					triangle_groups.push_back(std::move(triangle_group));
+			}
 		}
 
 		geometries[id]= std::move(triangle_groups);
