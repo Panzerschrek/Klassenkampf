@@ -530,7 +530,7 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 		std::memcpy(out_v.normal, in_v.normal, 3u);
 
 		for(size_t j= 0u; j < 2u; ++j)
-			out_v.tex_coord[j]= float(in_v.tex_coord[j]) / 4096.0f;
+			out_v.tex_coord[j]= float(in_v.tex_coord[j]) / float(SegmentModelFormat::c_tex_coord_scale);
 	}
 
 	result.vertex_buffer=

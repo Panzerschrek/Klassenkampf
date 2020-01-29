@@ -397,7 +397,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, pos_transformed), +c_max_coord_value));
 			}
 			for(size_t i= 0u; i < 2u; ++i)
-				out_vertex.tex_coord[i]= int16_t(vertex.tex_coord[i] * 4096.0f);
+				out_vertex.tex_coord[i]= int16_t(vertex.tex_coord[i] * float(SegmentModelFormat::c_tex_coord_scale));
 			for(size_t i= 0u; i < 3u; ++i)
 			{
 				const float normal_scaled= c_max_normal_value * vertex.normal[i];

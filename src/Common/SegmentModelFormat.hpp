@@ -8,6 +8,8 @@ namespace KK
 namespace SegmentModelFormat
 {
 
+constexpr const int32_t c_tex_coord_scale= 1024;
+
 struct SegmentModelHeader
 {
 	static constexpr const char c_expected_header[16]= "KK-SegmentModel";
