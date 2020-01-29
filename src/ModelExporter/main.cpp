@@ -383,13 +383,13 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	}
 
 	// Write materials.
-	std::unordered_map<std::string, uint16_t> material_name_to_id;
+	std::unordered_map<std::string, uint32_t> material_name_to_id;
 	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 	{
 		const auto it= material_name_to_id.find(triangle_group.material);
 		if(it == material_name_to_id.end())
 		{
-			material_name_to_id.emplace(triangle_group.material, uint16_t(material_name_to_id.size()));
+			material_name_to_id.emplace(triangle_group.material, uint32_t(material_name_to_id.size()));
 		}
 	}
 	{
@@ -432,8 +432,8 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
 			out_group.first_vertex= uint32_t(total_vertices);
 			out_group.first_index= uint32_t(total_indices);
+			out_group.index_count= uint32_t(triangle_group.indices.size());
 			out_group.material_id= material_name_to_id[triangle_group.material];
-			out_group.index_count= uint16_t(triangle_group.indices.size());
 			total_vertices+= triangle_group.vertices.size();
 			total_indices+= triangle_group.indices.size();
 			++get_data_file().triangle_group_count;
