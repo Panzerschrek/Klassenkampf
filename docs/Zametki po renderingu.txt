@@ -1,0 +1,21 @@
+Primerno kak sejcas viditsä proçess risovanija kadra.
+
+
+*) Operedeläutsä vidimyje komnaty, istocniki sveta, dekali, modeli i t. d. Dlä etogo ispoljzujetsä portaljno-sektornyj metod.
+*) Dlä istocnikov sveta, otbrasyvajuschih teni, risujutsä tenevyje karty. Ispoljzujetsä keširovanije dlä staticeskih istocnikov i staticeskih geometrij.
+*) Vsä piramida vidimosti delitsä na klastery po X, Y, Z, dlä každogo klastera opredeläjutsä vlijajuscije na nego istocniki sveta.
+   Informaçija ob istocnikah sveta i klasterah peredajotsä na "GPU".
+*) Vse neprozracnyje objekty sçeny risujutsä toljko v bufer glubiny.
+*) Na osnove bufera glubiny stroitsä lokaljnoje zatenenije v prostranstve ekrana ("SSAO"). Ispoljzujetsä "SSAO" s ucötom normali, normalj rekonstruirujetsä na osnove bufera glubiny.
+   Posle pervogo prohoda "SSAO" vypolnäjetsä takže prohod sglaživanija.
+*) Vse neprozracnyje objekty sçeny risujutsä jesco raz v "HDR" bufer çveta s testom glubiny na ravenstvo, cto pozvoläjet odnokratno obrabotatj každyj fragment.
+   Dlä každogo fragmenta opredeläjetsä jego klaster, scitajetsä osvescenije oto vseh istocnikov sveta klastera. Pri etom ispoljzujetsä približönnyj fiziceski-korrektnyj rendering,
+   primenäjutsä tekstury aljbedo, metallicnosti, šerohovatosti, karty normalej.
+   Dlä fonovogo osvescenija ispoljzujetsä zaranije poscitannaja karta vtoricnogo rassejannogo osvescenija, k nej primenäjestä rezuljtat "SSAO".
+   Dlä fonovogo osvescenija dinamiceskih objektov ispoljzujutsä zaranije poscitannyje proby vtoricnogo rassejannogo osvescenija.
+   Dlä risovanija glänçevyh fragmentov ispoljzujetsä trassirovka bližajšej kubiceskoj karty okruženija.
+   Dlä risovanija ploskih zerkaljnyh poverhnostej ispoljzujetsä otrenderennaja do etogo iz otražönnoj poziçii kamery sçena.
+*) Risujutsä prozracnyje objekty po porädku ot daljnih k bližnim. Osvescenije primenäjetsä analogicno predyduscemu punktu.
+*) Rezuljtirujuscih bufer umenjšajetsä, razmyvajetsä i sohranäjetsä v otdeljnuju teksturu dlä primenenija effekta "bloom".
+*) Vycisläjetsä srednaja jarkostj bufera kadra (ili že gistogramma), na etoj osnove vycisläjetsä ekspoziçija, kotoraja sglaživajetsä vo vremeni.
+*) Rezuljtirujuscih bufer vyvoditsä na ekran so sžatijem diapazona, primenenijem effekta "bloom", neboljšimi geometriceskimi i çvetovymi iskaženijami.
