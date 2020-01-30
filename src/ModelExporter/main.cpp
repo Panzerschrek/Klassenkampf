@@ -258,13 +258,13 @@ TriangleGroup ReadTriangleGroup(
 				if(normal_source != nullptr)
 				{
 					out_vertex.normal[0]= out_vertex.normal[1]= out_vertex.normal[2]= 0.0f;
-					for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
+					for(size_t j= 0u; j < std::min(normal_source->vector_size, size_t(3u)); ++j)
 						out_vertex.normal[j]= normal_source->data[ indices[v_i + normal_offset] * normal_source->vector_size + j ];
 				}
 				if(tex_coord_source != nullptr)
 				{
 					out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
-					for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(2u)); ++j)
+					for(size_t j= 0u; j < std::min(tex_coord_source->vector_size, size_t(2u)); ++j)
 						out_vertex.tex_coord[j]= tex_coord_source->data[ indices[v_i + tex_coord_offset] * tex_coord_source->vector_size + j ];
 				}
 				poly_vertices.push_back(out_vertex);
@@ -295,13 +295,13 @@ TriangleGroup ReadTriangleGroup(
 			if(normal_source != nullptr)
 			{
 				out_vertex.normal[0]= out_vertex.normal[1]= out_vertex.normal[2]= 0.0f;
-				for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
+				for(size_t j= 0u; j < std::min(normal_source->vector_size, size_t(3u)); ++j)
 					out_vertex.normal[j]= normal_source->data[ indices[i + normal_offset] * normal_source->vector_size + j ];
 			}
 			if(tex_coord_source != nullptr)
 			{
 				out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
-				for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(2u)); ++j)
+				for(size_t j= 0u; j < std::min(tex_coord_source->vector_size, size_t(2u)); ++j)
 					out_vertex.tex_coord[j]= tex_coord_source->data[ indices[i + tex_coord_offset] * tex_coord_source->vector_size + j ];
 			}
 
