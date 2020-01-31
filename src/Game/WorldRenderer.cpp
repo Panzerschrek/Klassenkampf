@@ -347,11 +347,11 @@ WorldRenderer::WorldRenderer(
 				1u,
 				1u,
 				vk::SampleCountFlagBits::e1,
-				vk::ImageTiling::eLinear,
-				vk::ImageUsageFlagBits::eSampled,
+				vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 				vk::SharingMode::eExclusive,
 				0u, nullptr,
-				vk::ImageLayout::ePreinitialized));
+				vk::ImageLayout::eUndefined));
 
 		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*vk_image_);
 
@@ -359,30 +359,70 @@ WorldRenderer::WorldRenderer(
 		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 		{
 			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
 		vk_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindImageMemory(*vk_image_, *vk_image_memory_, 0u);
 
-		const vk::SubresourceLayout image_layout=
-			vk_device_.getImageSubresourceLayout(
-				*vk_image_,
-				vk::ImageSubresource(vk::ImageAspectFlagBits::eColor, 0u, 0u));
+		// Transfer image data.
+		const GPUDataUploader::RequestResult staging_buffer=
+			gpu_data_uploader_.RequestMemory(image_loaded.GetWidth() * image_loaded.GetHeight() * 4u);
 
-		void* texture_data_gpu_size= nullptr;
-		vk_device_.mapMemory(*vk_image_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
+		std::memcpy(
+			static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+			image_loaded.GetData(),
+			image_loaded.GetWidth() * image_loaded.GetHeight() * 4u);
 
-		for(uint32_t y= 0u; y < image_loaded.GetHeight(); ++y)
-			std::memcpy(
-				static_cast<char*>(texture_data_gpu_size) + y * image_layout.rowPitch,
-				image_loaded.GetData() + y * image_loaded.GetWidth(),
-				image_loaded.GetWidth() * sizeof(uint32_t));
+		const vk::ImageMemoryBarrier image_memory_transfer_init(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+			queue_family_index_,
+			queue_family_index_,
+			*vk_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-		vk_device_.unmapMemory(*vk_image_memory_);
+		staging_buffer.command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_transfer_init);
 
+		const vk::BufferImageCopy copy_region(
+			staging_buffer.buffer_offset,
+			image_loaded.GetWidth(), image_loaded.GetHeight(),
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
+			vk::Offset3D(0, 0, 0),
+			vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u));
+
+		staging_buffer.command_buffer.copyBufferToImage(
+			staging_buffer.buffer,
+			*vk_image_,
+			vk::ImageLayout::eTransferDstOptimal,
+			1u, &copy_region);
+
+		const vk::ImageMemoryBarrier image_memory_transfer_final(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+			queue_family_index_,
+			queue_family_index_,
+			*vk_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+
+		staging_buffer.command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_transfer_final);
+
+		// Create image view.
 		vk_image_view_= vk_device_.createImageViewUnique(
 			vk::ImageViewCreateInfo(
 				vk::ImageViewCreateFlags(),
@@ -392,27 +432,7 @@ WorldRenderer::WorldRenderer(
 				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
 
-		// Make image layout transition.
-		const vk::CommandBuffer command_buffer= window_vulkan.BeginFrame();
-
-		const vk::ImageMemoryBarrier vk_image_memory_barrier(
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::ePreinitialized, vk::ImageLayout::eGeneral,
-			window_vulkan.GetQueueFamilyIndex(),
-			window_vulkan.GetQueueFamilyIndex(),
-			*vk_image_,
-			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-		command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &vk_image_memory_barrier);
-
-		window_vulkan.EndFrame({});
+		gpu_data_uploader_.Flush();
 	}
 
 	segment_model_= LoadSegmentModel("sponza.kks");
@@ -441,7 +461,7 @@ WorldRenderer::WorldRenderer(
 		const vk::DescriptorImageInfo descriptor_image_info(
 			vk::Sampler(),
 			*vk_image_view_,
-			vk::ImageLayout::eGeneral);
+			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::WriteDescriptorSet write_descriptor_set(
 			*vk_descriptor_set_,
@@ -474,7 +494,7 @@ WorldRenderer::WorldRenderer(
 		const vk::DescriptorImageInfo descriptor_image_info(
 			vk::Sampler(),
 			*material.image_view,
-			vk::ImageLayout::eGeneral);
+			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::WriteDescriptorSet write_descriptor_set(
 			*material.descriptor_set,
@@ -650,16 +670,8 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 			vk::ImageLayout::eTransferDstOptimal,
 			1u, &copy_region);
 
-		//const vk::ImageMemoryBarrier image_memory_transfer_final(
-		//	vk::AccessFlagBits::eTransferWrite,
-		//	vk::AccessFlagBits::eMemoryRead,
-		//	vk::ImageLayout::eUndefined, /*vk::ImageLayout::eShaderReadOnlyOptimal*/ vk::ImageLayout::eGeneral,
-		//	queue_family_index_,
-		//	queue_family_index_,
-		//	*out_material.image,
-		//	vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-		const auto image_layout_final= /*vk::ImageLayout::eShaderReadOnlyOptimal*/ vk::ImageLayout::eGeneral;
+		const auto image_layout_final= vk::ImageLayout::eShaderReadOnlyOptimal;
 		for(uint32_t j= 1u; j < mip_levels; ++j)
 		{
 			// Transform previous mip level layout from dst_optimal to src_optimal
