@@ -21,6 +21,7 @@ public:
 	void EndFrame(const DrawFunctions& draw_functions);
 
 	vk::Device GetVulkanDevice() const;
+	vk::Queue GetQueue() const;
 	vk::Extent2D GetViewportSize() const;
 	uint32_t GetQueueFamilyIndex() const;
 	vk::RenderPass GetRenderPass() const; // Render pass for rendering directly into screen.

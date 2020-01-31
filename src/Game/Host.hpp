@@ -1,5 +1,6 @@
 #pragma once
 #include "CameraController.hpp"
+#include "GPUDataUploader.hpp"
 #include "SystemWindow.hpp"
 #include "TextOut.hpp"
 #include "TicksCounter.hpp"
@@ -25,6 +26,7 @@ private:
 	TicksCounter ticks_counter_;
 	SystemWindow system_window_;
 	WindowVulkan window_vulkan_;
+	GPUDataUploader gpu_data_uploader_;
 	WorldRenderer world_renderer_;
 	TextOut text_out_;
 	CameraController camera_controller_;

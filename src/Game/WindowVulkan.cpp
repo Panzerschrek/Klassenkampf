@@ -350,6 +350,11 @@ vk::Device WindowVulkan::GetVulkanDevice() const
 	return *vk_device_;
 }
 
+vk::Queue WindowVulkan::GetQueue() const
+{
+	return vk_queue_;
+}
+
 vk::Extent2D WindowVulkan::GetViewportSize() const
 {
 	return viewport_size_;

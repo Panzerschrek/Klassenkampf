@@ -1,5 +1,6 @@
 #pragma once
 #include "../MathLib/Mat.hpp"
+#include "GPUDataUploader.hpp"
 #include "Tonemapper.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
@@ -13,6 +14,7 @@ class WorldRenderer final
 public:
 	WorldRenderer(
 		WindowVulkan& window_vulkan,
+		GPUDataUploader& gpu_data_uploader,
 		const WorldData::World& world);
 
 	~WorldRenderer();
@@ -29,9 +31,20 @@ private:
 			uint32_t first_vertex;
 			uint32_t first_index;
 			uint32_t index_count;
+			size_t material_index;
+		};
+
+		struct Material
+		{
+			vk::UniqueImage image;
+			vk::UniqueImageView image_view;
+			vk::UniqueDeviceMemory image_memory;
+
+			vk::UniqueDescriptorSet descriptor_set;
 		};
 
 		std::vector<TriangleGroup> triangle_groups;
+		std::vector<Material> materials;
 
 		vk::UniqueBuffer vertex_buffer;
 		vk::UniqueDeviceMemory vertex_buffer_memory;
@@ -44,9 +57,11 @@ private:
 	SegmentModel LoadSegmentModel(const char* const file_name);
 
 private:
+	GPUDataUploader& gpu_data_uploader_;
 	const vk::Device vk_device_;
 	const vk::Extent2D viewport_size_;
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
+	const uint32_t queue_family_index_;
 
 	Tonemapper tonemapper_;
 
