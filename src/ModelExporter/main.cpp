@@ -266,6 +266,7 @@ TriangleGroup ReadTriangleGroup(
 					out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
 					for(size_t j= 0u; j < std::min(tex_coord_source->vector_size, size_t(2u)); ++j)
 						out_vertex.tex_coord[j]= tex_coord_source->data[ indices[v_i + tex_coord_offset] * tex_coord_source->vector_size + j ];
+					out_vertex.tex_coord[1]= 1.0f - out_vertex.tex_coord[1];
 				}
 				poly_vertices.push_back(out_vertex);
 			}
@@ -303,6 +304,7 @@ TriangleGroup ReadTriangleGroup(
 				out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
 				for(size_t j= 0u; j < std::min(tex_coord_source->vector_size, size_t(2u)); ++j)
 					out_vertex.tex_coord[j]= tex_coord_source->data[ indices[i + tex_coord_offset] * tex_coord_source->vector_size + j ];
+				out_vertex.tex_coord[1]= 1.0f - out_vertex.tex_coord[1];
 			}
 
 			result.vertices.push_back(out_vertex);
