@@ -9,6 +9,18 @@
 namespace KK
 {
 
+namespace
+{
+
+vk::PhysicalDeviceFeatures GetRequiredDeviceFeatures()
+{
+	vk::PhysicalDeviceFeatures features;
+	features.setSamplerAnisotropy(VK_TRUE);
+	return features;
+}
+
+} // namespace
+
 WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 {
 	#ifdef DEBUG
@@ -129,11 +141,15 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 		1u, &queue_priority);
 
 	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+	const vk::PhysicalDeviceFeatures physical_device_features= GetRequiredDeviceFeatures();
+
 	const vk::DeviceCreateInfo vk_device_create_info(
 		vk::DeviceCreateFlags(),
 		1u, &vk_device_queue_create_info,
 		0u, nullptr,
-		uint32_t(std::size(device_extension_names)), device_extension_names);
+		uint32_t(std::size(device_extension_names)), device_extension_names,
+		&physical_device_features);
 
 	// Create physical device.
 	// HACK! createDeviceUnique works wrong! Use other method instead.
@@ -348,6 +364,11 @@ void WindowVulkan::EndFrame(const DrawFunctions& draw_functions)
 vk::Device WindowVulkan::GetVulkanDevice() const
 {
 	return *vk_device_;
+}
+
+vk::Queue WindowVulkan::GetQueue() const
+{
+	return vk_queue_;
 }
 
 vk::Extent2D WindowVulkan::GetViewportSize() const

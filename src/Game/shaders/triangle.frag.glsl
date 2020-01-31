@@ -12,5 +12,9 @@ void main()
 	const vec3 sun_vector= normalize(vec3(0.5, 0.2, 0.7));
 	float l= max(0.0, dot(sun_vector, normalize(f_normal))) + 0.25;
 
-	out_color= l * texture(tex, f_tex_coord);
+	const vec4 tex_value= texture(tex, f_tex_coord);
+	if(tex_value.a < 0.5)
+		discard;
+
+	out_color= vec4(l * tex_value.xyz, tex_value.a);
 }

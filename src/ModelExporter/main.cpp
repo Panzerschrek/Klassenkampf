@@ -226,29 +226,89 @@ TriangleGroup ReadTriangleGroup(
 
 	TriangleGroup result;
 
-	for(size_t i= 0u; i < indices.size(); i+= vertex_attrib_count)
+	if(const tinyxml2::XMLElement* const vcount_element= triangle_element.FirstChildElement("vcount"))
 	{
-		VertexCombined out_vertex;
-		if(vertex_source != nullptr)
+		std::vector<uint32_t> vcount;
+		std::istringstream ss(vcount_element->GetText());
+		while(!ss.eof())
 		{
-			out_vertex.pos[0]= out_vertex.pos[1]= out_vertex.pos[2]= 0.0f;
-			for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
-				out_vertex.pos[j]= vertex_source->data[ indices[i + vertex_offset] * vertex_source->vector_size + j ];
-		}
-		if(normal_source != nullptr)
-		{
-			out_vertex.normal[0]= out_vertex.normal[1]= out_vertex.normal[2]= 0.0f;
-			for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
-				out_vertex.normal[j]= normal_source->data[ indices[i + normal_offset] * normal_source->vector_size + j ];
-		}
-		if(tex_coord_source != nullptr)
-		{
-			out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
-			for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(2u)); ++j)
-				out_vertex.tex_coord[j]= tex_coord_source->data[ indices[i + tex_coord_offset] * tex_coord_source->vector_size + j ];
+			uint32_t c= 0u;
+			ss >> c;
+			vcount.push_back(c);
 		}
 
-		result.vertices.push_back(out_vertex);
+		std::vector<VertexCombined> poly_vertices;
+		size_t index_index= 0u;
+		for(const size_t poly_vertex_count : vcount)
+		{
+			if(poly_vertex_count < 3u)
+				break;
+
+			for(size_t i= 0u; i < poly_vertex_count; ++i)
+			{
+				const size_t v_i= index_index + i * vertex_attrib_count;
+
+				VertexCombined out_vertex;
+				if(vertex_source != nullptr)
+				{
+					out_vertex.pos[0]= out_vertex.pos[1]= out_vertex.pos[2]= 0.0f;
+					for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
+						out_vertex.pos[j]= vertex_source->data[ indices[v_i + vertex_offset] * vertex_source->vector_size + j ];
+				}
+				if(normal_source != nullptr)
+				{
+					out_vertex.normal[0]= out_vertex.normal[1]= out_vertex.normal[2]= 0.0f;
+					for(size_t j= 0u; j < std::min(normal_source->vector_size, size_t(3u)); ++j)
+						out_vertex.normal[j]= normal_source->data[ indices[v_i + normal_offset] * normal_source->vector_size + j ];
+				}
+				if(tex_coord_source != nullptr)
+				{
+					out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
+					for(size_t j= 0u; j < std::min(tex_coord_source->vector_size, size_t(2u)); ++j)
+						out_vertex.tex_coord[j]= tex_coord_source->data[ indices[v_i + tex_coord_offset] * tex_coord_source->vector_size + j ];
+					out_vertex.tex_coord[1]= 1.0f - out_vertex.tex_coord[1];
+				}
+				poly_vertices.push_back(out_vertex);
+			}
+
+			for(size_t i= 0u; i < poly_vertex_count - 2u; ++i)
+			{
+				result.vertices.push_back(poly_vertices[0]);
+				result.vertices.push_back(poly_vertices[i+1u]);
+				result.vertices.push_back(poly_vertices[i+2u]);
+			}
+			poly_vertices.clear();
+
+			index_index+= poly_vertex_count * vertex_attrib_count;
+		}
+	}
+	else
+	{
+		for(size_t i= 0u; i < indices.size(); i+= vertex_attrib_count)
+		{
+			VertexCombined out_vertex;
+			if(vertex_source != nullptr)
+			{
+				out_vertex.pos[0]= out_vertex.pos[1]= out_vertex.pos[2]= 0.0f;
+				for(size_t j= 0u; j < std::min(vertex_source->vector_size, size_t(3u)); ++j)
+					out_vertex.pos[j]= vertex_source->data[ indices[i + vertex_offset] * vertex_source->vector_size + j ];
+			}
+			if(normal_source != nullptr)
+			{
+				out_vertex.normal[0]= out_vertex.normal[1]= out_vertex.normal[2]= 0.0f;
+				for(size_t j= 0u; j < std::min(normal_source->vector_size, size_t(3u)); ++j)
+					out_vertex.normal[j]= normal_source->data[ indices[i + normal_offset] * normal_source->vector_size + j ];
+			}
+			if(tex_coord_source != nullptr)
+			{
+				out_vertex.tex_coord[0]= out_vertex.tex_coord[1]= 0.0f;
+				for(size_t j= 0u; j < std::min(tex_coord_source->vector_size, size_t(2u)); ++j)
+					out_vertex.tex_coord[j]= tex_coord_source->data[ indices[i + tex_coord_offset] * tex_coord_source->vector_size + j ];
+				out_vertex.tex_coord[1]= 1.0f - out_vertex.tex_coord[1];
+			}
+
+			result.vertices.push_back(out_vertex);
+		}
 	}
 
 	const char* const material= triangle_element.Attribute("material");
@@ -325,13 +385,13 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	}
 
 	// Write materials.
-	std::unordered_map<std::string, uint16_t> material_name_to_id;
+	std::unordered_map<std::string, uint32_t> material_name_to_id;
 	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 	{
 		const auto it= material_name_to_id.find(triangle_group.material);
 		if(it == material_name_to_id.end())
 		{
-			material_name_to_id.emplace(triangle_group.material, uint16_t(material_name_to_id.size()));
+			material_name_to_id.emplace(triangle_group.material, uint32_t(material_name_to_id.size()));
 		}
 	}
 	{
@@ -374,8 +434,8 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 			SegmentModelFormat::TriangleGroup& out_group= get_out_triangle_groups()[size_t(get_data_file().triangle_group_count)];
 			out_group.first_vertex= uint32_t(total_vertices);
 			out_group.first_index= uint32_t(total_indices);
+			out_group.index_count= uint32_t(triangle_group.indices.size());
 			out_group.material_id= material_name_to_id[triangle_group.material];
-			out_group.index_count= uint16_t(triangle_group.indices.size());
 			total_vertices+= triangle_group.vertices.size();
 			total_indices+= triangle_group.indices.size();
 			++get_data_file().triangle_group_count;
@@ -397,7 +457,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 				out_vertex.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, pos_transformed), +c_max_coord_value));
 			}
 			for(size_t i= 0u; i < 2u; ++i)
-				out_vertex.tex_coord[i]= int16_t(vertex.tex_coord[i] * 4096.0f);
+				out_vertex.tex_coord[i]= int16_t(vertex.tex_coord[i] * float(SegmentModelFormat::c_tex_coord_scale));
 			for(size_t i= 0u; i < 3u; ++i)
 			{
 				const float normal_scaled= c_max_normal_value * vertex.normal[i];
@@ -510,6 +570,15 @@ Geometries ReadGeometries(const tinyxml2::XMLElement& collada_element)
 				triangles= triangles->NextSiblingElement("triangles"))
 			{
 				TriangleGroup triangle_group= ReadTriangleGroup(*triangles, coord_sources);
+				if(!triangle_group.vertices.empty())
+					triangle_groups.push_back(std::move(triangle_group));
+			}
+
+			for(const tinyxml2::XMLElement* polylist= mesh->FirstChildElement("polylist");
+				polylist != nullptr;
+				polylist= polylist->NextSiblingElement("polylist"))
+			{
+				TriangleGroup triangle_group= ReadTriangleGroup(*polylist, coord_sources);
 				if(!triangle_group.vertices.empty())
 					triangle_groups.push_back(std::move(triangle_group));
 			}
