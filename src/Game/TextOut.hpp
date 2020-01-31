@@ -1,4 +1,5 @@
 #pragma once
+#include "GPUDataUploader.hpp"
 #include "WindowVulkan.hpp"
 #include <string_view>
 
@@ -15,7 +16,9 @@ namespace KK
 class TextOut final
 {
 public:
-	explicit TextOut(WindowVulkan& window_vulkan);
+	TextOut(
+		WindowVulkan& window_vulkan,
+		GPUDataUploader& gpu_data_uploader);
 	~TextOut();
 
 	void AddText(
@@ -47,6 +50,7 @@ private:
 private:
 	const vk::Device vk_device_;
 	const vk::Extent2D viewport_size_;
+	GPUDataUploader& gpu_data_uploader_;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;

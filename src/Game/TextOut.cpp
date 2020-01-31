@@ -19,9 +19,12 @@ namespace Shaders
 
 } // namespace
 
-TextOut::TextOut(WindowVulkan& window_vulkan)
+TextOut::TextOut(
+	WindowVulkan& window_vulkan,
+	GPUDataUploader& gpu_data_uploader)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
+	, gpu_data_uploader_(gpu_data_uploader)
 {
 	// Create shaders
 	shader_vert_=
@@ -177,11 +180,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
 
-	const vk::CommandBuffer command_buffer= window_vulkan.BeginFrame();
-
 	// Create font image
-	vk::UniqueBuffer image_staging_buffer;
-	vk::UniqueDeviceMemory image_staging_buffer_memory;
 	{
 		const auto image_loaded_opt= Image::Load("mono_font_sdf.png");
 		KK_ASSERT(image_loaded_opt != std::nullopt);
@@ -220,32 +219,13 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		font_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindImageMemory(*font_image_, *font_image_memory_, 0u);
 
-		// Prepare staging buffer.
-		image_staging_buffer=
-			vk_device_.createBufferUnique(
-				vk::BufferCreateInfo(
-					vk::BufferCreateFlags(),
-					image_memory_requirements.size,
-					vk::BufferUsageFlagBits::eTransferSrc));
+		const GPUDataUploader::RequestResult staging_buffer=
+			gpu_data_uploader_.RequestMemory(image_loaded.GetWidth() * image_loaded.GetHeight() * sizeof(Image::PixelType));
 
-		const vk::MemoryRequirements staging_memory_requirements= vk_device_.getBufferMemoryRequirements(*image_staging_buffer);
-
-		vk::MemoryAllocateInfo staging_buffer_allocate_info(staging_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
-		{
-			if((staging_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible ) != vk::MemoryPropertyFlags() &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
-				staging_buffer_allocate_info.memoryTypeIndex= i;
-		}
-
-		image_staging_buffer_memory= vk_device_.allocateMemoryUnique(staging_buffer_allocate_info);
-		vk_device_.bindBufferMemory(*image_staging_buffer, *image_staging_buffer_memory, 0u);
-
-		void* texture_data_gpu_size= nullptr;
-		vk_device_.mapMemory(*image_staging_buffer_memory, 0u, staging_buffer_allocate_info.allocationSize, vk::MemoryMapFlags(), &texture_data_gpu_size);
-		std::memcpy(texture_data_gpu_size, image_loaded.GetData(), image_loaded.GetWidth() * image_loaded.GetHeight() * sizeof(Image::PixelType));
-		vk_device_.unmapMemory(*image_staging_buffer_memory);
+		std::memcpy(
+			static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+			image_loaded.GetData(),
+			image_loaded.GetWidth() * image_loaded.GetHeight() * sizeof(Image::PixelType));
 
 		// Copy staging bufer content into image.
 
@@ -258,7 +238,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 			*font_image_,
 			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-		command_buffer.pipelineBarrier(
+		staging_buffer.command_buffer.pipelineBarrier(
 			vk::PipelineStageFlagBits::eTransfer,
 			vk::PipelineStageFlagBits::eBottomOfPipe,
 			vk::DependencyFlags(),
@@ -267,14 +247,14 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 			1u, &vk_image_memory_transfer_init);
 
 		const vk::BufferImageCopy copy_region(
-			0u,
+			staging_buffer.buffer_offset,
 			image_loaded.GetWidth(), image_loaded.GetHeight(),
 			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
 			vk::Offset3D(0, 0, 0),
 			vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u));
 
-		command_buffer.copyBufferToImage(
-			*image_staging_buffer,
+		staging_buffer.command_buffer.copyBufferToImage(
+			staging_buffer.buffer,
 			*font_image_,
 			vk::ImageLayout::eTransferDstOptimal,
 			1u, &copy_region);
@@ -291,7 +271,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				*font_image_,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i - 1u, 1u, 0u, 1u));
 
-			command_buffer.pipelineBarrier(
+			staging_buffer.command_buffer.pipelineBarrier(
 				vk::PipelineStageFlagBits::eTransfer,
 				vk::PipelineStageFlagBits::eBottomOfPipe,
 				vk::DependencyFlags(),
@@ -308,7 +288,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				*font_image_,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i, 1u, 0u, 1u));
 
-			command_buffer.pipelineBarrier(
+			staging_buffer.command_buffer.pipelineBarrier(
 				vk::PipelineStageFlagBits::eTransfer,
 				vk::PipelineStageFlagBits::eBottomOfPipe,
 				vk::DependencyFlags(),
@@ -339,7 +319,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 0u, 0u, 1u),
 				dst_offsets);
 
-			command_buffer.blitImage(
+			staging_buffer.command_buffer.blitImage(
 				*font_image_,
 				vk::ImageLayout::eTransferSrcOptimal,
 				*font_image_,
@@ -356,7 +336,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 				*font_image_,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i - 1u, 1u, 0u, 1u));
 
-			command_buffer.pipelineBarrier(
+			staging_buffer.command_buffer.pipelineBarrier(
 				vk::PipelineStageFlagBits::eTransfer,
 				vk::PipelineStageFlagBits::eBottomOfPipe,
 				vk::DependencyFlags(),
@@ -375,7 +355,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 					*font_image_,
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i, 1u, 0u, 1u));
 
-				command_buffer.pipelineBarrier(
+				staging_buffer.command_buffer.pipelineBarrier(
 					vk::PipelineStageFlagBits::eTransfer,
 					vk::PipelineStageFlagBits::eBottomOfPipe,
 					vk::DependencyFlags(),
@@ -455,7 +435,22 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		index_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindBufferMemory(*index_buffer_, *index_buffer_memory_, 0u);
 
-		command_buffer.updateBuffer(*index_buffer_, 0u, quad_indeces.size() * sizeof(uint16_t), quad_indeces.data());
+		const GPUDataUploader::RequestResult staging_buffer=
+			gpu_data_uploader_.RequestMemory(quad_indeces.size() * sizeof(uint16_t));
+
+		std::memcpy(
+			static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+			quad_indeces.data(),
+			quad_indeces.size() * sizeof(uint16_t));
+
+		vk::BufferCopy copy_region(
+			staging_buffer.buffer_offset,
+			0u,
+			quad_indeces.size() * sizeof(uint16_t));
+		staging_buffer.command_buffer.copyBuffer(
+			staging_buffer.buffer,
+			*index_buffer_,
+			1u, &copy_region);
 	}
 
 	// Create descriptor set pool.
@@ -494,10 +489,7 @@ TextOut::TextOut(WindowVulkan& window_vulkan)
 		1u, &write_descriptor_set,
 		0u, nullptr);
 
-	window_vulkan.EndFrame({});
-
-	// Wait for image buffer copying.
-	vk_device_.waitIdle();
+	gpu_data_uploader_.Flush();
 }
 
 TextOut::~TextOut()
