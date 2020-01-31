@@ -90,8 +90,8 @@ WorldRenderer::WorldRenderer(
 				vk::SamplerAddressMode::eRepeat,
 				vk::SamplerAddressMode::eRepeat,
 				0.0f,
-				VK_FALSE,
-				0.0f,
+				VK_TRUE, // anisotropy
+				4.0f, // anisotropy level
 				VK_FALSE,
 				vk::CompareOp::eNever,
 				0.0f,
