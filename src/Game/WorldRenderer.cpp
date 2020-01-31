@@ -445,7 +445,7 @@ WorldRenderer::WorldRenderer(
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				uint32_t(1u + segment_model_.materials.size()), // max sets.
+				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
 				1u, &vk_descriptor_pool_size));
 
 	{
