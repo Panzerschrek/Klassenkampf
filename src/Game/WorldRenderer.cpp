@@ -85,7 +85,7 @@ WorldRenderer::WorldRenderer(
 				vk::SamplerCreateFlags(),
 				vk::Filter::eLinear,
 				vk::Filter::eLinear,
-				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerMipmapMode::eLinear,
 				vk::SamplerAddressMode::eRepeat,
 				vk::SamplerAddressMode::eRepeat,
 				vk::SamplerAddressMode::eRepeat,
@@ -95,7 +95,7 @@ WorldRenderer::WorldRenderer(
 				VK_FALSE,
 				vk::CompareOp::eNever,
 				0.0f,
-				0.0f,
+				100.0f,
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
@@ -580,7 +580,9 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 
 		const Image& image= *image_loaded_opt;
 
-		const uint32_t mip_levels= 1u;
+		KK_ASSERT((image.GetWidth () & (image.GetWidth () - 1u)) == 0u);
+		KK_ASSERT((image.GetHeight() & (image.GetHeight() - 1u)) == 0u);
+		const uint32_t mip_levels= uint32_t(std::log2(float(std::min(image.GetWidth(), image.GetHeight()))) - 1.0f);
 
 		SegmentModel::Material& out_material= result.materials[i];
 		out_material.image= vk_device_.createImageUnique(
@@ -648,22 +650,121 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 			vk::ImageLayout::eTransferDstOptimal,
 			1u, &copy_region);
 
-		const vk::ImageMemoryBarrier image_memory_transfer_final(
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::eUndefined, /*vk::ImageLayout::eShaderReadOnlyOptimal*/ vk::ImageLayout::eGeneral,
-			queue_family_index_,
-			queue_family_index_,
-			*out_material.image,
-			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+		//const vk::ImageMemoryBarrier image_memory_transfer_final(
+		//	vk::AccessFlagBits::eTransferWrite,
+		//	vk::AccessFlagBits::eMemoryRead,
+		//	vk::ImageLayout::eUndefined, /*vk::ImageLayout::eShaderReadOnlyOptimal*/ vk::ImageLayout::eGeneral,
+		//	queue_family_index_,
+		//	queue_family_index_,
+		//	*out_material.image,
+		//	vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
-		staging_buffer.command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &image_memory_transfer_final);
+		const auto image_layout_final= /*vk::ImageLayout::eShaderReadOnlyOptimal*/ vk::ImageLayout::eGeneral;
+		for(uint32_t j= 1u; j < mip_levels; ++j)
+		{
+			// Transform previous mip level layout from dst_optimal to src_optimal
+			const vk::ImageMemoryBarrier vk_image_memory_barrier_src(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
+				queue_family_index_,
+				queue_family_index_,
+				*out_material.image,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
+
+			staging_buffer.command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier_src);
+
+			const vk::ImageMemoryBarrier vk_image_memory_barrier_dst(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+				queue_family_index_,
+				queue_family_index_,
+				*out_material.image,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j, 1u, 0u, 1u));
+
+			staging_buffer.command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier_dst);
+
+			std::array<vk::Offset3D, 2> src_offsets;
+			std::array<vk::Offset3D, 2> dst_offsets;
+
+			src_offsets[0]= 0u;
+			src_offsets[0]= 0u;
+			src_offsets[0]= 0u;
+			src_offsets[1].x= image.GetWidth () >> (j-1u);
+			src_offsets[1].y= image.GetHeight() >> (j-1u);
+			src_offsets[1].z= 1u;
+
+			dst_offsets[0]= 0u;
+			dst_offsets[0]= 0u;
+			dst_offsets[0]= 0u;
+			dst_offsets[1].x= image.GetWidth () >> j;
+			dst_offsets[1].y= image.GetHeight() >> j;
+			dst_offsets[1].z= 1;
+
+			vk::ImageBlit image_blit(
+				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 1u, 0u, 1u),
+				src_offsets,
+				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 0u, 0u, 1u),
+				dst_offsets);
+
+			staging_buffer.command_buffer.blitImage(
+				*out_material.image,
+				vk::ImageLayout::eTransferSrcOptimal,
+				*out_material.image,
+				vk::ImageLayout::eTransferDstOptimal,
+				1u, &image_blit,
+				vk::Filter::eLinear);
+
+			const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+				vk::AccessFlagBits::eTransferWrite,
+				vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eTransferSrcOptimal, image_layout_final,
+				queue_family_index_,
+				queue_family_index_,
+				*out_material.image,
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
+
+			staging_buffer.command_buffer.pipelineBarrier(
+				vk::PipelineStageFlagBits::eTransfer,
+				vk::PipelineStageFlagBits::eBottomOfPipe,
+				vk::DependencyFlags(),
+				0u, nullptr,
+				0u, nullptr,
+				1u, &vk_image_memory_barrier_src_final);
+
+			if(j + 1u == mip_levels)
+			{
+				const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+					vk::AccessFlagBits::eTransferWrite,
+					vk::AccessFlagBits::eMemoryRead,
+					vk::ImageLayout::eTransferDstOptimal, image_layout_final,
+					queue_family_index_,
+					queue_family_index_,
+					*out_material.image,
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j, 1u, 0u, 1u));
+
+				staging_buffer.command_buffer.pipelineBarrier(
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eBottomOfPipe,
+					vk::DependencyFlags(),
+					0u, nullptr,
+					0u, nullptr,
+					1u, &vk_image_memory_barrier_src_final);
+			}
+		} // for mips
 
 		out_material.image_view= vk_device_.createImageViewUnique(
 			vk::ImageViewCreateInfo(
