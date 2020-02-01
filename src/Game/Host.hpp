@@ -24,6 +24,9 @@ public:
 	bool Loop();
 
 private:
+	void CommandQuit();
+
+private:
 	using Clock= std::chrono::steady_clock;
 
 	Settings settings_;
@@ -36,9 +39,12 @@ private:
 	Console console_;
 	WorldRenderer world_renderer_;
 	CameraController camera_controller_;
+	CommandsMapPtr commands_map_;
 
 	const Clock::time_point init_time_;
 	Clock::time_point prev_tick_time_;
+
+	bool quit_requested_= false;
 };
 
 } // namespace KK

@@ -29,6 +29,14 @@ Host::Host()
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {
+	commands_map_=
+		std::make_shared<CommandsMap>(
+			CommandsMap(
+				{
+					{"quit", std::bind(&Host::CommandQuit, this)},
+				}));
+
+	commands_processor_.RegisterCommands(commands_map_);
 }
 
 bool Host::Loop()
@@ -95,7 +103,12 @@ bool Host::Loop()
 		std::this_thread::sleep_for(min_frame_duration - frame_dt);
 	}
 
-	return false;
+	return quit_requested_;
+}
+
+void Host::CommandQuit()
+{
+	quit_requested_= true;
 }
 
 } // namespace KK
