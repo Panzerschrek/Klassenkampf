@@ -24,6 +24,7 @@ public:
 	IntType GetOrSetInt(std::string_view key, IntType default_value= 0);
 	RealType GetOrSetReal(std::string_view key, RealType default_value= 0.0);
 
+	std::string_view GetString(std::string_view key, std::string_view default_value= "");
 	void SetString(std::string_view key, std::string_view value);
 
 	bool HasValue(std::string_view key);

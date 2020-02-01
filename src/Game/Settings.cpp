@@ -230,6 +230,15 @@ Settings::RealType Settings::GetOrSetReal(const std::string_view key, const Real
 	}
 }
 
+std::string_view Settings::GetString(const std::string_view key, const std::string_view default_value)
+{
+	temp_key_= key;
+	const auto it= values_map_.find(temp_key_);
+	if(it == values_map_.end())
+		return default_value;
+	return it->second;
+}
+
 void Settings::SetString(const std::string_view key, const std::string_view value)
 {
 	temp_key_= key;

@@ -1,5 +1,6 @@
 #include "WindowVulkan.hpp"
 #include "Assert.hpp"
+#include "Log.hpp"
 #include "SystemWindow.hpp"
 #include <SDL_vulkan.h>
 #include <algorithm>
@@ -34,17 +35,13 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	// Get vulkan extensiion, needed by SDL.
 	unsigned int extension_names_count= 0;
 	if( !SDL_Vulkan_GetInstanceExtensions(system_window.GetSDLWindow(), &extension_names_count, nullptr) )
-	{
-		std::exit(-1);
-	}
+		Log::FatalError("Could not get Vulkan instance extensions");
 
 	std::vector<const char*> extensions_list;
 	extensions_list.resize(extension_names_count, nullptr);
 
 	if( !SDL_Vulkan_GetInstanceExtensions(system_window.GetSDLWindow(), &extension_names_count, extensions_list.data()) )
-	{
-		std::exit(-1);
-	}
+		Log::FatalError("Could not get Vulkan instance extensions");
 
 	if(use_debug_extensions_and_layers)
 	{
@@ -90,9 +87,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	// Create surface.
 	VkSurfaceKHR vk_tmp_surface;
 	if(!SDL_Vulkan_CreateSurface(system_window.GetSDLWindow(), *vk_instance_, &vk_tmp_surface))
-	{
-		std::exit(-1);
-	}
+		Log::FatalError("Could not create Vulkan surface");
 	vk_surface_= vk::UniqueSurfaceKHR(vk_tmp_surface, vk::ObjectDestroy<vk::Instance>(*vk_instance_));
 
 	SDL_Vulkan_GetDrawableSize(system_window.GetSDLWindow(), reinterpret_cast<int*>(&viewport_size_.width), reinterpret_cast<int*>(&viewport_size_.height));
@@ -129,9 +124,8 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	}
 
 	if(queue_family_index == ~0u)
-	{
-		std::exit(-1);
-	}
+		Log::FatalError("Could not select queue family index");
+
 	vk_queue_family_index_= queue_family_index;
 
 	const float queue_priority= 1.0f;
@@ -156,9 +150,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	//vk_device_= physical_device.createDeviceUnique(vk_device_create_info);
 	vk::Device vk_device_tmp;
 	if((physical_device.createDevice(&vk_device_create_info, nullptr, &vk_device_tmp)) != vk::Result::eSuccess)
-	{
-		std::exit(-1);
-	}
+		Log::FatalError("Could not create Vulkan device");
 	vk_device_.reset(vk_device_tmp);
 
 	vk_queue_= vk_device_->getQueue(queue_family_index, 0u);

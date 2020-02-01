@@ -1,5 +1,6 @@
-#include "Assert.hpp"
 #include "SystemWindow.hpp"
+#include "Assert.hpp"
+#include "Log.hpp"
 #include <SDL.h>
 #include <algorithm>
 #include <cstring>
@@ -118,6 +119,9 @@ SystemWindow::SystemWindow(Settings& settings, const GAPISupport gapi_support)
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 			width, height,
 			window_flags);
+
+	if(window_ == nullptr)
+		Log::FatalError("Could not create window");
 }
 
 SystemWindow::~SystemWindow()

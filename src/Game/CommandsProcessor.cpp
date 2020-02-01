@@ -1,4 +1,5 @@
 #include "CommandsProcessor.hpp"
+#include "Log.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -50,16 +51,13 @@ void CommandsProcessor::ProcessCommand(const std::string_view command_string)
 	if( settings_.HasValue(command_parsed.first))
 	{
 		if( command_parsed.second.empty() )
-		{
-			// TODO - print into log
-		}
+			Log::Info( "\"", command_parsed.first, "\" is \"", settings_.GetString(command_parsed.first), "\"");
 		else
 			settings_.SetString(command_parsed.first, command_parsed.second.front());
 	}
 	else
 	{
-		// TODO
-		//Log::Info( command_parsed.first, ": command not found" );
+		Log::Info(command_parsed.first, ": command not found");
 	}
 }
 
@@ -95,11 +93,10 @@ std::string CommandsProcessor::TryCompleteCommand(const std::string_view command
 	// Print candidates.
 	if(candidates.size() > 1u)
 	{
-		// TODO - write to log.
-		//Log::Info( ">", command );
+		Log::Info(">", command);
 		std::sort( candidates.begin(), candidates.end() );
-		//for(const std::string& candidate : candidates)
-			//Log::Info( "  ", candidate );
+		for(const std::string& candidate : candidates)
+			Log::Info("  ", candidate);
 	}
 
 	// Find common prefix for candidates.
