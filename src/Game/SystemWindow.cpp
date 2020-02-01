@@ -16,7 +16,7 @@ SystemEventTypes::KeyCode TranslateKey(const SDL_Scancode scan_code)
 {
 	using KeyCode= SystemEventTypes::KeyCode;
 
-	switch( scan_code )
+	switch(scan_code)
 	{
 	case SDL_SCANCODE_ESCAPE: return KeyCode::Escape;
 	case SDL_SCANCODE_RETURN: return KeyCode::Enter;

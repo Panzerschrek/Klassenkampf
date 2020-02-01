@@ -22,8 +22,9 @@ Host::Host()
 	, system_window_(settings_, SystemWindow::GAPISupport::Vulkan)
 	, window_vulkan_(system_window_)
 	, gpu_data_uploader_(window_vulkan_)
-	, world_renderer_(window_vulkan_, gpu_data_uploader_, GenerateWorld())
 	, text_out_(window_vulkan_, gpu_data_uploader_)
+	, console_(commands_processor_, text_out_)
+	, world_renderer_(window_vulkan_, gpu_data_uploader_, GenerateWorld())
 	, camera_controller_(CalculateAspect(window_vulkan_.GetViewportSize()))
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
@@ -38,13 +39,22 @@ bool Host::Loop()
 
 	const float dt_s= float(dt.count()) * float(Clock::duration::period::num) / float(Clock::duration::period::den);
 
-	for(const SystemEvent& system_event : system_window_.ProcessEvents())
+	const SystemEvents system_events= system_window_.ProcessEvents();
+	for(const SystemEvent& system_event : system_events)
 	{
 		if(std::get_if<SystemEventTypes::QuitEvent>(&system_event) != nullptr)
 			return true;
-	}
 
-	camera_controller_.Update(dt_s, system_window_.GetInputState());
+		if(const auto* const key_event= std::get_if<SystemEventTypes::KeyEvent>(&system_event))
+		{
+			if(key_event->pressed && key_event->key_code == SystemEventTypes::KeyCode::BackQuote)
+				console_.Toggle();
+		}
+	}
+	console_.ProcessEvents(system_events);
+
+	if(!console_.IsActive())
+		camera_controller_.Update(dt_s, system_window_.GetInputState());
 
 	ticks_counter_.Tick();
 	{
@@ -57,6 +67,8 @@ bool Host::Loop()
 		const uint8_t color[4]={ 255, 255, 255, 255 };
 		text_out_.AddText(0.0f, 0.0f, 0.25f, color, fps_str);
 	}
+
+	console_.Draw();
 
 	const auto command_buffer= window_vulkan_.BeginFrame();
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "CameraController.hpp"
 #include "CommandsProcessor.hpp"
+#include "Console.hpp"
 #include "GPUDataUploader.hpp"
 #include "Settings.hpp"
 #include "SystemWindow.hpp"
@@ -31,8 +32,9 @@ private:
 	SystemWindow system_window_;
 	WindowVulkan window_vulkan_;
 	GPUDataUploader gpu_data_uploader_;
-	WorldRenderer world_renderer_;
 	TextOut text_out_;
+	Console console_;
+	WorldRenderer world_renderer_;
 	CameraController camera_controller_;
 
 	const Clock::time_point init_time_;

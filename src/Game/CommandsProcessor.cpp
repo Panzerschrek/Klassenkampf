@@ -85,7 +85,7 @@ std::string CommandsProcessor::TryCompleteCommand(const std::string_view command
 	// Get matching settings variables.
 	const std::vector<std::string> settings_candidates=
 		settings_.GetSettingsKeysStartsWith(command);
-	candidates.insert(settings_candidates.end(), settings_candidates.begin(), settings_candidates.end());
+	candidates.insert(candidates.end(), settings_candidates.begin(), settings_candidates.end());
 
 	if( candidates.size() == 0u )
 		return command;
