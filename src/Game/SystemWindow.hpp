@@ -1,4 +1,5 @@
 #pragma once
+#include "Settings.hpp"
 #include "SystemEvent.hpp"
 #include <SDL_video.h>
 
@@ -15,7 +16,7 @@ public:
 	};
 
 public:
-	explicit SystemWindow(GAPISupport gapi_support);
+	SystemWindow(Settings& settings, GAPISupport gapi_support);
 	~SystemWindow();
 
 	SystemEvents ProcessEvents();

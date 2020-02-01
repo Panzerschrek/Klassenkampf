@@ -16,8 +16,9 @@ float CalculateAspect(const vk::Extent2D& viewport_size)
 } // namespace
 
 Host::Host()
-	: ticks_counter_(std::chrono::milliseconds(500))
-	, system_window_(SystemWindow::GAPISupport::Vulkan)
+	: settings_("kk_config.cfg")
+	, ticks_counter_(std::chrono::milliseconds(500))
+	, system_window_(settings_, SystemWindow::GAPISupport::Vulkan)
 	, window_vulkan_(system_window_)
 	, gpu_data_uploader_(window_vulkan_)
 	, world_renderer_(window_vulkan_, gpu_data_uploader_, GenerateWorld())

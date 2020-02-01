@@ -96,7 +96,7 @@ uint16_t TranslateKeyModifiers(const Uint16 modifiers)
 
 } // namespace
 
-SystemWindow::SystemWindow(const GAPISupport gapi_support)
+SystemWindow::SystemWindow(Settings& settings, const GAPISupport gapi_support)
 {
 	// TODO - check errors.
 	SDL_Init(SDL_INIT_VIDEO);
@@ -109,11 +109,14 @@ SystemWindow::SystemWindow(const GAPISupport gapi_support)
 		break;
 	};
 
+	const int width = std::max(640, std::min(int(settings.GetOrSetInt("r_window_width" , 800)), 4096));
+	const int height= std::max(480, std::min(int(settings.GetOrSetInt("r_window_height", 600)), 4096));
+
 	window_=
 		SDL_CreateWindow(
 			"Klassenkampf",
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-			800, 600,
+			width, height,
 			window_flags);
 }
 

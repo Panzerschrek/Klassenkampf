@@ -1,6 +1,7 @@
 #pragma once
 #include "CameraController.hpp"
 #include "GPUDataUploader.hpp"
+#include "Settings.hpp"
 #include "SystemWindow.hpp"
 #include "TextOut.hpp"
 #include "TicksCounter.hpp"
@@ -23,6 +24,7 @@ public:
 private:
 	using Clock= std::chrono::steady_clock;
 
+	Settings settings_;
 	TicksCounter ticks_counter_;
 	SystemWindow system_window_;
 	WindowVulkan window_vulkan_;
