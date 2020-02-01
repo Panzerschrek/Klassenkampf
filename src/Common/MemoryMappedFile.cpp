@@ -115,4 +115,4 @@ MemoryMappedFile::~MemoryMappedFile()
 #endif
 }
 
-} // namespace PanzerMaps
+} // namespace KK
