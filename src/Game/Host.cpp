@@ -17,6 +17,7 @@ float CalculateAspect(const vk::Extent2D& viewport_size)
 
 Host::Host()
 	: settings_("kk_config.cfg")
+	, commands_processor_(settings_)
 	, ticks_counter_(std::chrono::milliseconds(500))
 	, system_window_(settings_, SystemWindow::GAPISupport::Vulkan)
 	, window_vulkan_(system_window_)

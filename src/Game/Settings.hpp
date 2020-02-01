@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 
 namespace KK
@@ -22,6 +23,12 @@ public:
 	std::string_view GetOrSetString(std::string_view key, std::string_view default_value= "");
 	IntType GetOrSetInt(std::string_view key, IntType default_value= 0);
 	RealType GetOrSetReal(std::string_view key, RealType default_value= 0.0);
+
+	void SetString(std::string_view key, std::string_view value);
+
+	bool HasValue(std::string_view key);
+
+	std::vector<std::string> GetSettingsKeysStartsWith(std::string_view key_start) const;
 
 private:
 	const std::string file_name_;

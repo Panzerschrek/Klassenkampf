@@ -230,4 +230,29 @@ Settings::RealType Settings::GetOrSetReal(const std::string_view key, const Real
 	}
 }
 
+void Settings::SetString(const std::string_view key, const std::string_view value)
+{
+	temp_key_= key;
+	values_map_[temp_key_]= value;
+}
+
+bool Settings::HasValue(const std::string_view key)
+{
+	temp_key_= key;
+	return values_map_.count(temp_key_) != 0;
+}
+
+std::vector<std::string> Settings::GetSettingsKeysStartsWith(const std::string_view key_start) const
+{
+	std::vector<std::string> result;
+	for(const auto& map_value : values_map_)
+	{
+		if(map_value.first.size() >= key_start.size() &&
+			std::string_view(map_value.first.data(), key_start.size()) == key_start)
+			result.push_back(map_value.first);
+	}
+
+	return result;
+}
+
 } // namespace KK
