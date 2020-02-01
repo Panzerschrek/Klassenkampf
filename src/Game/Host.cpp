@@ -73,7 +73,13 @@ bool Host::Loop()
 		fps_str[5]= freq_i >=  10 ? char('0' + freq_i /  10 % 10) : ' ';
 		fps_str[6]= char('0' + freq_i /   1 % 10);
 		const uint8_t color[4]={ 255, 255, 255, 255 };
-		text_out_.AddText(0.0f, 0.0f, 0.25f, color, fps_str);
+		const float scale= 0.25f;
+		text_out_.AddText(
+			text_out_.GetMaxColumns() / scale - float(sizeof(fps_str)),
+			0.0f,
+			scale,
+			color,
+			fps_str);
 	}
 
 	console_.Draw();

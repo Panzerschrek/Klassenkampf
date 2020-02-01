@@ -21,6 +21,8 @@ public:
 		GPUDataUploader& gpu_data_uploader);
 	~TextOut();
 
+	// Returns max columns and rows for font with size= 1
+	float GetMaxColumns() const;
 	float GetMaxRows() const;
 
 	void AddText(

@@ -498,6 +498,11 @@ TextOut::~TextOut()
 	vk_device_.waitIdle();
 }
 
+float TextOut::GetMaxColumns() const
+{
+	return float(viewport_size_.width ) / float(glyph_size_[0]);
+}
+
 float TextOut::GetMaxRows() const
 {
 	return float(viewport_size_.height) / float(glyph_size_[1]);
