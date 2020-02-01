@@ -57,7 +57,7 @@ private:
 	std::list<std::string> lines_;
 	size_t lines_position_= 0u;
 
-	// TODO - Maybe use raw array or std::array, instead std::string.
+	// TODO - Maybe use raw array or std::array, instead std::string?
 	std::string history_[ c_max_history ];
 	size_t history_size_= 0u;
 	size_t next_history_line_index_= 0u;

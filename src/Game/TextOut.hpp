@@ -21,6 +21,8 @@ public:
 		GPUDataUploader& gpu_data_uploader);
 	~TextOut();
 
+	float GetMaxRows() const;
+
 	void AddText(
 		float column,
 		float row,

@@ -151,38 +151,33 @@ void Console::Draw()
 
 	const float scale= 1.0f / 3.0f;
 	const float offset= 0.0f;
-	const uint8_t color[4]{ 255, 255, 255, 128 };
+	const uint8_t color[4]{ 255, 255, 240, 255 };
 
-	float y= 16.0f * position_;
+	float y= text_out_.GetMaxRows() / scale * 0.5f * position_;
 
-	//const bool draw_cursor= (int(current_time.ToSeconds() * 3.0f) & 1u) != 0u;
-	const bool draw_cursor= false;
+	const int cursor_period_ms= 500;
+	const bool draw_cursor= std::chrono::duration_cast<std::chrono::milliseconds>(current_time - Time()).count() % cursor_period_ms < cursor_period_ms / 2;
 
 	char line_with_cursor[ c_max_input_line_length + 3u ];
-	std::snprintf(line_with_cursor, sizeof(line_with_cursor), draw_cursor ? ">%s_" : ">%s", input_line_);
+	std::snprintf(line_with_cursor, sizeof(line_with_cursor), draw_cursor ? "> %s_" : "> %s", input_line_);
 
 	text_out_.AddText(offset, y, scale, color, line_with_cursor);
-	y-= 1.0f;
+	y-= 1.5f;
 
 	if(lines_position_ > 0u)
 	{
 		const char* const str=
 		"  ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^    ^  ";
-
 		text_out_.AddText(offset, y, scale, color, str);
 		y-= 1.0f;
-
 	}
 
-	auto it= lines_.rbegin();
-	it= std::next(it, std::min(lines_position_, lines_.size()));
-	for(; it != lines_.rend(); ++it)
+	for(
+		auto it= std::next(lines_.rbegin(), std::min(lines_position_, lines_.size()));
+		it != lines_.rend() && y > -1.0f;
+		++it, y-= 1.0f)
 	{
-		if(y < -1.0f)
-			break;
-
 		text_out_.AddText(offset, y, scale, color, *it);
-		y-= 1.0f;
 	}
 }
 
@@ -199,18 +194,12 @@ void Console::RemoveOldUserMessages(const Time current_time)
 void Console::DrawUserMessages()
 {
 	const float scale= 1.0f;
-	const uint8_t color[4]{ 255, 255, 255, 128 };
+	const uint8_t color[4]{ 240, 240, 255, 255 };
 
 	float y= 0.0f;
 	for(const UserMessage& message : user_messages_)
 	{
-		text_out_.AddText(
-			0.0f,
-			y,
-			scale,
-			color,
-			message.text);
-
+		text_out_.AddText(0.0f, y, scale, color, message.text);
 		y+= 1.0f;
 	}
 }
