@@ -14,7 +14,7 @@ public:
 	using DrawFunctions= std::vector<DrawFunction>;
 
 public:
-	explicit WindowVulkan(const SystemWindow& system_window);
+	WindowVulkan(const SystemWindow& system_window, Settings& settings);
 	~WindowVulkan();
 
 	vk::CommandBuffer BeginFrame();

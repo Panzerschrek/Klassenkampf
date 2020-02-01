@@ -30,7 +30,9 @@ std::string VulkanVersionToString(const uint32_t version)
 
 } // namespace
 
-WindowVulkan::WindowVulkan(const SystemWindow& system_window)
+WindowVulkan::WindowVulkan(
+	const SystemWindow& system_window,
+	Settings& settings)
 {
 	#ifdef DEBUG
 	const bool use_debug_extensions_and_layers= true;
@@ -38,7 +40,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	const bool use_debug_extensions_and_layers= true;
 	#endif
 
-	const bool vsync= true; // TODO - read from settings.
+	const bool vsync= settings.GetOrSetInt("r_vsync", 1) != 0;
 
 	// Get vulkan extensiion, needed by SDL.
 	unsigned int extension_names_count= 0;
