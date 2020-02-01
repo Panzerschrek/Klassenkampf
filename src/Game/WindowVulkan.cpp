@@ -20,6 +20,14 @@ vk::PhysicalDeviceFeatures GetRequiredDeviceFeatures()
 	return features;
 }
 
+std::string VulkanVersionToString(const uint32_t version)
+{
+	return
+		std::to_string(version >> 22u) + "." +
+		std::to_string((version >> 12u) & ((1u << 10u) - 1u)) + "." +
+		std::to_string(version & ((1u << 12u) - 1u));
+}
+
 } // namespace
 
 WindowVulkan::WindowVulkan(const SystemWindow& system_window)
@@ -83,6 +91,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	}
 
 	vk_instance_= vk::createInstanceUnique(vk_instance_create_info);
+	Log::Info("Vulkan instance created");
 
 	// Create surface.
 	VkSurfaceKHR vk_tmp_surface;
@@ -106,6 +115,19 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 				break;
 			}
 		}
+	}
+
+	{
+		const vk::PhysicalDeviceProperties properties= physical_device.getProperties();
+		Log::Info("");
+		Log::Info("Vulkan physical device selected");
+		Log::Info("API version: ", VulkanVersionToString(properties.apiVersion));
+		Log::Info("Driver version: ", VulkanVersionToString(properties.driverVersion));
+		Log::Info("Vendor ID: ", properties.vendorID);
+		Log::Info("Device ID: ", properties.deviceID);
+		Log::Info("Device type: ", vk::to_string(properties.deviceType));
+		Log::Info("Device name: ", properties.deviceName);
+		Log::Info("");
 	}
 
 	// Select queue family.
@@ -152,6 +174,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 	if((physical_device.createDevice(&vk_device_create_info, nullptr, &vk_device_tmp)) != vk::Result::eSuccess)
 		Log::FatalError("Could not create Vulkan device");
 	vk_device_.reset(vk_device_tmp);
+	Log::Info("Vulkan logical device created");
 
 	vk_queue_= vk_device_->getQueue(queue_family_index, 0u);
 
@@ -166,6 +189,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 			break;
 		}
 	}
+	Log::Info("Swapchan surface format: ", vk::to_string(surface_format.format), " ", vk::to_string(surface_format.colorSpace));
 
 	// Select present mode. Prefer usage of tripple buffering, than double buffering.
 	const std::vector<vk::PresentModeKHR> present_modes= physical_device.getSurfacePresentModesKHR(*vk_surface_);
@@ -180,6 +204,7 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 		if(std::find(present_modes.begin(), present_modes.end(), vk::PresentModeKHR::eMailbox) != present_modes.end())
 			present_mode= vk::PresentModeKHR::eMailbox;
 	}
+	Log::Info("Present mode: ", vk::to_string(present_mode));
 
 	const vk::SurfaceCapabilitiesKHR surface_capabilities= physical_device.getSurfaceCapabilitiesKHR(*vk_surface_);
 
@@ -281,6 +306,8 @@ WindowVulkan::WindowVulkan(const SystemWindow& system_window)
 
 WindowVulkan::~WindowVulkan()
 {
+	Log::Info("Vulkan deinitialization");
+
 	// Sync before destruction.
 	vk_device_->waitIdle();
 }

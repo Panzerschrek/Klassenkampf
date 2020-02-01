@@ -122,10 +122,13 @@ SystemWindow::SystemWindow(Settings& settings, const GAPISupport gapi_support)
 
 	if(window_ == nullptr)
 		Log::FatalError("Could not create window");
+
+	Log::Info("Window created with size ", width, "x", height);
 }
 
 SystemWindow::~SystemWindow()
 {
+	Log::Info("Destroying system window");
 	SDL_DestroyWindow(window_);
 }
 
