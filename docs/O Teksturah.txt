@@ -1,0 +1,12 @@
+Dlä približönnogo fiziceski-korrektnogo teksturirovanija neobhodim räd tekstur. Planirujetsä, cto každyj material budet imetj odnu ili neskoljko takih tekstur.
+Takže dlä materiala možno vmesto tekstury ukazatj odnu konstantu, v takom slucaje renderer sozdast malenjkuju teksturu-zaglužku so znacenijem etoj konstanty.
+Tekstury planirujetsä hranitj v videopamäti v sžatom vide, ctoby sokratitj potrebläjemyj objom pamäti i jejo propusknuju sposobnostj.
+
+Planirujutsä sledujuscije tekstury:
+*) Aljbedo. Hranitsä v formate "VK_FORMAT_BC1_RGB_UNORM_BLOCK". 3 komponenta, 4 bita na tekselj.
+*) Alibedo s aljfa-kanalom. Ispoljzujetsä dlä tekstur s aljfa-testom. Hranitsä v formate "VK_FORMAT_BC3_UNORM_BLOCK". 4 komponenta, 8 bit na tekselj.
+*) Svecenije. Hranitsä v formate "VK_FORMAT_BC1_RGB_UNORM_BLOCK". 3 komponenta, 4 bita na tekselj. Dopolniteljno v šejder peredajotsä konstanta-masštab svecenija.
+*) Karta normalej. Hranitsä v formate "VK_FORMAT_BC5_UNORM_BLOCK". 2 komponenta, 8 bit na tekselj.
+*) Karta metallicnosti i šerohovatosti. Hranitsä v formate "VK_FORMAT_BC5_UNORM_BLOCK". 2 komponenta, 8 bit na tekselj.
+
+Itogo, v samom täžölom slucaje, kogda ispoljzujutsä polnoçennyje tekstury, na tekselj budet prihoditjsä 8 + 4 + 8 + 8 = 28 bit. Eto menjše, cem odno toljko aljbedo s aljfa-kanalom dlä nesžatyh tekstur.
