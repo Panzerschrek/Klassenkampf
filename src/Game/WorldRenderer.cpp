@@ -435,12 +435,30 @@ WorldRenderer::WorldRenderer(
 		gpu_data_uploader_.Flush();
 	}
 
-	segment_model_= LoadSegmentModel("sponza.kks");
+	const char* const segment_models_names[]=
+	{
+		"corridor_segment",
+		"floor_segment",
+		"shaft_segment",
+		"floor_wall_join",
+		"wall_segment",
+	};
+
+	size_t material_count= 0u;
+	for(const char* const segment_model_name : segment_models_names)
+	{
+		const std::string file_path= std::string("segment_models/") + segment_model_name + ".kks";
+		if(std::optional<SegmentModel> model= LoadSegmentModel(file_path.c_str()))
+		{
+			material_count+= model->materials.size();
+			segment_models_.push_back(std::move(*model));
+		}
+	}
 
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_size(
 		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(1u + segment_model_.materials.size()));
+		uint32_t(1u + material_count));
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
@@ -477,37 +495,40 @@ WorldRenderer::WorldRenderer(
 			0u, nullptr);
 	}
 
-	for(SegmentModel::Material& material : segment_model_.materials)
+	for(SegmentModel& model : segment_models_)
 	{
-		if(!material.image_view)
-			continue;
+		for(SegmentModel::Material& material : model.materials)
+		{
+			if(!material.image_view)
+				continue;
 
-		// Create descriptor set.
-		material.descriptor_set=
-			std::move(
-			vk_device_.allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(
-					*vk_descriptor_pool_,
-					1u, &*vk_decriptor_set_layout_)).front());
+			// Create descriptor set.
+			material.descriptor_set=
+				std::move(
+				vk_device_.allocateDescriptorSetsUnique(
+					vk::DescriptorSetAllocateInfo(
+						*vk_descriptor_pool_,
+						1u, &*vk_decriptor_set_layout_)).front());
 
-		// Write descriptor set.
-		const vk::DescriptorImageInfo descriptor_image_info(
-			vk::Sampler(),
-			*material.image_view,
-			vk::ImageLayout::eShaderReadOnlyOptimal);
+			// Write descriptor set.
+			const vk::DescriptorImageInfo descriptor_image_info(
+				vk::Sampler(),
+				*material.image_view,
+				vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*material.descriptor_set,
-			g_tex_uniform_binding,
-			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
-		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
-			0u, nullptr);
+			const vk::WriteDescriptorSet write_descriptor_set(
+				*material.descriptor_set,
+				g_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr);
+			vk_device_.updateDescriptorSets(
+				1u, &write_descriptor_set,
+				0u, nullptr);
+		}
 	}
 }
 
@@ -523,17 +544,17 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 		command_buffer,
 		[&]
 		{
-			command_buffer.pushConstants(
-				*vk_pipeline_layout_,
-				vk::ShaderStageFlagBits::eVertex,
-				0,
-				sizeof(view_matrix),
-				&view_matrix);
-
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
 
 			if(false)
 			{
+				command_buffer.pushConstants(
+					*vk_pipeline_layout_,
+					vk::ShaderStageFlagBits::eVertex,
+					0,
+					sizeof(view_matrix),
+					&view_matrix);
+
 				command_buffer.bindDescriptorSets(
 					vk::PipelineBindPoint::eGraphics,
 					*vk_pipeline_layout_,
@@ -547,15 +568,27 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 
 				command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
 			}
-			if(!segment_model_.triangle_groups.empty())
+			for(const SegmentModel& segment_model : segment_models_)
 			{
-				const vk::DeviceSize offsets= 0u;
-				command_buffer.bindVertexBuffers(0u, 1u, &*segment_model_.vertex_buffer, &offsets);
-				command_buffer.bindIndexBuffer(*segment_model_.index_buffer, 0u, vk::IndexType::eUint16);
 
-				for(const SegmentModel::TriangleGroup& triangle_group : segment_model_.triangle_groups)
+				m_Mat4 translate_matrix, segment_matrix;
+				translate_matrix.Translate(m_Vec3(float(&segment_model - segment_models_.data()), 0.0f, 0.0f));
+				segment_matrix= translate_matrix * view_matrix;
+
+				command_buffer.pushConstants(
+					*vk_pipeline_layout_,
+					vk::ShaderStageFlagBits::eVertex,
+					0,
+					sizeof(segment_matrix),
+					&segment_matrix);
+
+				const vk::DeviceSize offsets= 0u;
+				command_buffer.bindVertexBuffers(0u, 1u, &*segment_model.vertex_buffer, &offsets);
+				command_buffer.bindIndexBuffer(*segment_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+				for(const SegmentModel::TriangleGroup& triangle_group : segment_model.triangle_groups)
 				{
-					const SegmentModel::Material& material= segment_model_.materials[triangle_group.material_index];
+					const SegmentModel::Material& material= segment_model.materials[triangle_group.material_index];
 
 					const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *vk_descriptor_set_;
 					command_buffer.bindDescriptorSets(
@@ -576,10 +609,11 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 	tonemapper_.EndFrame(command_buffer);
 }
 
-WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const file_name)
+std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const char* const file_name)
 {
 	const MemoryMappedFilePtr file_mapped= MemoryMappedFile::Create(file_name);
-	KK_ASSERT(file_mapped != nullptr);
+	if(file_mapped == nullptr)
+		return std::nullopt;
 
 	const char* const file_data= static_cast<const char*>(file_mapped->Data());
 	const auto& header= *reinterpret_cast<const SegmentModelFormat::SegmentModelHeader*>(file_data);
@@ -787,8 +821,6 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
-
-	const float c_scale= 1.0f / 16.0f;
 	// Fill vertex buffer.
 	// TODO - do not use temporary vector, write to mapped GPU memory instead.
 	std::vector<WorldVertex> out_vertices(header.vertex_count);
@@ -798,7 +830,7 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 		WorldVertex& out_v= out_vertices[i];
 
 		for(size_t j= 0; j < 3u; ++j)
-			out_v.pos[j]= c_scale * (header.shift[j] + header.scale[j] * float(in_v.pos[j]));
+			out_v.pos[j]= header.shift[j] + header.scale[j] * float(in_v.pos[j]);
 
 		std::memcpy(out_v.normal, in_v.normal, 3u);
 
@@ -869,7 +901,7 @@ WorldRenderer::SegmentModel WorldRenderer::LoadSegmentModel(const char* const fi
 	}
 
 	gpu_data_uploader_.Flush();
-	return result;
+	return std::move(result);
 }
 
 } // namespace KK

@@ -54,7 +54,7 @@ private:
 	};
 
 private:
-	SegmentModel LoadSegmentModel(const char* const file_name);
+	std::optional<SegmentModel> LoadSegmentModel(const char* const file_name);
 
 private:
 	GPUDataUploader& gpu_data_uploader_;
@@ -86,7 +86,7 @@ private:
 	vk::UniqueImageView vk_image_view_;
 	vk::UniqueSampler vk_image_sampler_;
 
-	SegmentModel segment_model_;
+	std::vector<SegmentModel> segment_models_;
 };
 
 } // namespace KK
