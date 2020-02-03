@@ -1,6 +1,7 @@
 #include "Settings.hpp"
 #include "../Common/MemoryMappedFile.hpp"
 #include <cstring>
+#include <optional>
 
 
 namespace KK

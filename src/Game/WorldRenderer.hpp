@@ -4,6 +4,7 @@
 #include "Tonemapper.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
+#include <optional>
 
 
 namespace KK

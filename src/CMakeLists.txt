@@ -10,7 +10,9 @@ set(CMAKE_CXX_EXTENSIONS Off)
 # Setup compiler options.
 if(MSVC)
 	add_compile_options(/utf-8 /W3 /WX)
-	add_definitions(-DNOMINMAX)
+	add_definitions(
+		-DNOMINMAX
+		-D_CRT_SECURE_NO_WARNINGS)
 else()
 	add_compile_options(-Werror -Wall -Wextra -Wconversion)
 endif()
