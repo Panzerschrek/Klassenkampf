@@ -149,7 +149,15 @@ void Console::Draw()
 		return;
 	}
 
-	const float scale= 1.0f / 3.0f;
+	const float max_rows= text_out_.GetMaxRows();
+	float scale;
+	if(max_rows < 12.0f)
+		scale= 1.0f / 4.0f;
+	else if(max_rows < 18.0f)
+		scale= 1.0f / 3.0f;
+	else
+		scale= 1.0f / 2.0f;
+
 	const float offset= 0.0f;
 	const uint8_t color[4]{ 255, 255, 240, 255 };
 
