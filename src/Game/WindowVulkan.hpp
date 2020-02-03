@@ -47,6 +47,7 @@ private:
 private:
 	// Keep here order of construction.
 	vk::UniqueInstance vk_instance_;
+	VkDebugReportCallbackEXT vk_debug_report_callback_= VK_NULL_HANDLE;
 	vk::UniqueSurfaceKHR vk_surface_;
 	vk::UniqueDevice vk_device_;
 	vk::Queue vk_queue_= nullptr;

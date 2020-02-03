@@ -28,6 +28,30 @@ std::string VulkanVersionToString(const uint32_t version)
 		std::to_string(version & ((1u << 12u) - 1u));
 }
 
+VkBool32 VulkanDebugReportCallback(
+	VkDebugReportFlagsEXT flags,
+	VkDebugReportObjectTypeEXT object_type,
+	uint64_t  object,
+	size_t location,
+	int32_t message_code,
+	const char* const layer_prefix,
+	const char* const message,
+	void* user_data)
+{
+	(void)flags;
+	(void)location;
+	(void)message_code;
+	(void)layer_prefix;
+	(void)user_data;
+
+	Log::Warning(
+		message, "\n",
+		" object= ", object,
+		" type= ", vk::to_string(vk::DebugReportObjectTypeEXT(object_type)));
+
+	return VK_FALSE;
+}
+
 } // namespace
 
 WindowVulkan::WindowVulkan(
@@ -94,6 +118,25 @@ WindowVulkan::WindowVulkan(
 
 	vk_instance_= vk::createInstanceUnique(vk_instance_create_info);
 	Log::Info("Vulkan instance created");
+
+	if(use_debug_extensions_and_layers)
+	{
+		if(const auto vkCreateDebugReportCallbackEXT=
+			PFN_vkCreateDebugReportCallbackEXT(vk_instance_->getProcAddr("vkCreateDebugReportCallbackEXT")))
+		{
+			const vk::DebugReportCallbackCreateInfoEXT debug_report_callback_create_info(
+				vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::eError,
+				VulkanDebugReportCallback);
+
+			vkCreateDebugReportCallbackEXT(
+				*vk_instance_,
+				&static_cast<const VkDebugReportCallbackCreateInfoEXT&>(debug_report_callback_create_info),
+				nullptr,
+				&vk_debug_report_callback_);
+			if(vk_debug_report_callback_ != VK_NULL_HANDLE)
+				Log::Info("Vulkan debug callback installed");
+		}
+	}
 
 	// Create surface.
 	VkSurfaceKHR vk_tmp_surface;
@@ -313,6 +356,13 @@ WindowVulkan::~WindowVulkan()
 
 	// Sync before destruction.
 	vk_device_->waitIdle();
+
+	if(vk_debug_report_callback_ != VK_NULL_HANDLE)
+	{
+		if(const auto vkDestroyDebugReportCallbackEXT=
+			PFN_vkDestroyDebugReportCallbackEXT(vk_instance_->getProcAddr("vkDestroyDebugReportCallbackEXT")))
+			vkDestroyDebugReportCallbackEXT(*vk_instance_, vk_debug_report_callback_, nullptr);
+	}
 }
 
 vk::CommandBuffer WindowVulkan::BeginFrame()
