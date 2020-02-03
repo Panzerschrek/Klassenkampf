@@ -185,7 +185,8 @@ WindowVulkan::WindowVulkan(
 	vk::SurfaceFormatKHR surface_format= surface_formats.back();
 	for(const vk::SurfaceFormatKHR& surface_format_variant : surface_formats)
 	{
-		if(surface_format_variant.format == vk::Format::eR8G8B8A8Unorm)
+		if( surface_format_variant.format == vk::Format::eR8G8B8A8Unorm ||
+			surface_format_variant.format == vk::Format::eB8G8R8A8Unorm)
 		{
 			surface_format= surface_format_variant;
 			break;
