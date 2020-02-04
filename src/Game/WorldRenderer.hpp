@@ -87,6 +87,9 @@ private:
 	vk::UniqueImageView vk_image_view_;
 	vk::UniqueSampler vk_image_sampler_;
 
+	vk::UniqueBuffer vk_uniform_buffer_;
+	vk::UniqueDeviceMemory vk_uniform_buffer_memory_;
+
 	std::vector<SegmentModel> segment_models_;
 };
 

@@ -28,7 +28,22 @@ struct WorldVertex
 	int8_t normal[3];
 };
 
+struct Uniforms
+{
+	m_Mat4 mat;
+	uint8_t padding[192u];
+};
+static_assert(sizeof(Uniforms) == 256u, "Invalid size");
+
+struct PushConstants
+{
+	m_Vec3 sun_vector;
+};
+static_assert(sizeof(PushConstants) <= 128u, "Push constants too big!");
+
 const uint32_t g_tex_uniform_binding= 0u;
+const uint32_t g_uniform_buffer_binding= 1u;
+const size_t g_max_uniform_sets= 128u;
 
 const float g_box_vertices[][3]
 {
@@ -109,6 +124,13 @@ WorldRenderer::WorldRenderer(
 			vk::ShaderStageFlagBits::eFragment,
 			&*vk_image_sampler_,
 		},
+		{
+			g_uniform_buffer_binding,
+			vk::DescriptorType::eUniformBufferDynamic,
+			1u,
+			vk::ShaderStageFlagBits::eVertex,
+			nullptr,
+		},
 	};
 
 	vk_decriptor_set_layout_=
@@ -118,18 +140,16 @@ WorldRenderer::WorldRenderer(
 				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
 	const vk::PushConstantRange vk_push_constant_range(
-		vk::ShaderStageFlagBits::eVertex,
+		vk::ShaderStageFlagBits::eFragment,
 		0u,
-		sizeof(m_Mat4));
+		sizeof(PushConstants));
 
 	vk_pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
-				1u,
-				&*vk_decriptor_set_layout_,
-				1u,
-				&vk_push_constant_range));
+				1u, &*vk_decriptor_set_layout_,
+				1u, &vk_push_constant_range));
 
 	// Create pipeline.
 	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
@@ -435,6 +455,29 @@ WorldRenderer::WorldRenderer(
 		gpu_data_uploader_.Flush();
 	}
 
+	// Create uniform buffer
+	{
+		vk_uniform_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					g_max_uniform_sets * sizeof(Uniforms),
+					vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_uniform_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vk_uniform_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*vk_uniform_buffer_, *vk_uniform_buffer_memory_, 0u);
+	}
+
 	const char* const segment_models_names[]=
 	{
 		"corridor_segment",
@@ -456,15 +499,24 @@ WorldRenderer::WorldRenderer(
 	}
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(
-		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(1u + material_count));
+	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
+	{
+		{
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(1u + material_count)
+		},
+		{
+			vk::DescriptorType::eUniformBufferDynamic,
+			uint32_t(1u + material_count)
+		},
+	};
+
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
-				1u, &vk_descriptor_pool_size));
+				uint32_t(1u + material_count), // max sets.
+				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
 	{
 		// Create descriptor set.
@@ -481,17 +533,36 @@ WorldRenderer::WorldRenderer(
 			*vk_image_view_,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*vk_descriptor_set_,
-			g_tex_uniform_binding,
+		const vk::DescriptorBufferInfo descriptor_uniform_buffer_info(
+			*vk_uniform_buffer_,
 			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
+			sizeof(Uniforms));
+
+		const vk::WriteDescriptorSet write_descriptor_set[]
+		{
+			{
+				*vk_descriptor_set_,
+				g_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*vk_descriptor_set_,
+				g_uniform_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eUniformBufferDynamic,
+				nullptr,
+				&descriptor_uniform_buffer_info,
+				nullptr
+			},
+		};
 		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
+			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
 			0u, nullptr);
 	}
 
@@ -516,17 +587,36 @@ WorldRenderer::WorldRenderer(
 				*material.image_view,
 				vk::ImageLayout::eShaderReadOnlyOptimal);
 
-			const vk::WriteDescriptorSet write_descriptor_set(
-				*material.descriptor_set,
-				g_tex_uniform_binding,
+			const vk::DescriptorBufferInfo descriptor_uniform_buffer_info(
+				*vk_uniform_buffer_,
 				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_image_info,
-				nullptr,
-				nullptr);
+				sizeof(Uniforms));
+
+			const vk::WriteDescriptorSet write_descriptor_set[]
+			{
+				{
+					*material.descriptor_set,
+					g_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_image_info,
+					nullptr,
+					nullptr
+				},
+				{
+					*material.descriptor_set,
+					g_uniform_buffer_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eUniformBufferDynamic,
+					nullptr,
+					&descriptor_uniform_buffer_info,
+					nullptr
+				},
+			};
 			vk_device_.updateDescriptorSets(
-				1u, &write_descriptor_set,
+				uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
 				0u, nullptr);
 		}
 	}
@@ -540,20 +630,40 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
 {
+	std::vector<Uniforms> uniforms;
+	uniforms.reserve(segment_models_.size());
+	for(const SegmentModel& segment_model : segment_models_)
+	{
+		m_Mat4 translate_matrix, segment_matrix;
+		translate_matrix.Translate(m_Vec3(float(&segment_model - segment_models_.data()), 0.0f, 0.0f));
+		segment_matrix= translate_matrix * view_matrix;
+
+		Uniforms u;
+		u.mat= segment_matrix;
+		uniforms.push_back(u);
+	}
+
+	command_buffer.updateBuffer(*vk_uniform_buffer_, 0u, sizeof(Uniforms) * uniforms.size(), uniforms.data());
+
 	tonemapper_.DoRenderPass(
 		command_buffer,
 		[&]
 		{
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
 
+			PushConstants push_constants;
+			push_constants.sun_vector= m_Vec3(0.5f, 0.2f, 0.7f);
+			push_constants.sun_vector/= push_constants.sun_vector.GetLength();
+
+			command_buffer.pushConstants(
+				*vk_pipeline_layout_,
+				vk::ShaderStageFlagBits::eFragment,
+				0,
+				sizeof(PushConstants),
+				&push_constants);
+
 			if(false)
 			{
-				command_buffer.pushConstants(
-					*vk_pipeline_layout_,
-					vk::ShaderStageFlagBits::eVertex,
-					0,
-					sizeof(view_matrix),
-					&view_matrix);
 
 				command_buffer.bindDescriptorSets(
 					vk::PipelineBindPoint::eGraphics,
@@ -570,18 +680,6 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 			}
 			for(const SegmentModel& segment_model : segment_models_)
 			{
-
-				m_Mat4 translate_matrix, segment_matrix;
-				translate_matrix.Translate(m_Vec3(float(&segment_model - segment_models_.data()), 0.0f, 0.0f));
-				segment_matrix= translate_matrix * view_matrix;
-
-				command_buffer.pushConstants(
-					*vk_pipeline_layout_,
-					vk::ShaderStageFlagBits::eVertex,
-					0,
-					sizeof(segment_matrix),
-					&segment_matrix);
-
 				const vk::DeviceSize offsets= 0u;
 				command_buffer.bindVertexBuffers(0u, 1u, &*segment_model.vertex_buffer, &offsets);
 				command_buffer.bindIndexBuffer(*segment_model.index_buffer, 0u, vk::IndexType::eUint16);
@@ -590,13 +688,15 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 				{
 					const SegmentModel::Material& material= segment_model.materials[triangle_group.material_index];
 
+					const uint32_t dynamic_offset= uint32_t((&segment_model - segment_models_.data()) * sizeof(Uniforms));
+
 					const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *vk_descriptor_set_;
 					command_buffer.bindDescriptorSets(
 						vk::PipelineBindPoint::eGraphics,
 						*vk_pipeline_layout_,
 						0u,
 						1u, &desctipor_set,
-						0u, nullptr);
+						1u, &dynamic_offset);
 
 					command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 				}

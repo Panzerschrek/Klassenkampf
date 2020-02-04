@@ -1,8 +1,8 @@
 #version 450
 
-layout(push_constant) uniform uniforms_block
+layout(binding= 1) uniform uniform_block
 {
-	mat4 mat;
+	mat4 other_mat;
 };
 
 layout(location=0) in vec3 pos;
@@ -16,5 +16,5 @@ void main()
 {
 	f_normal= normal;
 	f_tex_coord= tex_coord;
-	gl_Position= mat * vec4(pos, 1.0);
+	gl_Position= other_mat * vec4(pos, 1.0);
 }
