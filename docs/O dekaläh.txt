@@ -1,0 +1,9 @@
+Dekali možno nakladyvatj na sçenu v processe renderinga, ispoljzuja mehanizmy klasternogo renderinga.
+
+V každyj klaster, zatragivajemyj dekalem, zapisyvajetsä matriça preobrazovanija 4x4 iz mirovogo prostranstva v prostranstvo dekalä.
+Takže zapisyvajetsä smescenije i masštab v atlase dekalej. Vozmožno, masštab i smescenije budut raznymi dlä raznyh kart (aljbedo, normalj, metallicnostj i t. d.).
+V pikseljnom šejdere proizvoditsä preobrazovanije mirovyh koordinat pikselä v koordinaty dekalä. Jesli koordinaty vyšli za kub [-1;1], to dekalj ne nakladyvajetsä.
+Jesli dekalj nakladyvajetsä, proishodät vyborki iz tekstur, proishodit smešivanije so znacenijami iz osnovnyh tekstur po aljfe. Pri etom dlä každoko kanala možet bytj ispoljzovana svoja aljfa.
+
+Porädok naloženija dekalej možno zadavatj cerez porädok ih zapisi v klastery.
+Vo vremä podgotovki kadra možno otbrasyvatj dalökije i nizkoprioritetnyje dekali, ctoby ulucšitj proizvoditeljnostj.
