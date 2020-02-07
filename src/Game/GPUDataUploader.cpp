@@ -69,8 +69,10 @@ GPUDataUploader::~GPUDataUploader()
 	vk_device_.waitIdle();
 }
 
-GPUDataUploader::RequestResult GPUDataUploader::RequestMemory(const size_t size)
+GPUDataUploader::RequestResult GPUDataUploader::RequestMemory(size_t size)
 {
+	size= (size + 15u) & ~15u; // Save alignment.
+
 	KK_ASSERT(size <= buffer_data_size_);
 	if(current_data_buffer_offset_ + size > buffer_data_size_)
 	{

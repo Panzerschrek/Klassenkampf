@@ -674,7 +674,7 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 
 			for(size_t i= 0u; i < mip_levels.size(); ++i)
 			{
-				const size_t mip_data_size= mip_levels[i].size[0] * mip_levels[i].size[1];
+				const size_t mip_data_size= mip_levels[i].size_rounded[0] * mip_levels[i].size_rounded[1];
 
 				const GPUDataUploader::RequestResult staging_buffer=
 					gpu_data_uploader_.RequestMemory(mip_data_size);
@@ -702,7 +702,8 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 
 				const vk::BufferImageCopy copy_region(
 					staging_buffer.buffer_offset,
-					mip_levels[i].size[0], mip_levels[i].size[1],
+					mip_levels[i].size_rounded[0],
+					mip_levels[i].size_rounded[1],
 					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, uint32_t(i), 0u, 1u),
 					vk::Offset3D(0, 0, 0),
 					vk::Extent3D(mip_levels[i].size[0], mip_levels[i].size[1], 1u));

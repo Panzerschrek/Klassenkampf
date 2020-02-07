@@ -14,6 +14,7 @@ public:
 	{
 		const void* data= nullptr;
 		uint32_t size[2]{0, 0};
+		uint32_t size_rounded[2]{0, 0};
 	};
 
 	static std::optional<DDSImage> Load(const char* file_name);

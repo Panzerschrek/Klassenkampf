@@ -20,6 +20,7 @@ struct DDSPixelFormat
 	uint32_t b_bit_mask;
 	uint32_t a_bit_mask;
 };
+static_assert(sizeof(DDSPixelFormat) == 32u, "invalid size");
 
 struct DDSHeader
 {
@@ -39,8 +40,13 @@ struct DDSHeader
 	uint32_t caps4;
 	uint32_t reserved2;
 };
-
 static_assert(sizeof(DDSHeader) == 128u, "invalid size");
+
+namespace DDSHeaderFlags
+{
+	constexpr uint32_t
+		DDSD_MIPMAPCOUNT= 0x20000;
+}
 
 } // namespace
 
@@ -59,22 +65,28 @@ std::optional<DDSImage> DDSImage::Load(const char* const file_name)
 		return std::nullopt;
 	if(header.size != sizeof(DDSHeader) - sizeof(header.magic))
 		return std::nullopt;
+	if(header.pixel_format.size != sizeof(DDSPixelFormat))
+		return std::nullopt;
 
 	std::vector<MipLevel> mip_levels;
+	if((header.flags & DDSHeaderFlags::DDSD_MIPMAPCOUNT) != 0u)
+		mip_levels.resize(header.mip_count);
+	else
+		mip_levels.resize(1u);
 
 	size_t offset= sizeof(DDSHeader);
-	mip_levels.resize(header.mip_count);
 	for(size_t i= 0u; i < mip_levels.size(); ++i)
 	{
 		mip_levels[i].data= static_cast<const char*>(file->Data()) + offset;
 		mip_levels[i].size[0]= header.width  >> i;
 		mip_levels[i].size[1]= header.height >> i;
-		offset+= mip_levels[i].size[0] * mip_levels[i].size[1];
-	}
 
-	// Skip temporary some mip levels.
-	if(mip_levels.size() > 6u)
-		mip_levels.resize(6u);
+		// Block size is 4x4
+		mip_levels[i].size_rounded[0]= (mip_levels[i].size[0] + 3u) & ~3u;
+		mip_levels[i].size_rounded[1]= (mip_levels[i].size[1] + 3u) & ~3u;
+
+		offset+= mip_levels[i].size_rounded[0] * mip_levels[i].size_rounded[1];
+	}
 
 	return DDSImage(std::move(file), std::move(mip_levels));
 }
