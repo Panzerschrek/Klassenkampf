@@ -639,8 +639,6 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 			if(mip_levels.empty())
 				continue;
 
-			const vk::Format image_format= vk::Format::eBc2UnormBlock;
-
 			KK_ASSERT((mip_levels[0].size[0] & (mip_levels[0].size[0] - 1u)) == 0u);
 			KK_ASSERT((mip_levels[0].size[1] & (mip_levels[0].size[1] - 1u)) == 0u);
 
@@ -648,7 +646,7 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 				vk::ImageCreateInfo(
 					vk::ImageCreateFlags(),
 					vk::ImageType::e2D,
-					image_format,
+					image.GetFormat(),
 					vk::Extent3D(mip_levels[0].size[0], mip_levels[0].size[1], 1u),
 					uint32_t(mip_levels.size()),
 					1u,
@@ -674,14 +672,13 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 
 			for(size_t i= 0u; i < mip_levels.size(); ++i)
 			{
-				const size_t mip_data_size= mip_levels[i].size_rounded[0] * mip_levels[i].size_rounded[1];
 
 				const GPUDataUploader::RequestResult staging_buffer=
-					gpu_data_uploader_.RequestMemory(mip_data_size);
+					gpu_data_uploader_.RequestMemory(mip_levels[i].data_size);
 				std::memcpy(
 					static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
 					mip_levels[i].data,
-					mip_data_size);
+					mip_levels[i].data_size);
 
 				const vk::ImageMemoryBarrier image_memory_transfer_init(
 					vk::AccessFlagBits::eTransferWrite,
@@ -740,7 +737,7 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 					vk::ImageViewCreateFlags(),
 					*out_material.image,
 					vk::ImageViewType::e2D,
-					image_format,
+					image.GetFormat(),
 					vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u)));
 		}
