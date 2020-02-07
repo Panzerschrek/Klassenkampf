@@ -135,8 +135,8 @@ std::optional<DDSImage> DDSImage::Load(const char* const file_name)
 	for(size_t i= 0u; i < mip_levels.size(); ++i)
 	{
 		mip_levels[i].data= static_cast<const char*>(file->Data()) + offset;
-		mip_levels[i].size[0]= header.width  >> i;
-		mip_levels[i].size[1]= header.height >> i;
+		mip_levels[i].size[0]= std::max(header.width  >> i, 1u);
+		mip_levels[i].size[1]= std::max(header.height >> i, 1u);
 
 		// Block size is 4x4
 		mip_levels[i].size_rounded[0]= (mip_levels[i].size[0] + 3u) & ~3u;
