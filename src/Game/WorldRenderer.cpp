@@ -1,5 +1,6 @@
 #include "WorldRenderer.hpp"
 #include "Assert.hpp"
+#include "DDSImage.hpp"
 #include "Image.hpp"
 #include "../Common/MemoryMappedFile.hpp"
 #include "../Common/SegmentModelFormat.hpp"
@@ -442,6 +443,7 @@ WorldRenderer::WorldRenderer(
 		"shaft_segment",
 		"floor_wall_join",
 		"wall_segment",
+		"sponza",
 	};
 
 	size_t material_count= 0u;
@@ -628,112 +630,170 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 	for(size_t i= 0u; i < result.materials.size(); ++i)
 	{
 		const std::string material_name= static_cast<const char*>(in_materials[i].name);
-		const auto image_loaded_opt= Image::Load(("textures/" + material_name + ".png").c_str());
-		if(image_loaded_opt == std::nullopt)
-			continue;
-
-		const Image& image= *image_loaded_opt;
-
-		KK_ASSERT((image.GetWidth () & (image.GetWidth () - 1u)) == 0u);
-		KK_ASSERT((image.GetHeight() & (image.GetHeight() - 1u)) == 0u);
-		const uint32_t mip_levels= uint32_t(std::log2(float(std::min(image.GetWidth(), image.GetHeight()))) - 1.0f);
-
 		SegmentModel::Material& out_material= result.materials[i];
-		out_material.image= vk_device_.createImageUnique(
-			vk::ImageCreateInfo(
-				vk::ImageCreateFlags(),
-				vk::ImageType::e2D,
-				vk::Format::eR8G8B8A8Unorm,
-				vk::Extent3D(image.GetWidth(), image.GetHeight(), 1u),
-				mip_levels,
-				1u,
-				vk::SampleCountFlagBits::e1,
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
-				vk::SharingMode::eExclusive,
-				0u, nullptr,
-				vk::ImageLayout::eUndefined));
 
-		const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_material.image);
-
-		vk::MemoryAllocateInfo memory_allocate_info(memory_requirements.size);
-		for(uint32_t j= 0u; j < memory_properties_.memoryTypeCount; ++j)
+		if(const auto dds_image_opt= DDSImage::Load(("textures/" + material_name + ".dds").c_str()))
 		{
-			if((memory_requirements.memoryTypeBits & (1u << j)) != 0 &&
-				(memory_properties_.memoryTypes[j].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
-				memory_allocate_info.memoryTypeIndex= j;
+			const DDSImage& image= *dds_image_opt;
+			const std::vector<DDSImage::MipLevel>& mip_levels= image.GetMipLevels();
+			if(mip_levels.empty())
+				continue;
+
+			const vk::Format image_format= vk::Format::eBc2UnormBlock;
+
+			KK_ASSERT((mip_levels[0].size[0] & (mip_levels[0].size[0] - 1u)) == 0u);
+			KK_ASSERT((mip_levels[0].size[1] & (mip_levels[0].size[1] - 1u)) == 0u);
+
+			out_material.image= vk_device_.createImageUnique(
+				vk::ImageCreateInfo(
+					vk::ImageCreateFlags(),
+					vk::ImageType::e2D,
+					image_format,
+					vk::Extent3D(mip_levels[0].size[0], mip_levels[0].size[1], 1u),
+					uint32_t(mip_levels.size()),
+					1u,
+					vk::SampleCountFlagBits::e1,
+					vk::ImageTiling::eOptimal,
+					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
+					vk::SharingMode::eExclusive,
+					0u, nullptr,
+					vk::ImageLayout::eUndefined));
+
+			const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_material.image);
+
+			vk::MemoryAllocateInfo memory_allocate_info(memory_requirements.size);
+			for(uint32_t j= 0u; j < memory_properties_.memoryTypeCount; ++j)
+			{
+				if((memory_requirements.memoryTypeBits & (1u << j)) != 0 &&
+					(memory_properties_.memoryTypes[j].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+					memory_allocate_info.memoryTypeIndex= j;
+			}
+
+			out_material.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
+			vk_device_.bindImageMemory(*out_material.image, *out_material.image_memory, 0u);
+
+			for(size_t i= 0u; i < mip_levels.size(); ++i)
+			{
+				const size_t mip_data_size= mip_levels[i].size[0] * mip_levels[i].size[1];
+
+				const GPUDataUploader::RequestResult staging_buffer=
+					gpu_data_uploader_.RequestMemory(mip_data_size);
+				std::memcpy(
+					static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+					mip_levels[i].data,
+					mip_data_size);
+
+				const vk::ImageMemoryBarrier image_memory_transfer_init(
+					vk::AccessFlagBits::eTransferWrite,
+					vk::AccessFlagBits::eMemoryRead,
+					vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+					queue_family_index_,
+					queue_family_index_,
+					*out_material.image,
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, uint32_t(i), 1u, 0u, 1u));
+
+				staging_buffer.command_buffer.pipelineBarrier(
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eBottomOfPipe,
+					vk::DependencyFlags(),
+					0u, nullptr,
+					0u, nullptr,
+					1u, &image_memory_transfer_init);
+
+				const vk::BufferImageCopy copy_region(
+					staging_buffer.buffer_offset,
+					mip_levels[i].size[0], mip_levels[i].size[1],
+					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, uint32_t(i), 0u, 1u),
+					vk::Offset3D(0, 0, 0),
+					vk::Extent3D(mip_levels[i].size[0], mip_levels[i].size[1], 1u));
+
+				staging_buffer.command_buffer.copyBufferToImage(
+					staging_buffer.buffer,
+					*out_material.image,
+					vk::ImageLayout::eTransferDstOptimal,
+					1u, &copy_region);
+
+				if(i + 1u == mip_levels.size())
+				{
+					const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+						vk::AccessFlagBits::eTransferWrite,
+						vk::AccessFlagBits::eMemoryRead,
+						vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+						queue_family_index_,
+						queue_family_index_,
+						*out_material.image,
+						vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u));
+
+					staging_buffer.command_buffer.pipelineBarrier(
+						vk::PipelineStageFlagBits::eTransfer,
+						vk::PipelineStageFlagBits::eBottomOfPipe,
+						vk::DependencyFlags(),
+						0u, nullptr,
+						0u, nullptr,
+						1u, &vk_image_memory_barrier_src_final);
+				}
+			} // for mip levels
+
+			out_material.image_view= vk_device_.createImageViewUnique(
+				vk::ImageViewCreateInfo(
+					vk::ImageViewCreateFlags(),
+					*out_material.image,
+					vk::ImageViewType::e2D,
+					image_format,
+					vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u)));
 		}
-
-		out_material.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
-		vk_device_.bindImageMemory(*out_material.image, *out_material.image_memory, 0u);
-
-		const GPUDataUploader::RequestResult staging_buffer=
-			gpu_data_uploader_.RequestMemory(image.GetWidth() * image.GetHeight() * 4u);
-		std::memcpy(
-			static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
-			image.GetData(),
-			image.GetWidth() * image.GetHeight() * 4u);
-
-		const vk::ImageMemoryBarrier image_memory_transfer_init(
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-			queue_family_index_,
-			queue_family_index_,
-			*out_material.image,
-			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-		staging_buffer.command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &image_memory_transfer_init);
-
-		const vk::BufferImageCopy copy_region(
-			staging_buffer.buffer_offset,
-			image.GetWidth(), image.GetHeight(),
-			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
-			vk::Offset3D(0, 0, 0),
-			vk::Extent3D(image.GetWidth(), image.GetHeight(), 1u));
-
-		staging_buffer.command_buffer.copyBufferToImage(
-			staging_buffer.buffer,
-			*out_material.image,
-			vk::ImageLayout::eTransferDstOptimal,
-			1u, &copy_region);
-
-
-		const auto image_layout_final= vk::ImageLayout::eShaderReadOnlyOptimal;
-		for(uint32_t j= 1u; j < mip_levels; ++j)
+		else if(const auto image_loaded_opt= Image::Load(("textures/" + material_name + ".png").c_str()))
 		{
-			// Transform previous mip level layout from dst_optimal to src_optimal
-			const vk::ImageMemoryBarrier vk_image_memory_barrier_src(
-				vk::AccessFlagBits::eTransferWrite,
-				vk::AccessFlagBits::eMemoryRead,
-				vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
-				queue_family_index_,
-				queue_family_index_,
-				*out_material.image,
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
+			const Image& image= *image_loaded_opt;
 
-			staging_buffer.command_buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eBottomOfPipe,
-				vk::DependencyFlags(),
-				0u, nullptr,
-				0u, nullptr,
-				1u, &vk_image_memory_barrier_src);
+			KK_ASSERT((image.GetWidth () & (image.GetWidth () - 1u)) == 0u);
+			KK_ASSERT((image.GetHeight() & (image.GetHeight() - 1u)) == 0u);
+			const uint32_t mip_levels= uint32_t(std::log2(float(std::min(image.GetWidth(), image.GetHeight()))) - 1.0f);
 
-			const vk::ImageMemoryBarrier vk_image_memory_barrier_dst(
+			out_material.image= vk_device_.createImageUnique(
+				vk::ImageCreateInfo(
+					vk::ImageCreateFlags(),
+					vk::ImageType::e2D,
+					vk::Format::eR8G8B8A8Unorm,
+					vk::Extent3D(image.GetWidth(), image.GetHeight(), 1u),
+					mip_levels,
+					1u,
+					vk::SampleCountFlagBits::e1,
+					vk::ImageTiling::eOptimal,
+					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
+					vk::SharingMode::eExclusive,
+					0u, nullptr,
+					vk::ImageLayout::eUndefined));
+
+			const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_material.image);
+
+			vk::MemoryAllocateInfo memory_allocate_info(memory_requirements.size);
+			for(uint32_t j= 0u; j < memory_properties_.memoryTypeCount; ++j)
+			{
+				if((memory_requirements.memoryTypeBits & (1u << j)) != 0 &&
+					(memory_properties_.memoryTypes[j].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+					memory_allocate_info.memoryTypeIndex= j;
+			}
+
+			out_material.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
+			vk_device_.bindImageMemory(*out_material.image, *out_material.image_memory, 0u);
+
+			const GPUDataUploader::RequestResult staging_buffer=
+				gpu_data_uploader_.RequestMemory(image.GetWidth() * image.GetHeight() * 4u);
+			std::memcpy(
+				static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+				image.GetData(),
+				image.GetWidth() * image.GetHeight() * 4u);
+
+			const vk::ImageMemoryBarrier image_memory_transfer_init(
 				vk::AccessFlagBits::eTransferWrite,
 				vk::AccessFlagBits::eMemoryRead,
 				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
 				queue_family_index_,
 				queue_family_index_,
 				*out_material.image,
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j, 1u, 0u, 1u));
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
 			staging_buffer.command_buffer.pipelineBarrier(
 				vk::PipelineStageFlagBits::eTransfer,
@@ -741,62 +801,47 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 				vk::DependencyFlags(),
 				0u, nullptr,
 				0u, nullptr,
-				1u, &vk_image_memory_barrier_dst);
+				1u, &image_memory_transfer_init);
 
-			std::array<vk::Offset3D, 2> src_offsets;
-			std::array<vk::Offset3D, 2> dst_offsets;
+			const vk::BufferImageCopy copy_region(
+				staging_buffer.buffer_offset,
+				image.GetWidth(), image.GetHeight(),
+				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
+				vk::Offset3D(0, 0, 0),
+				vk::Extent3D(image.GetWidth(), image.GetHeight(), 1u));
 
-			src_offsets[0]= 0u;
-			src_offsets[0]= 0u;
-			src_offsets[0]= 0u;
-			src_offsets[1].x= image.GetWidth () >> (j-1u);
-			src_offsets[1].y= image.GetHeight() >> (j-1u);
-			src_offsets[1].z= 1u;
-
-			dst_offsets[0]= 0u;
-			dst_offsets[0]= 0u;
-			dst_offsets[0]= 0u;
-			dst_offsets[1].x= image.GetWidth () >> j;
-			dst_offsets[1].y= image.GetHeight() >> j;
-			dst_offsets[1].z= 1;
-
-			vk::ImageBlit image_blit(
-				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 1u, 0u, 1u),
-				src_offsets,
-				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 0u, 0u, 1u),
-				dst_offsets);
-
-			staging_buffer.command_buffer.blitImage(
-				*out_material.image,
-				vk::ImageLayout::eTransferSrcOptimal,
+			staging_buffer.command_buffer.copyBufferToImage(
+				staging_buffer.buffer,
 				*out_material.image,
 				vk::ImageLayout::eTransferDstOptimal,
-				1u, &image_blit,
-				vk::Filter::eLinear);
+				1u, &copy_region);
 
-			const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
-				vk::AccessFlagBits::eTransferWrite,
-				vk::AccessFlagBits::eMemoryRead,
-				vk::ImageLayout::eTransferSrcOptimal, image_layout_final,
-				queue_family_index_,
-				queue_family_index_,
-				*out_material.image,
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
 
-			staging_buffer.command_buffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eBottomOfPipe,
-				vk::DependencyFlags(),
-				0u, nullptr,
-				0u, nullptr,
-				1u, &vk_image_memory_barrier_src_final);
-
-			if(j + 1u == mip_levels)
+			const auto image_layout_final= vk::ImageLayout::eShaderReadOnlyOptimal;
+			for(uint32_t j= 1u; j < mip_levels; ++j)
 			{
-				const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+				// Transform previous mip level layout from dst_optimal to src_optimal
+				const vk::ImageMemoryBarrier vk_image_memory_barrier_src(
 					vk::AccessFlagBits::eTransferWrite,
 					vk::AccessFlagBits::eMemoryRead,
-					vk::ImageLayout::eTransferDstOptimal, image_layout_final,
+					vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
+					queue_family_index_,
+					queue_family_index_,
+					*out_material.image,
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
+
+				staging_buffer.command_buffer.pipelineBarrier(
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eBottomOfPipe,
+					vk::DependencyFlags(),
+					0u, nullptr,
+					0u, nullptr,
+					1u, &vk_image_memory_barrier_src);
+
+				const vk::ImageMemoryBarrier vk_image_memory_barrier_dst(
+					vk::AccessFlagBits::eTransferWrite,
+					vk::AccessFlagBits::eMemoryRead,
+					vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
 					queue_family_index_,
 					queue_family_index_,
 					*out_material.image,
@@ -808,18 +853,86 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 					vk::DependencyFlags(),
 					0u, nullptr,
 					0u, nullptr,
-					1u, &vk_image_memory_barrier_src_final);
-			}
-		} // for mips
+					1u, &vk_image_memory_barrier_dst);
 
-		out_material.image_view= vk_device_.createImageViewUnique(
-			vk::ImageViewCreateInfo(
-				vk::ImageViewCreateFlags(),
-				*out_material.image,
-				vk::ImageViewType::e2D,
-				vk::Format::eR8G8B8A8Unorm,
-				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
+				std::array<vk::Offset3D, 2> src_offsets;
+				std::array<vk::Offset3D, 2> dst_offsets;
+
+				src_offsets[0]= 0u;
+				src_offsets[0]= 0u;
+				src_offsets[0]= 0u;
+				src_offsets[1].x= image.GetWidth () >> (j-1u);
+				src_offsets[1].y= image.GetHeight() >> (j-1u);
+				src_offsets[1].z= 1u;
+
+				dst_offsets[0]= 0u;
+				dst_offsets[0]= 0u;
+				dst_offsets[0]= 0u;
+				dst_offsets[1].x= image.GetWidth () >> j;
+				dst_offsets[1].y= image.GetHeight() >> j;
+				dst_offsets[1].z= 1;
+
+				vk::ImageBlit image_blit(
+					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 1u, 0u, 1u),
+					src_offsets,
+					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 0u, 0u, 1u),
+					dst_offsets);
+
+				staging_buffer.command_buffer.blitImage(
+					*out_material.image,
+					vk::ImageLayout::eTransferSrcOptimal,
+					*out_material.image,
+					vk::ImageLayout::eTransferDstOptimal,
+					1u, &image_blit,
+					vk::Filter::eLinear);
+
+				const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+					vk::AccessFlagBits::eTransferWrite,
+					vk::AccessFlagBits::eMemoryRead,
+					vk::ImageLayout::eTransferSrcOptimal, image_layout_final,
+					queue_family_index_,
+					queue_family_index_,
+					*out_material.image,
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
+
+				staging_buffer.command_buffer.pipelineBarrier(
+					vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eBottomOfPipe,
+					vk::DependencyFlags(),
+					0u, nullptr,
+					0u, nullptr,
+					1u, &vk_image_memory_barrier_src_final);
+
+				if(j + 1u == mip_levels)
+				{
+					const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+						vk::AccessFlagBits::eTransferWrite,
+						vk::AccessFlagBits::eMemoryRead,
+						vk::ImageLayout::eTransferDstOptimal, image_layout_final,
+						queue_family_index_,
+						queue_family_index_,
+						*out_material.image,
+						vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j, 1u, 0u, 1u));
+
+					staging_buffer.command_buffer.pipelineBarrier(
+						vk::PipelineStageFlagBits::eTransfer,
+						vk::PipelineStageFlagBits::eBottomOfPipe,
+						vk::DependencyFlags(),
+						0u, nullptr,
+						0u, nullptr,
+						1u, &vk_image_memory_barrier_src_final);
+				}
+			} // for mips
+
+			out_material.image_view= vk_device_.createImageViewUnique(
+				vk::ImageViewCreateInfo(
+					vk::ImageViewCreateFlags(),
+					*out_material.image,
+					vk::ImageViewType::e2D,
+					vk::Format::eR8G8B8A8Unorm,
+					vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
+		}
 	}
 	// Fill vertex buffer.
 	// TODO - do not use temporary vector, write to mapped GPU memory instead.
