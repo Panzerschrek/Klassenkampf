@@ -11,6 +11,22 @@ namespace WorldData
 
 using CoordType= int32_t;
 
+enum class SegmentType
+{
+	Floor,
+	Wall,
+	FloorWallJoint,
+	Corridor,
+	Shaft,
+};
+
+struct Segment
+{
+	CoordType pos[3];
+	SegmentType type;
+	uint8_t angle; // 4 - 2 * pi
+};
+
 enum class SectorType
 {
 	Room,
@@ -32,6 +48,8 @@ struct Sector
 	Direction direction= Direction::XPlus;
 	CoordType bb_min[3]{};
 	CoordType bb_max[3]{};
+
+	std::vector<Segment> segments;
 };
 
 struct World

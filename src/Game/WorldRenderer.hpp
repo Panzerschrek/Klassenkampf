@@ -16,7 +16,7 @@ public:
 	WorldRenderer(
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
-		const WorldData::World& world);
+		WorldData::World world);
 
 	~WorldRenderer();
 
@@ -55,6 +55,7 @@ private:
 	};
 
 private:
+	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
 	std::optional<SegmentModel> LoadSegmentModel(const char* const file_name);
 
 private:
@@ -63,6 +64,8 @@ private:
 	const vk::Extent2D viewport_size_;
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 	const uint32_t queue_family_index_;
+
+	const WorldData::World world_;
 
 	Tonemapper tonemapper_;
 
@@ -87,7 +90,7 @@ private:
 	vk::UniqueImageView vk_image_view_;
 	vk::UniqueSampler vk_image_sampler_;
 
-	std::vector<SegmentModel> segment_models_;
+	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models_;
 };
 
 } // namespace KK

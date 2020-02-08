@@ -23,6 +23,10 @@ private:
 
 	bool CanPlace(const WorldData::CoordType* bb_min, const WorldData::CoordType* bb_max);
 
+	void FillSegmentsCorridor(WorldData::Sector& sector);
+	void FillSegmentsRoom(WorldData::Sector& sector);
+	void FillSegmentsShaft(WorldData::Sector& sector);
+
 private:
 	WorldData::World result_;
 	LongRand rand_;
@@ -44,6 +48,22 @@ WorldData::World WorldGenerator::Generate()
 		result_.sectors.push_back(std::move(root_sector));
 	}
 	Genrate_r(0u);
+
+	for(WorldData::Sector& sector : result_.sectors)
+	{
+		switch(sector.type)
+		{
+		case WorldData::SectorType::Corridor:
+			FillSegmentsCorridor(sector);
+			break;
+		case WorldData::SectorType::Room:
+			FillSegmentsRoom(sector);
+			break;
+		case WorldData::SectorType::Shaft:
+			FillSegmentsShaft(sector);
+			break;
+		}
+	}
 
 	return std::move(result_);
 }
@@ -256,6 +276,76 @@ bool WorldGenerator::CanPlace(const WorldData::CoordType* const bb_min, const Wo
 	}
 
 	return true;
+}
+
+void WorldGenerator::FillSegmentsCorridor(WorldData::Sector& sector)
+{
+	KK_ASSERT(sector.type == WorldData::SectorType::Corridor);
+
+	WorldData::CoordType pos[2]{ sector.bb_min[0], sector.bb_min[1] };
+	WorldData::CoordType delta[2]{ 0, 0 };
+	WorldData::CoordType iterations= 0;
+	uint8_t angle= 0;
+	if(sector.direction == WorldData::Direction::XPlus || sector.direction == WorldData::Direction::XMinus)
+	{
+		delta[0]= 1;
+		delta[1]= 0;
+		iterations= sector.bb_max[0] - sector.bb_min[0];
+		angle= 1;
+	}
+	else
+	if(sector.direction == WorldData::Direction::YPlus || sector.direction == WorldData::Direction::YMinus)
+	{
+		delta[0]= 0;
+		delta[1]= 1;
+		iterations= sector.bb_max[1] - sector.bb_min[1];
+		angle= 0;
+
+	}
+	else
+		KK_ASSERT(false);
+
+	for(WorldData::CoordType i= 0; i < iterations; ++i, pos[0]+= delta[0], pos[1]+= delta[1])
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Corridor;
+		segment.pos[0]= pos[0];
+		segment.pos[1]= pos[1];
+		segment.pos[2]= sector.bb_min[2];
+		segment.angle= angle;
+		sector.segments.push_back(std::move(segment));
+	}
+}
+
+void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
+{
+	KK_ASSERT(sector.type == WorldData::SectorType::Room);
+	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; ++x)
+	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; ++y)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Floor;
+		segment.pos[0]= x;
+		segment.pos[1]= y;
+		segment.pos[2]= sector.bb_min[2];
+		segment.angle= uint8_t((rand_.Rand() & 255u) / 64u);
+		sector.segments.push_back(std::move(segment));
+	}
+}
+
+void WorldGenerator::FillSegmentsShaft(WorldData::Sector& sector)
+{
+	KK_ASSERT(sector.type == WorldData::SectorType::Shaft);
+	for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2]; ++z)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Shaft;
+		segment.pos[0]= sector.bb_min[0];
+		segment.pos[1]= sector.bb_min[1];
+		segment.pos[2]= z;
+		segment.angle= 0;
+		sector.segments.push_back(std::move(segment));
+	}
 }
 
 } // namespace
