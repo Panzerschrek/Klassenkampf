@@ -240,22 +240,22 @@ WorldRenderer::WorldRenderer(
 	// Create vertex buffer
 	std::vector<WorldVertex> world_vertices;
 	std::vector<uint16_t> world_indeces;
-	for(const WorldData::Segment& segment : world.segments)
+	for(const WorldData::Sector& sector : world.sectors)
 	{
 		const size_t index_offset= world_vertices.size();
 
 		const float c_general_scale= 0.25;
 		const float s[3]
 		{
-			c_general_scale * float(segment.bb_max[0] - segment.bb_min[0]),
-			c_general_scale * float(segment.bb_max[1] - segment.bb_min[1]),
-			c_general_scale * float(segment.bb_max[2] - segment.bb_min[2]),
+			c_general_scale * float(sector.bb_max[0] - sector.bb_min[0]),
+			c_general_scale * float(sector.bb_max[1] - sector.bb_min[1]),
+			c_general_scale * float(sector.bb_max[2] - sector.bb_min[2]),
 		};
 		const float d[3]
 		{
-			c_general_scale * float(segment.bb_min[0]),
-			c_general_scale * float(segment.bb_min[1]),
-			c_general_scale * float(segment.bb_min[2]),
+			c_general_scale * float(sector.bb_min[0]),
+			c_general_scale * float(sector.bb_min[1]),
+			c_general_scale * float(sector.bb_min[2]),
 		};
 		for(const auto& in_vertex : g_box_vertices)
 		{
