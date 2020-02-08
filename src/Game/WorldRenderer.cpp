@@ -22,6 +22,13 @@ namespace Shaders
 
 } // namespace Shaders
 
+struct Uniforms
+{
+	m_Mat4 view_matrix;
+	m_Mat4 normals_matrix;
+};
+static_assert(sizeof(Uniforms) <= 128u, "Uniforms size is too big, limit is 128 bytes");
+
 struct WorldVertex
 {
 	float pos[3];
@@ -122,7 +129,7 @@ WorldRenderer::WorldRenderer(
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
 		0u,
-		sizeof(m_Mat4));
+		sizeof(Uniforms));
 
 	vk_pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
@@ -602,12 +609,16 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 		world_scale_mat.Scale(1.0f / 8.0f);
 		segment_mat= to_center_mat * rotate_mat * from_center_mat * translate_mat * world_scale_mat * view_matrix;
 
+		Uniforms uniforms;
+		uniforms.view_matrix= segment_mat;
+		uniforms.normals_matrix= rotate_mat;
+
 		command_buffer.pushConstants(
 			*vk_pipeline_layout_,
 			vk::ShaderStageFlagBits::eVertex,
 			0,
-			sizeof(segment_mat),
-			&segment_mat);
+			sizeof(uniforms),
+			&uniforms);
 
 		const vk::DeviceSize offsets= 0u;
 		command_buffer.bindVertexBuffers(0u, 1u, &*segment_model.vertex_buffer, &offsets);
