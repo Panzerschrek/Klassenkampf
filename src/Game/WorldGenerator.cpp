@@ -320,6 +320,8 @@ void WorldGenerator::FillSegmentsCorridor(WorldData::Sector& sector)
 void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 {
 	KK_ASSERT(sector.type == WorldData::SectorType::Room);
+
+	// Floors.
 	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; ++x)
 	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; ++y)
 	{
@@ -331,6 +333,35 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.angle= uint8_t((rand_.Rand() & 255u) / 64u);
 		sector.segments.push_back(std::move(segment));
 	}
+
+	// Walls ±X.
+	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; ++y)
+	for(WorldData::CoordType z= sector.bb_min[2] + 1; z < sector.bb_max[2]; ++z)
+	for(WorldData::CoordType side= 0; side < 2; ++side)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Wall;
+		segment.pos[0]= sector.bb_min[0] + side * (sector.bb_max[0] - sector.bb_min[0] - 1);
+		segment.pos[1]= y;
+		segment.pos[2]= z;
+		segment.angle= uint8_t(side * 2);
+		sector.segments.push_back(std::move(segment));
+	}
+
+	// Walls ±Y.
+	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; ++x)
+	for(WorldData::CoordType z= sector.bb_min[2] + 1; z < sector.bb_max[2]; ++z)
+	for(WorldData::CoordType side= 0; side < 2; ++side)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Wall;
+		segment.pos[0]= x;
+		segment.pos[1]= sector.bb_min[1] + side * (sector.bb_max[1] - sector.bb_min[1] - 1);
+		segment.pos[2]= z;
+		segment.angle= uint8_t(1 + side * 2);
+		sector.segments.push_back(std::move(segment));
+	}
+
 }
 
 void WorldGenerator::FillSegmentsShaft(WorldData::Sector& sector)
