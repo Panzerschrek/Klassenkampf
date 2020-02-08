@@ -11,7 +11,7 @@ namespace WorldData
 
 using CoordType= int32_t;
 
-enum class SegmentType
+enum class SectorType
 {
 	Room,
 	Corridor,
@@ -26,9 +26,9 @@ enum class Direction
 	YMinus,
 };
 
-struct Segment
+struct Sector
 {
-	SegmentType type= SegmentType::Room;
+	SectorType type= SectorType::Room;
 	Direction direction= Direction::XPlus;
 	CoordType bb_min[3]{};
 	CoordType bb_max[3]{};
@@ -36,7 +36,7 @@ struct Segment
 
 struct World
 {
-	std::vector<Segment> segments;
+	std::vector<Sector> sectors;
 };
 
 } // namespace WorldData
