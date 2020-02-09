@@ -18,6 +18,8 @@ enum class SegmentType
 	FloorWallJoint,
 	Corridor,
 	Shaft,
+	CeilingArch4,
+	Column4,
 };
 
 struct Segment
@@ -48,6 +50,7 @@ struct Sector
 	Direction direction= Direction::XPlus;
 	CoordType bb_min[3]{};
 	CoordType bb_max[3]{};
+	CoordType ceiling_height= 0;
 
 	std::vector<Segment> segments;
 };
