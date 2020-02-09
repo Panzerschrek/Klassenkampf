@@ -325,8 +325,8 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 	KK_ASSERT(sector.type == WorldData::SectorType::Room);
 
 	// Floors.
-	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; ++x)
-	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; ++y)
+	for(WorldData::CoordType x= sector.bb_min[0] + 1; x < sector.bb_max[0] - 1; ++x)
+	for(WorldData::CoordType y= sector.bb_min[1] + 1; y < sector.bb_max[1] - 1; ++y)
 	{
 		WorldData::Segment segment;
 		segment.type= WorldData::SegmentType::Floor;
@@ -334,6 +334,32 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.pos[1]= y;
 		segment.pos[2]= sector.bb_min[2];
 		segment.angle= uint8_t((rand_.Rand() & 255u) / 64u);
+		sector.segments.push_back(std::move(segment));
+	}
+
+	// Floor-wall joint ±X.
+	for(WorldData::CoordType y= sector.bb_min[1] + 1; y < sector.bb_max[1] - 1; ++y)
+	for(WorldData::CoordType side= 0; side < 2; ++side)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::FloorWallJoint;
+		segment.pos[0]= sector.bb_min[0] + side * (sector.bb_max[0] - sector.bb_min[0] - 1);
+		segment.pos[1]= y;
+		segment.pos[2]= sector.bb_min[2];
+		segment.angle= uint8_t(side * 2);
+		sector.segments.push_back(std::move(segment));
+	}
+
+	// Floor-wall ±Y.
+	for(WorldData::CoordType x= sector.bb_min[0] + 1; x < sector.bb_max[0] - 1; ++x)
+	for(WorldData::CoordType side= 0; side < 2; ++side)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::FloorWallJoint;
+		segment.pos[0]= x;
+		segment.pos[1]= sector.bb_min[1] + side * (sector.bb_max[1] - sector.bb_min[1] - 1);
+		segment.pos[2]= sector.bb_min[2];
+		segment.angle= uint8_t(1 + side * 2);
 		sector.segments.push_back(std::move(segment));
 	}
 
