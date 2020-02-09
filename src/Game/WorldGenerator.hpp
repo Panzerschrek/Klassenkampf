@@ -53,6 +53,7 @@ struct Sector
 	CoordType bb_min[3]{};
 	CoordType bb_max[3]{};
 	CoordType ceiling_height= 0;
+	CoordType columns_step= 0;
 
 	std::vector<Segment> segments;
 };

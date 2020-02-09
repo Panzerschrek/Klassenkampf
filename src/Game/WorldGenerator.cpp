@@ -43,7 +43,7 @@ WorldData::World WorldGenerator::Generate()
 {
 	{
 		WorldData::Sector root_sector;
-		root_sector.type=WorldData::SectorType::Room;
+		root_sector.type= WorldData::SectorType::Room;
 
 		root_sector.bb_min[0]= -4;
 		root_sector.bb_min[1]= -4;
@@ -52,6 +52,7 @@ WorldData::World WorldGenerator::Generate()
 		root_sector.bb_max[1]= +4;
 		root_sector.bb_max[2]= +8;
 		root_sector.ceiling_height= 2;
+		root_sector.columns_step= 4;
 
 		result_.sectors.push_back(std::move(root_sector));
 	}
@@ -115,6 +116,19 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 	new_room.bb_min[2]= corridor.bb_min[2];
 	new_room.bb_max[2]= corridor.bb_min[2] + room_size[2];
 	new_room.ceiling_height= 2;
+	new_room.columns_step= 4;
+
+	// Do not place corridors in place of columns.
+	WorldData::CoordType room_x= corridor.bb_min[0] - (room_size[0] >> 1);
+	if((corridor.bb_min[0] - room_x) % new_room.columns_step == 0)
+		--room_x;
+	if((corridor.bb_min[0] - room_x) == new_room.columns_step - 1)
+		++room_x;
+	WorldData::CoordType room_y= corridor.bb_min[1] - (room_size[1] >> 1);
+	if((corridor.bb_min[1] - room_y) % new_room.columns_step == 0)
+		--room_y;
+	if((corridor.bb_min[1] - room_y) % new_room.columns_step == new_room.columns_step - 1)
+		++room_y;
 
 	WorldData::Portal portal;
 	portal.bb_min[2]= corridor.bb_min[2];
@@ -125,7 +139,7 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 	case WorldData::Direction::XPlus:
 		new_room.bb_min[0]= corridor.bb_max[0];
 		new_room.bb_max[0]= corridor.bb_max[0] + room_size[0];
-		new_room.bb_min[1]= corridor.bb_max[1] - (room_size[1] >> 1);
+		new_room.bb_min[1]= room_y;
 		new_room.bb_max[1]= new_room.bb_min[1] + room_size[1];
 		portal.bb_min[0]= new_room.bb_min[0];
 		portal.bb_max[0]= new_room.bb_min[0];
@@ -136,7 +150,7 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 	case WorldData::Direction::XMinus:
 		new_room.bb_max[0]= corridor.bb_min[0];
 		new_room.bb_min[0]= corridor.bb_min[0] - room_size[0];
-		new_room.bb_min[1]= corridor.bb_max[1] - (room_size[1] >> 1);
+		new_room.bb_min[1]= room_y;
 		new_room.bb_max[1]= new_room.bb_min[1] + room_size[1];
 		portal.bb_min[0]= new_room.bb_max[0];
 		portal.bb_max[0]= new_room.bb_max[0];
@@ -145,7 +159,7 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 		break;
 
 	case WorldData::Direction::YPlus:
-		new_room.bb_min[0]= corridor.bb_max[0] - (room_size[0] >> 1);
+		new_room.bb_min[0]= room_x;
 		new_room.bb_max[0]= new_room.bb_min[0] + room_size[0];
 		new_room.bb_min[1]= corridor.bb_max[1];
 		new_room.bb_max[1]= corridor.bb_max[1] + room_size[1];
@@ -156,7 +170,7 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 		break;
 
 	case WorldData::Direction::YMinus:
-		new_room.bb_min[0]= corridor.bb_max[0] - (room_size[0] >> 1);
+		new_room.bb_min[0]= room_x;
 		new_room.bb_max[0]= new_room.bb_min[0] + room_size[0];
 		new_room.bb_max[1]= corridor.bb_min[1];
 		new_room.bb_min[1]= corridor.bb_min[1] - room_size[1];
@@ -185,6 +199,19 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 {
 	const WorldData::Sector sector= result_.sectors[sector_index];
 
+	// Do not place corridors in place of columns.
+	WorldData::CoordType corridor_x= sector.bb_min[0] + ((sector.bb_max[0] - sector.bb_min[0]) >> 1);
+	if((corridor_x - sector.bb_min[0]) % sector.columns_step == 0)
+		++corridor_x;
+	if((corridor_x - sector.bb_min[0]) % sector.columns_step == sector.columns_step - 1)
+		--corridor_x;
+
+	WorldData::CoordType corridor_y= sector.bb_min[1] + ((sector.bb_max[1] - sector.bb_min[1]) >> 1);
+	if((corridor_y - sector.bb_min[1]) % sector.columns_step == 0)
+		++corridor_y;
+	if((corridor_y - sector.bb_min[1]) % sector.columns_step == sector.columns_step - 1)
+		--corridor_y;
+
 	size_t new_sectors_count= 0u;
 	for(size_t dir_index= 0u; dir_index < 4u; ++dir_index)
 	{
@@ -210,7 +237,7 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 		case WorldData::Direction::XPlus:
 			new_corridor.bb_min[0]= sector.bb_max[0];
 			new_corridor.bb_max[0]= sector.bb_max[0] + corridor_length;
-			new_corridor.bb_min[1]= (sector.bb_min[1] + sector.bb_max[1]) >> 1;
+			new_corridor.bb_min[1]= corridor_y;
 			new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
 			portal.bb_min[0]= new_corridor.bb_min[0];
 			portal.bb_max[0]= new_corridor.bb_min[0];
@@ -221,7 +248,7 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 		case WorldData::Direction::XMinus:
 			new_corridor.bb_max[0]= sector.bb_min[0];
 			new_corridor.bb_min[0]= sector.bb_min[0] - corridor_length;
-			new_corridor.bb_min[1]= (sector.bb_min[1] + sector.bb_max[1]) >> 1;
+			new_corridor.bb_min[1]= corridor_y;
 			new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
 			portal.bb_min[0]= new_corridor.bb_max[0];
 			portal.bb_max[0]= new_corridor.bb_max[0];
@@ -230,7 +257,7 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 			break;
 
 		case WorldData::Direction::YPlus:
-			new_corridor.bb_min[0]= (sector.bb_min[0] + sector.bb_max[0]) >> 1;
+			new_corridor.bb_min[0]= corridor_x;
 			new_corridor.bb_max[0]= new_corridor.bb_min[0] + 1;
 			new_corridor.bb_min[1]= sector.bb_max[1];
 			new_corridor.bb_max[1]= sector.bb_max[1] + corridor_length;
@@ -241,7 +268,7 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 			break;
 
 		case WorldData::Direction::YMinus:
-			new_corridor.bb_min[0]= (sector.bb_min[0] + sector.bb_max[0]) >> 1;
+			new_corridor.bb_min[0]= corridor_x;
 			new_corridor.bb_max[0]= new_corridor.bb_min[0] + 1;
 			new_corridor.bb_max[1]= sector.bb_min[1];
 			new_corridor.bb_min[1]= sector.bb_min[1] - corridor_length;
@@ -310,11 +337,12 @@ void WorldGenerator::ProcessShaft(const size_t sector_index)
 	const WorldData::CoordType y= result_.sectors[sector_index].bb_min[1];
 	const WorldData::CoordType z= result_.sectors[sector_index].bb_min[2];
 
+	const LongRand::RandResultType size_mul= 4u;
 	const WorldData::CoordType room_size[]=
 	{
-		WorldData::CoordType(rand_.Rand() % 5u + 3u),
-		WorldData::CoordType(rand_.Rand() % 5u + 3u),
-		WorldData::CoordType(rand_.Rand() % 3u + 2u),
+		WorldData::CoordType((rand_.Rand() % 4u + 1u) * size_mul),
+		WorldData::CoordType((rand_.Rand() % 4u + 1u) * size_mul),
+		WorldData::CoordType(rand_.Rand() % 4u + 4u),
 	};
 
 	WorldData::Sector new_room;
@@ -326,6 +354,9 @@ void WorldGenerator::ProcessShaft(const size_t sector_index)
 	new_room.bb_max[1]= new_room.bb_min[1] + room_size[1];
 	new_room.bb_max[2]= z;
 	new_room.bb_min[2]= new_room.bb_max[2] - room_size[2];
+	new_room.ceiling_height= 2;
+	new_room.columns_step= 4;
+
 	if(!CanPlace(new_room.bb_min, new_room.bb_max))
 		return;
 
@@ -532,8 +563,8 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 	}
 
 	// Ceilings.
-	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; x+= 4)
-	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; y+= 4)
+	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; x+= sector.columns_step)
+	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; y+= sector.columns_step)
 	{
 		WorldData::Segment segment;
 		segment.type= WorldData::SegmentType::CeilingArch4;
@@ -545,8 +576,8 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 	}
 
 	// Columns.
-	for(WorldData::CoordType x= sector.bb_min[0]; x <= sector.bb_max[0]; x+= 4)
-	for(WorldData::CoordType y= sector.bb_min[1]; y <= sector.bb_max[1]; y+= 4)
+	for(WorldData::CoordType x= sector.bb_min[0]; x <= sector.bb_max[0]; x+= sector.columns_step)
+	for(WorldData::CoordType y= sector.bb_min[1]; y <= sector.bb_max[1]; y+= sector.columns_step)
 	for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2] - sector.ceiling_height; ++z)
 	{
 		WorldData::Segment segment;
