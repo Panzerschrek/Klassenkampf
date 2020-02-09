@@ -9,6 +9,12 @@ namespace KK
 namespace
 {
 
+WorldData::PortalKey MakePortalKey(const size_t sector_index0, const size_t sector_index1)
+{
+	KK_ASSERT(sector_index0 != sector_index1);
+	return std::min(sector_index0, sector_index1) << 32u | std::max(sector_index0, sector_index1);
+}
+
 class WorldGenerator final
 {
 public:
@@ -22,6 +28,7 @@ private:
 	void ProcessShaft(size_t sector_index);
 
 	bool CanPlace(const WorldData::CoordType* bb_min, const WorldData::CoordType* bb_max);
+	const WorldData::Portal* FindPortal(const WorldData::CoordType* cell);
 
 	void FillSegmentsCorridor(WorldData::Sector& sector);
 	void FillSegmentsRoom(WorldData::Sector& sector);
@@ -101,40 +108,62 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 		WorldData::CoordType(rand_.Rand() % 4u + 4u),
 	};
 
+	const WorldData::Sector corridor= result_.sectors[sector_index];
+
 	WorldData::Sector new_room;
 	new_room.type= WorldData::SectorType::Room;
-	new_room.bb_min[2]= result_.sectors[sector_index].bb_min[2];
-	new_room.bb_max[2]= result_.sectors[sector_index].bb_min[2] + room_size[2];
+	new_room.bb_min[2]= corridor.bb_min[2];
+	new_room.bb_max[2]= corridor.bb_min[2] + room_size[2];
 	new_room.ceiling_height= 2;
+
+	WorldData::Portal portal;
+	portal.bb_min[2]= corridor.bb_min[2];
+	portal.bb_max[2]= corridor.bb_max[2];
 
 	switch(result_.sectors[sector_index].direction)
 	{
 	case WorldData::Direction::XPlus:
-		new_room.bb_min[0]= result_.sectors[sector_index].bb_max[0];
-		new_room.bb_max[0]= result_.sectors[sector_index].bb_max[0] + room_size[0];
-		new_room.bb_min[1]= result_.sectors[sector_index].bb_max[1] - (room_size[1] >> 1);
+		new_room.bb_min[0]= corridor.bb_max[0];
+		new_room.bb_max[0]= corridor.bb_max[0] + room_size[0];
+		new_room.bb_min[1]= corridor.bb_max[1] - (room_size[1] >> 1);
 		new_room.bb_max[1]= new_room.bb_min[1] + room_size[1];
+		portal.bb_min[0]= new_room.bb_min[0];
+		portal.bb_max[0]= new_room.bb_min[0];
+		portal.bb_min[1]= corridor.bb_min[1];
+		portal.bb_max[1]= corridor.bb_max[1];
 		break;
 
 	case WorldData::Direction::XMinus:
-		new_room.bb_max[0]= result_.sectors[sector_index].bb_min[0];
-		new_room.bb_min[0]= result_.sectors[sector_index].bb_min[0] - room_size[0];
-		new_room.bb_min[1]= result_.sectors[sector_index].bb_max[1] - (room_size[1] >> 1);
+		new_room.bb_max[0]= corridor.bb_min[0];
+		new_room.bb_min[0]= corridor.bb_min[0] - room_size[0];
+		new_room.bb_min[1]= corridor.bb_max[1] - (room_size[1] >> 1);
 		new_room.bb_max[1]= new_room.bb_min[1] + room_size[1];
+		portal.bb_min[0]= new_room.bb_max[0];
+		portal.bb_max[0]= new_room.bb_max[0];
+		portal.bb_min[1]= corridor.bb_min[1];
+		portal.bb_max[1]= corridor.bb_max[1];
 		break;
 
 	case WorldData::Direction::YPlus:
-		new_room.bb_min[0]= result_.sectors[sector_index].bb_max[0] - (room_size[0] >> 1);
+		new_room.bb_min[0]= corridor.bb_max[0] - (room_size[0] >> 1);
 		new_room.bb_max[0]= new_room.bb_min[0] + room_size[0];
-		new_room.bb_min[1]= result_.sectors[sector_index].bb_max[1];
-		new_room.bb_max[1]= result_.sectors[sector_index].bb_max[1] + room_size[1];
+		new_room.bb_min[1]= corridor.bb_max[1];
+		new_room.bb_max[1]= corridor.bb_max[1] + room_size[1];
+		portal.bb_min[0]= corridor.bb_min[0];
+		portal.bb_max[0]= corridor.bb_max[0];
+		portal.bb_min[1]= new_room.bb_min[1];
+		portal.bb_max[1]= new_room.bb_min[1];
 		break;
 
 	case WorldData::Direction::YMinus:
-		new_room.bb_min[0]= result_.sectors[sector_index].bb_max[0] - (room_size[0] >> 1);
+		new_room.bb_min[0]= corridor.bb_max[0] - (room_size[0] >> 1);
 		new_room.bb_max[0]= new_room.bb_min[0] + room_size[0];
-		new_room.bb_max[1]= result_.sectors[sector_index].bb_min[1];
-		new_room.bb_min[1]= result_.sectors[sector_index].bb_min[1] - room_size[1];
+		new_room.bb_max[1]= corridor.bb_min[1];
+		new_room.bb_min[1]= corridor.bb_min[1] - room_size[1];
+		portal.bb_min[0]= corridor.bb_min[0];
+		portal.bb_max[0]= corridor.bb_max[0];
+		portal.bb_min[1]= new_room.bb_max[1];
+		portal.bb_max[1]= new_room.bb_max[1];
 		break;
 	};
 
@@ -143,6 +172,10 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 
 	if(!CanPlace(new_room.bb_min, new_room.bb_max))
 		return;
+
+	result_.portals.emplace(
+		MakePortalKey(sector_index, result_.sectors.size()),
+		portal);
 
 	result_.sectors.push_back(new_room);
 	Genrate_r(result_.sectors.size() - 1u);
@@ -166,6 +199,10 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 		new_corridor.bb_min[2]= sector.bb_min[2];
 		new_corridor.bb_max[2]= sector.bb_min[2] + 1;
 
+		WorldData::Portal portal;
+		portal.bb_min[2]= new_corridor.bb_min[2];
+		portal.bb_max[2]= new_corridor.bb_max[2];
+
 		const WorldData::CoordType corridor_length= WorldData::CoordType(rand_.Rand() % 7u + 1u);
 
 		switch(dir)
@@ -175,6 +212,10 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 			new_corridor.bb_max[0]= sector.bb_max[0] + corridor_length;
 			new_corridor.bb_min[1]= (sector.bb_min[1] + sector.bb_max[1]) >> 1;
 			new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
+			portal.bb_min[0]= new_corridor.bb_min[0];
+			portal.bb_max[0]= new_corridor.bb_min[0];
+			portal.bb_min[1]= new_corridor.bb_min[1];
+			portal.bb_max[1]= new_corridor.bb_max[1];
 			break;
 
 		case WorldData::Direction::XMinus:
@@ -182,6 +223,10 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 			new_corridor.bb_min[0]= sector.bb_min[0] - corridor_length;
 			new_corridor.bb_min[1]= (sector.bb_min[1] + sector.bb_max[1]) >> 1;
 			new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
+			portal.bb_min[0]= new_corridor.bb_max[0];
+			portal.bb_max[0]= new_corridor.bb_max[0];
+			portal.bb_min[1]= new_corridor.bb_min[1];
+			portal.bb_max[1]= new_corridor.bb_max[1];
 			break;
 
 		case WorldData::Direction::YPlus:
@@ -189,6 +234,10 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 			new_corridor.bb_max[0]= new_corridor.bb_min[0] + 1;
 			new_corridor.bb_min[1]= sector.bb_max[1];
 			new_corridor.bb_max[1]= sector.bb_max[1] + corridor_length;
+			portal.bb_min[0]= new_corridor.bb_min[0];
+			portal.bb_max[0]= new_corridor.bb_max[0];
+			portal.bb_min[1]= new_corridor.bb_min[1];
+			portal.bb_max[1]= new_corridor.bb_min[1];
 			break;
 
 		case WorldData::Direction::YMinus:
@@ -196,6 +245,10 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 			new_corridor.bb_max[0]= new_corridor.bb_min[0] + 1;
 			new_corridor.bb_max[1]= sector.bb_min[1];
 			new_corridor.bb_min[1]= sector.bb_min[1] - corridor_length;
+			portal.bb_min[0]= new_corridor.bb_min[0];
+			portal.bb_max[0]= new_corridor.bb_max[0];
+			portal.bb_min[1]= new_corridor.bb_max[1];
+			portal.bb_max[1]= new_corridor.bb_max[1];
 			break;
 		};
 
@@ -204,6 +257,10 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 
 		if(!CanPlace(new_corridor.bb_min, new_corridor.bb_max))
 			continue;
+
+		result_.portals.emplace(
+			MakePortalKey(sector_index, result_.sectors.size()),
+			portal);
 
 		result_.sectors.push_back(new_corridor);
 		++new_sectors_count;
@@ -221,8 +278,20 @@ void WorldGenerator::ProcessRoom(const size_t sector_index)
 		new_shaft.bb_max[2]= sector.bb_min[2];
 		new_shaft.bb_min[2]= sector.bb_min[2] - (rand_.Rand() % 4 + 1);
 
+		WorldData::Portal portal;
+		portal.bb_min[0]= new_shaft.bb_min[0];
+		portal.bb_max[0]= new_shaft.bb_max[0];
+		portal.bb_min[1]= new_shaft.bb_min[1];
+		portal.bb_max[1]= new_shaft.bb_max[1];
+		portal.bb_min[2]= new_shaft.bb_max[2];
+		portal.bb_max[2]= new_shaft.bb_max[2];
+
 		if(CanPlace(new_shaft.bb_min, new_shaft.bb_max))
 		{
+			result_.portals.emplace(
+				MakePortalKey(sector_index, result_.sectors.size()),
+				portal);
+
 			result_.sectors.push_back(new_shaft);
 			++new_sectors_count;
 		}
@@ -260,6 +329,18 @@ void WorldGenerator::ProcessShaft(const size_t sector_index)
 	if(!CanPlace(new_room.bb_min, new_room.bb_max))
 		return;
 
+	WorldData::Portal portal;
+	portal.bb_min[0]= x;
+	portal.bb_max[0]= x + 1;
+	portal.bb_min[1]= y;
+	portal.bb_max[1]= y + 1;
+	portal.bb_min[2]= z;
+	portal.bb_max[2]= z;
+
+	result_.portals.emplace(
+		MakePortalKey(sector_index, result_.sectors.size()),
+		portal);
+
 	result_.sectors.push_back(new_room);
 	Genrate_r(result_.sectors.size() - 1u);
 }
@@ -279,6 +360,40 @@ bool WorldGenerator::CanPlace(const WorldData::CoordType* const bb_min, const Wo
 	}
 
 	return true;
+}
+
+const WorldData::Portal* WorldGenerator::FindPortal(const WorldData::CoordType* const cell)
+{
+	for(const auto& portal_pair : result_.portals)
+	{
+		const WorldData::Portal& portal= portal_pair.second;
+
+		if(portal.bb_min[0] == portal.bb_max[0])
+		{
+			if(  cell[1] >= portal.bb_min[1] && cell[1] < portal.bb_max[1] &&
+				 cell[2] >= portal.bb_min[2] && cell[2] < portal.bb_max[2] &&
+				(cell[0] == portal.bb_min[0] || cell[0] + 1 == portal.bb_min[0]))
+				return &portal;
+		}
+		else if(portal.bb_min[1] == portal.bb_max[1])
+		{
+			if(  cell[0] >= portal.bb_min[0] && cell[0] < portal.bb_max[0] &&
+				 cell[2] >= portal.bb_min[2] && cell[2] < portal.bb_max[2] &&
+				(cell[1] == portal.bb_min[1] || cell[1] + 1 == portal.bb_min[1]))
+				return &portal;
+		}
+		else if(portal.bb_min[2] == portal.bb_max[2])
+		{
+			if(  cell[0] >= portal.bb_min[0] && cell[0] < portal.bb_max[0] &&
+				 cell[1] >= portal.bb_min[1] && cell[1] < portal.bb_max[1] &&
+				(cell[2] == portal.bb_min[2] || cell[2] + 1 == portal.bb_min[2]))
+				return &portal;
+		}
+		else
+			KK_ASSERT(false);
+	}
+
+	return nullptr;
 }
 
 void WorldGenerator::FillSegmentsCorridor(WorldData::Sector& sector)
@@ -334,6 +449,10 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.pos[1]= y;
 		segment.pos[2]= sector.bb_min[2];
 		segment.angle= uint8_t((rand_.Rand() & 255u) / 64u);
+
+		if(FindPortal(segment.pos) != nullptr)
+			continue;
+
 		sector.segments.push_back(std::move(segment));
 	}
 
@@ -347,6 +466,10 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.pos[1]= y;
 		segment.pos[2]= sector.bb_min[2];
 		segment.angle= uint8_t(side * 2);
+
+		if(FindPortal(segment.pos) != nullptr)
+			continue;
+
 		sector.segments.push_back(std::move(segment));
 	}
 
@@ -360,6 +483,10 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.pos[1]= sector.bb_min[1] + side * (sector.bb_max[1] - sector.bb_min[1] - 1);
 		segment.pos[2]= sector.bb_min[2];
 		segment.angle= uint8_t(1 + side * 2);
+
+		if(FindPortal(segment.pos) != nullptr)
+			continue;
+
 		sector.segments.push_back(std::move(segment));
 	}
 

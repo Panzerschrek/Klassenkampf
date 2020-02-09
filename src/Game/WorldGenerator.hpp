@@ -1,6 +1,7 @@
 #pragma once
-#include <vector>
 #include <cstdint>
+#include <unordered_map>
+#include <vector>
 
 
 namespace KK
@@ -56,9 +57,22 @@ struct Sector
 	std::vector<Segment> segments;
 };
 
+struct Portal
+{
+	// bb_min = bb_max for one of components.
+	CoordType bb_min[3]{};
+	CoordType bb_max[3]{};
+};
+
+// Pair of indexes.
+// value= first << 32 | secodnd
+// first must be always less, than second.
+using PortalKey= uint64_t;
+
 struct World
 {
 	std::vector<Sector> sectors;
+	std::unordered_map<PortalKey, Portal> portals;
 };
 
 } // namespace WorldData
