@@ -43,7 +43,8 @@ WorldData::World WorldGenerator::Generate()
 		root_sector.bb_min[2]= +0;
 		root_sector.bb_max[0]= +4;
 		root_sector.bb_max[1]= +4;
-		root_sector.bb_max[2]= +3;
+		root_sector.bb_max[2]= +8;
+		root_sector.ceiling_height= 2;
 
 		result_.sectors.push_back(std::move(root_sector));
 	}
@@ -92,17 +93,19 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 	if(rand_.RandBool(1u, 5u))
 		return;
 
+	const LongRand::RandResultType size_mul= 4u;
 	const WorldData::CoordType room_size[]=
 	{
-		WorldData::CoordType(rand_.Rand() % 5u + 3u),
-		WorldData::CoordType(rand_.Rand() % 5u + 3u),
-		WorldData::CoordType(rand_.Rand() % 3u + 2u),
+		WorldData::CoordType((rand_.Rand() % 4u + 1u) * size_mul),
+		WorldData::CoordType((rand_.Rand() % 4u + 1u) * size_mul),
+		WorldData::CoordType(rand_.Rand() % 4u + 4u),
 	};
 
 	WorldData::Sector new_room;
 	new_room.type= WorldData::SectorType::Room;
 	new_room.bb_min[2]= result_.sectors[sector_index].bb_min[2];
 	new_room.bb_max[2]= result_.sectors[sector_index].bb_min[2] + room_size[2];
+	new_room.ceiling_height= 2;
 
 	switch(result_.sectors[sector_index].direction)
 	{
@@ -362,6 +365,30 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		sector.segments.push_back(std::move(segment));
 	}
 
+	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; x+= 4)
+	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; y+= 4)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::CeilingArch4;
+		segment.pos[0]= x;
+		segment.pos[1]= y;
+		segment.pos[2]= sector.bb_max[2] - sector.ceiling_height;
+		segment.angle= 0;
+		sector.segments.push_back(std::move(segment));
+	}
+
+	for(WorldData::CoordType x= sector.bb_min[0]; x <= sector.bb_max[0]; x+= 4)
+	for(WorldData::CoordType y= sector.bb_min[1]; y <= sector.bb_max[1]; y+= 4)
+	for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2] - sector.ceiling_height; ++z)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Column4;
+		segment.pos[0]= x;
+		segment.pos[1]= y;
+		segment.pos[2]= z;
+		segment.angle= 0;
+		sector.segments.push_back(std::move(segment));
+	}
 }
 
 void WorldGenerator::FillSegmentsShaft(WorldData::Sector& sector)
