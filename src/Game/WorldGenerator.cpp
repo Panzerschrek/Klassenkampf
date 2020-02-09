@@ -468,7 +468,7 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.angle= uint8_t(side * 2);
 
 		if(FindPortal(segment.pos) != nullptr)
-			continue;
+			segment.type= WorldData::SegmentType::Floor;
 
 		sector.segments.push_back(std::move(segment));
 	}
@@ -485,7 +485,7 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		segment.angle= uint8_t(1 + side * 2);
 
 		if(FindPortal(segment.pos) != nullptr)
-			continue;
+			segment.type= WorldData::SegmentType::Floor;
 
 		sector.segments.push_back(std::move(segment));
 	}
