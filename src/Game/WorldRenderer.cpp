@@ -455,6 +455,7 @@ WorldRenderer::WorldRenderer(
 		{ WorldData::SegmentType::Floor, "floor_segment" },
 		{ WorldData::SegmentType::Shaft, "shaft_segment" },
 		{ WorldData::SegmentType::FloorWallJoint, "floor_wall_join" },
+		{ WorldData::SegmentType::FloorWallWallJoint, "floor_wall_wall_join" },
 		{ WorldData::SegmentType::Wall, "wall_segment" },
 		{ WorldData::SegmentType::CeilingArch4, "arc4_segment" },
 		{ WorldData::SegmentType::Column4, "column4_segment" },

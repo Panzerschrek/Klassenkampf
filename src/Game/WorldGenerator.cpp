@@ -391,6 +391,20 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		sector.segments.push_back(std::move(segment));
 	}
 
+	// Lower corners.
+	for(WorldData::CoordType side_x= 0; side_x < 2; ++side_x)
+	for(WorldData::CoordType side_y= 0; side_y < 2; ++side_y)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::FloorWallWallJoint;
+		segment.pos[0]= sector.bb_min[0] + side_x * (sector.bb_max[0] - sector.bb_min[0] - 1);
+		segment.pos[1]= sector.bb_min[1] + side_y * (sector.bb_max[1] - sector.bb_min[1] - 1);
+		segment.pos[2]= sector.bb_min[2];
+		segment.angle= uint8_t(side_x == 0 ? (1 - side_y) : (side_y + 2));
+		sector.segments.push_back(std::move(segment));
+	}
+
+	// Ceilings.
 	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; x+= 4)
 	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; y+= 4)
 	{
@@ -403,6 +417,7 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		sector.segments.push_back(std::move(segment));
 	}
 
+	// Columns.
 	for(WorldData::CoordType x= sector.bb_min[0]; x <= sector.bb_max[0]; x+= 4)
 	for(WorldData::CoordType y= sector.bb_min[1]; y <= sector.bb_max[1]; y+= 4)
 	for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2] - sector.ceiling_height; ++z)

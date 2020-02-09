@@ -16,6 +16,7 @@ enum class SegmentType
 	Floor,
 	Wall,
 	FloorWallJoint,
+	FloorWallWallJoint,
 	Corridor,
 	Shaft,
 	CeilingArch4,
