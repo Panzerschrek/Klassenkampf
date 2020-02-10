@@ -22,6 +22,13 @@ namespace Shaders
 
 } // namespace Shaders
 
+struct Uniforms
+{
+	m_Mat4 view_matrix;
+	m_Mat4 normals_matrix;
+};
+static_assert(sizeof(Uniforms) <= 128u, "Uniforms size is too big, limit is 128 bytes");
+
 struct WorldVertex
 {
 	float pos[3];
@@ -56,12 +63,13 @@ const uint16_t g_box_indices[]
 WorldRenderer::WorldRenderer(
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
-	const WorldData::World& world)
+	WorldData::World world)
 	: gpu_data_uploader_(gpu_data_uploader)
 	, vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
+	, world_(std::move(world))
 	, tonemapper_(window_vulkan)
 {
 	// Create shaders
@@ -121,7 +129,7 @@ WorldRenderer::WorldRenderer(
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
 		0u,
-		sizeof(m_Mat4));
+		sizeof(Uniforms));
 
 	vk_pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
@@ -240,22 +248,22 @@ WorldRenderer::WorldRenderer(
 	// Create vertex buffer
 	std::vector<WorldVertex> world_vertices;
 	std::vector<uint16_t> world_indeces;
-	for(const WorldData::Segment& segment : world.segments)
+	for(const WorldData::Sector& sector : world_.sectors)
 	{
 		const size_t index_offset= world_vertices.size();
 
 		const float c_general_scale= 0.25;
 		const float s[3]
 		{
-			c_general_scale * float(segment.bb_max[0] - segment.bb_min[0]),
-			c_general_scale * float(segment.bb_max[1] - segment.bb_min[1]),
-			c_general_scale * float(segment.bb_max[2] - segment.bb_min[2]),
+			c_general_scale * float(sector.bb_max[0] - sector.bb_min[0]),
+			c_general_scale * float(sector.bb_max[1] - sector.bb_min[1]),
+			c_general_scale * float(sector.bb_max[2] - sector.bb_min[2]),
 		};
 		const float d[3]
 		{
-			c_general_scale * float(segment.bb_min[0]),
-			c_general_scale * float(segment.bb_min[1]),
-			c_general_scale * float(segment.bb_min[2]),
+			c_general_scale * float(sector.bb_min[0]),
+			c_general_scale * float(sector.bb_min[1]),
+			c_general_scale * float(sector.bb_min[2]),
 		};
 		for(const auto& in_vertex : g_box_vertices)
 		{
@@ -436,24 +444,32 @@ WorldRenderer::WorldRenderer(
 		gpu_data_uploader_.Flush();
 	}
 
-	const char* const segment_models_names[]=
+	struct SegmentModelDescription
 	{
-		"corridor_segment",
-		"floor_segment",
-		"shaft_segment",
-		"floor_wall_join",
-		"wall_segment",
-		"sponza",
+		WorldData::SegmentType type;
+		const char* file_name;
+	};
+	const SegmentModelDescription segment_models_names[]
+	{
+		{ WorldData::SegmentType::Corridor, "corridor_segment" },
+		{ WorldData::SegmentType::Floor, "floor_segment" },
+		{ WorldData::SegmentType::Shaft, "shaft_segment" },
+		{ WorldData::SegmentType::FloorWallJoint, "floor_wall_join" },
+		{ WorldData::SegmentType::FloorWallWallJoint, "floor_wall_wall_join" },
+		{ WorldData::SegmentType::Wall, "wall_segment" },
+		{ WorldData::SegmentType::CeilingArch4, "arc4_segment" },
+		{ WorldData::SegmentType::Column4, "column4_segment" },
+		//"sponza",
 	};
 
 	size_t material_count= 0u;
-	for(const char* const segment_model_name : segment_models_names)
+	for(const SegmentModelDescription& segment_model_description : segment_models_names)
 	{
-		const std::string file_path= std::string("segment_models/") + segment_model_name + ".kks";
+		const std::string file_path= std::string("segment_models/") + segment_model_description.file_name + ".kks";
 		if(std::optional<SegmentModel> model= LoadSegmentModel(file_path.c_str()))
 		{
 			material_count+= model->materials.size();
-			segment_models_.push_back(std::move(*model));
+			segment_models_.emplace(segment_model_description.type, std::move(*model));
 		}
 	}
 
@@ -497,8 +513,9 @@ WorldRenderer::WorldRenderer(
 			0u, nullptr);
 	}
 
-	for(SegmentModel& model : segment_models_)
+	for(auto& model_pair : segment_models_)
 	{
+		SegmentModel& model= model_pair.second;
 		for(SegmentModel::Material& material : model.materials)
 		{
 			if(!material.image_view)
@@ -544,71 +561,87 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 {
 	tonemapper_.DoRenderPass(
 		command_buffer,
-		[&]
-		{
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
-
-			if(false)
-			{
-				command_buffer.pushConstants(
-					*vk_pipeline_layout_,
-					vk::ShaderStageFlagBits::eVertex,
-					0,
-					sizeof(view_matrix),
-					&view_matrix);
-
-				command_buffer.bindDescriptorSets(
-					vk::PipelineBindPoint::eGraphics,
-					*vk_pipeline_layout_,
-					0u,
-					1u, &*vk_descriptor_set_,
-					0u, nullptr);
-
-				const vk::DeviceSize offsets= 0u;
-				command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
-				command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
-
-				command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
-			}
-			for(const SegmentModel& segment_model : segment_models_)
-			{
-
-				m_Mat4 translate_matrix, segment_matrix;
-				translate_matrix.Translate(m_Vec3(float(&segment_model - segment_models_.data()), 0.0f, 0.0f));
-				segment_matrix= translate_matrix * view_matrix;
-
-				command_buffer.pushConstants(
-					*vk_pipeline_layout_,
-					vk::ShaderStageFlagBits::eVertex,
-					0,
-					sizeof(segment_matrix),
-					&segment_matrix);
-
-				const vk::DeviceSize offsets= 0u;
-				command_buffer.bindVertexBuffers(0u, 1u, &*segment_model.vertex_buffer, &offsets);
-				command_buffer.bindIndexBuffer(*segment_model.index_buffer, 0u, vk::IndexType::eUint16);
-
-				for(const SegmentModel::TriangleGroup& triangle_group : segment_model.triangle_groups)
-				{
-					const SegmentModel::Material& material= segment_model.materials[triangle_group.material_index];
-
-					const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *vk_descriptor_set_;
-					command_buffer.bindDescriptorSets(
-						vk::PipelineBindPoint::eGraphics,
-						*vk_pipeline_layout_,
-						0u,
-						1u, &desctipor_set,
-						0u, nullptr);
-
-					command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-				}
-			}
-		});
+		[&]{ DrawFunction(command_buffer, view_matrix); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 {
 	tonemapper_.EndFrame(command_buffer);
+}
+
+void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
+{
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
+
+	if(false)
+	{
+		command_buffer.pushConstants(
+			*vk_pipeline_layout_,
+			vk::ShaderStageFlagBits::eVertex,
+			0,
+			sizeof(view_matrix),
+			&view_matrix);
+
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*vk_pipeline_layout_,
+			0u,
+			1u, &*vk_descriptor_set_,
+			0u, nullptr);
+
+		const vk::DeviceSize offsets= 0u;
+		command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
+		command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
+
+		command_buffer.drawIndexed(uint32_t(index_count_), 1u, 0u, 0u, 0u);
+	}
+
+	for(const WorldData::Sector& sector : world_.sectors)
+	for(const WorldData::Segment& segment : sector.segments)
+	{
+		const auto it= segment_models_.find(segment.type);
+		if(it == segment_models_.end())
+			continue;
+		const SegmentModel& segment_model= it->second;
+
+		m_Mat4 to_center_mat, rotate_mat, from_center_mat, translate_mat, world_scale_mat, segment_mat;
+		to_center_mat.Translate(m_Vec3(-0.5f, -0.5f, 0.0f));
+		rotate_mat.RotateZ(float(segment.angle) * (3.1415926535f / 2.0f));
+		from_center_mat.Translate(m_Vec3(+0.5f, +0.5f, 0.0f));
+		translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
+		world_scale_mat.Scale(1.0f / 8.0f);
+		segment_mat= to_center_mat * rotate_mat * from_center_mat * translate_mat * world_scale_mat * view_matrix;
+
+		Uniforms uniforms;
+		uniforms.view_matrix= segment_mat;
+		uniforms.normals_matrix= rotate_mat;
+
+		command_buffer.pushConstants(
+			*vk_pipeline_layout_,
+			vk::ShaderStageFlagBits::eVertex,
+			0,
+			sizeof(uniforms),
+			&uniforms);
+
+		const vk::DeviceSize offsets= 0u;
+		command_buffer.bindVertexBuffers(0u, 1u, &*segment_model.vertex_buffer, &offsets);
+		command_buffer.bindIndexBuffer(*segment_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+		for(const SegmentModel::TriangleGroup& triangle_group : segment_model.triangle_groups)
+		{
+			const SegmentModel::Material& material= segment_model.materials[triangle_group.material_index];
+
+			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *vk_descriptor_set_;
+			command_buffer.bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*vk_pipeline_layout_,
+				0u,
+				1u, &desctipor_set,
+				0u, nullptr);
+
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+		}
+	}
 }
 
 std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const char* const file_name)
