@@ -296,28 +296,17 @@ TextOut::TextOut(
 				0u, nullptr,
 				1u, &vk_image_memory_barrier_dst);
 
-			std::array<vk::Offset3D, 2> src_offsets;
-			std::array<vk::Offset3D, 2> dst_offsets;
-
-			src_offsets[0]= 0u;
-			src_offsets[0]= 0u;
-			src_offsets[0]= 0u;
-			src_offsets[1].x= image_loaded.GetWidth () >> (i-1u);
-			src_offsets[1].y= image_loaded.GetHeight() >> (i-1u);
-			src_offsets[1].z= 1u;
-
-			dst_offsets[0]= 0u;
-			dst_offsets[0]= 0u;
-			dst_offsets[0]= 0u;
-			dst_offsets[1].x= image_loaded.GetWidth () >> i;
-			dst_offsets[1].y= image_loaded.GetHeight() >> i;
-			dst_offsets[1].z= 1;
-
-			vk::ImageBlit image_blit(
+			const vk::ImageBlit image_blit(
 				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 1u, 0u, 1u),
-				src_offsets,
+				{
+					vk::Offset3D(0, 0, 0),
+					vk::Offset3D(image_loaded.GetWidth () >> (i-1u), image_loaded.GetHeight() >> (i-1u), 1),
+				},
 				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 0u, 0u, 1u),
-				dst_offsets);
+				{
+					vk::Offset3D(0, 0, 0),
+					vk::Offset3D(image_loaded.GetWidth () >> i, image_loaded.GetHeight() >> i, 1),
+				});
 
 			staging_buffer.command_buffer.blitImage(
 				*font_image_,
