@@ -681,7 +681,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				1u,
 				vk::SampleCountFlagBits::e1,
 				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
+				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 				vk::SharingMode::eExclusive,
 				0u, nullptr,
 				vk::ImageLayout::eUndefined));
@@ -701,15 +701,16 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 		for(size_t i= 0u; i < mip_levels.size(); ++i)
 		{
+			const DDSImage::MipLevel& mip_level= mip_levels[i];
 
 			const GPUDataUploader::RequestResult staging_buffer=
-				gpu_data_uploader_.RequestMemory(mip_levels[i].data_size);
+				gpu_data_uploader_.RequestMemory(mip_level.data_size);
 			std::memcpy(
 				static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
-				mip_levels[i].data,
-				mip_levels[i].data_size);
+				mip_level.data,
+				mip_level.data_size);
 
-			const vk::ImageMemoryBarrier image_memory_transfer_init(
+			const vk::ImageMemoryBarrier image_memory_barrier_transfer(
 				vk::AccessFlagBits::eTransferWrite,
 				vk::AccessFlagBits::eMemoryRead,
 				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
@@ -724,15 +725,15 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::DependencyFlags(),
 				0u, nullptr,
 				0u, nullptr,
-				1u, &image_memory_transfer_init);
+				1u, &image_memory_barrier_transfer);
 
 			const vk::BufferImageCopy copy_region(
 				staging_buffer.buffer_offset,
-				mip_levels[i].size_rounded[0],
-				mip_levels[i].size_rounded[1],
+				mip_level.size_rounded[0],
+				mip_level.size_rounded[1],
 				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, uint32_t(i), 0u, 1u),
 				vk::Offset3D(0, 0, 0),
-				vk::Extent3D(mip_levels[i].size[0], mip_levels[i].size[1], 1u));
+				vk::Extent3D(mip_level.size[0], mip_level.size[1], 1u));
 
 			staging_buffer.command_buffer.copyBufferToImage(
 				staging_buffer.buffer,
@@ -742,7 +743,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 			if(i + 1u == mip_levels.size())
 			{
-				const vk::ImageMemoryBarrier vk_image_memory_barrier_src_final(
+				const vk::ImageMemoryBarrier image_memory_barrier_final(
 					vk::AccessFlagBits::eTransferWrite,
 					vk::AccessFlagBits::eMemoryRead,
 					vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -757,7 +758,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 					vk::DependencyFlags(),
 					0u, nullptr,
 					0u, nullptr,
-					1u, &vk_image_memory_barrier_src_final);
+					1u, &image_memory_barrier_final);
 			}
 		} // for mip levels
 
@@ -879,28 +880,17 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				0u, nullptr,
 				1u, &vk_image_memory_barrier_dst);
 
-			std::array<vk::Offset3D, 2> src_offsets;
-			std::array<vk::Offset3D, 2> dst_offsets;
-
-			src_offsets[0]= 0u;
-			src_offsets[0]= 0u;
-			src_offsets[0]= 0u;
-			src_offsets[1].x= image.GetWidth () >> (j-1u);
-			src_offsets[1].y= image.GetHeight() >> (j-1u);
-			src_offsets[1].z= 1u;
-
-			dst_offsets[0]= 0u;
-			dst_offsets[0]= 0u;
-			dst_offsets[0]= 0u;
-			dst_offsets[1].x= image.GetWidth () >> j;
-			dst_offsets[1].y= image.GetHeight() >> j;
-			dst_offsets[1].z= 1;
-
-			vk::ImageBlit image_blit(
+			const vk::ImageBlit image_blit(
 				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 1u, 0u, 1u),
-				src_offsets,
+				{
+					vk::Offset3D(0, 0, 0),
+					vk::Offset3D(image.GetWidth () >> (j-1u), image.GetHeight() >> (j-1u), 1),
+				},
 				vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, j - 0u, 0u, 1u),
-				dst_offsets);
+				{
+					vk::Offset3D(0, 0, 0),
+					vk::Offset3D(image.GetWidth () >> j, image.GetHeight() >> j, 1),
+				});
 
 			staging_buffer.command_buffer.blitImage(
 				*out_material.image,
