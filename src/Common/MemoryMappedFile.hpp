@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <memory>
+#include <string_view>
 
 
 namespace KK
@@ -12,7 +13,7 @@ using MemoryMappedFilePtr= std::unique_ptr<const MemoryMappedFile>;
 class MemoryMappedFile
 {
 public:
-	static MemoryMappedFilePtr Create(const char* const file_name);
+	static MemoryMappedFilePtr Create(std::string_view file_name);
 
 public:
 	~MemoryMappedFile();

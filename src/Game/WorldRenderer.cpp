@@ -347,7 +347,7 @@ WorldRenderer::WorldRenderer(
 	struct SegmentModelDescription
 	{
 		WorldData::SegmentType type;
-		const char* file_name;
+		std::string_view file_name;
 	};
 	const SegmentModelDescription segment_models_names[]
 	{
@@ -363,8 +363,8 @@ WorldRenderer::WorldRenderer(
 
 	for(const SegmentModelDescription& segment_model_description : segment_models_names)
 	{
-		const std::string file_path= std::string("segment_models/") + segment_model_description.file_name + ".kks";
-		if(std::optional<SegmentModel> model= LoadSegmentModel(file_path.c_str()))
+		const std::string file_path= "segment_models/" + std::string(segment_model_description.file_name) + ".kks";
+		if(std::optional<SegmentModel> model= LoadSegmentModel(file_path))
 			segment_models_.emplace(segment_model_description.type, std::move(*model));
 	}
 
@@ -548,7 +548,7 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 	}
 }
 
-std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const char* const file_name)
+std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const std::string_view file_name)
 {
 	const MemoryMappedFilePtr file_mapped= MemoryMappedFile::Create(file_name);
 	if(file_mapped == nullptr)
@@ -661,7 +661,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 	Material& out_material= materials_[material_name];
 
-	if(const auto dds_image_opt= DDSImage::Load(("textures/" + material_name + ".dds").c_str()))
+	if(const auto dds_image_opt= DDSImage::Load(("textures/" + material_name + ".dds")))
 	{
 		const DDSImage& image= *dds_image_opt;
 		const std::vector<DDSImage::MipLevel>& mip_levels= image.GetMipLevels();
@@ -771,7 +771,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u)));
 	}
-	else if(const auto image_loaded_opt= Image::Load(("textures/" + material_name + ".png").c_str()))
+	else if(const auto image_loaded_opt= Image::Load(("textures/" + material_name + ".png")))
 	{
 		const Image& image= *image_loaded_opt;
 

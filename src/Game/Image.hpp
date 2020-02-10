@@ -1,5 +1,6 @@
 #pragma once
 #include <optional>
+#include <string_view>
 #include <vector>
 
 
@@ -13,7 +14,7 @@ public:
 	using PixelType= uint32_t;
 
 public:
-	static std::optional<Image> Load(const char* file_path);
+	static std::optional<Image> Load(std::string_view file_path);
 
 public:
 	uint32_t GetWidth() const;

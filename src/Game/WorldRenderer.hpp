@@ -55,7 +55,7 @@ private:
 
 private:
 	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
-	std::optional<SegmentModel> LoadSegmentModel(const char* const file_name);
+	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
 	void LoadMaterial(const std::string& material_name);
 
 private:

@@ -18,10 +18,12 @@
 namespace KK
 {
 
-std::optional<Image> Image::Load(const char* const file_path)
+std::optional<Image> Image::Load(const std::string_view file_path)
 {
+	const std::string file_path_str(file_path);
+
 	int width, height, channels;
-	unsigned char* stbi_img_data= stbi_load(file_path, &width, &height, &channels, 0);
+	unsigned char* stbi_img_data= stbi_load(file_path_str.c_str(), &width, &height, &channels, 0);
 	if(stbi_img_data == nullptr)
 		return std::nullopt;
 
