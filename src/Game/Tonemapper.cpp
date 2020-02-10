@@ -26,12 +26,37 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 {
 	const vk::Extent2D viewport_size= window_vulkan.GetViewportSize();
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
-	const auto framebuffer_image_format= vk::Format::eR8G8B8A8Unorm;
+
+	// Select color buffer format.
+	const vk::Format hdr_color_formats[]
+	{
+		// 16 bit formats have priority over 32bit formats.
+		// formats without alpha have priority over formats with alpha.
+		vk::Format::eR16G16B16Sfloat,
+		vk::Format::eR16G16B16A16Sfloat,
+		vk::Format::eR32G32B32Sfloat,
+		vk::Format::eR32G32B32A32Sfloat,
+		vk::Format::eB10G11R11UfloatPack32, // Keep it last, 5-6 bit mantissa is too low.
+	};
+	vk::Format framebuffer_image_format= hdr_color_formats[0];
+	for(const vk::Format format_candidate : hdr_color_formats)
+	{
+		const vk::FormatProperties format_properties=
+			window_vulkan.GetPhysicalDevice().getFormatProperties(format_candidate);
+
+		const vk::FormatFeatureFlags required_falgs=
+			vk::FormatFeatureFlagBits::eColorAttachment | vk::FormatFeatureFlagBits::eColorAttachmentBlend;
+		if((format_properties.optimalTilingFeatures & required_falgs) == required_falgs)
+		{
+			framebuffer_image_format= format_candidate;
+			break;
+		}
+	}
 
 	// Select depth buffer format.
 	const vk::Format depth_formats[]
 	{
-	// Depth formats by priority.
+		// Depth formats by priority.
 		vk::Format::eD32Sfloat,
 		vk::Format::eD24UnormS8Uint,
 		vk::Format::eX8D24UnormPack32,
