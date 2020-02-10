@@ -341,108 +341,8 @@ WorldRenderer::WorldRenderer(
 		vk_device_.unmapMemory(*vk_index_buffer_memory_);
 	}
 
-	// Create texture.
-	{
-		const auto image_loaded_opt= Image::Load("test_image.png");
-		KK_ASSERT(image_loaded_opt != std::nullopt);
-		const Image& image_loaded= *image_loaded_opt;
-
-		vk_image_= vk_device_.createImageUnique(
-			vk::ImageCreateInfo(
-				vk::ImageCreateFlags(),
-				vk::ImageType::e2D,
-				vk::Format::eR8G8B8A8Unorm,
-				vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u),
-				1u,
-				1u,
-				vk::SampleCountFlagBits::e1,
-				vk::ImageTiling::eOptimal,
-				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-				vk::SharingMode::eExclusive,
-				0u, nullptr,
-				vk::ImageLayout::eUndefined));
-
-		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*vk_image_);
-
-		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
-		{
-			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
-				vk_memory_allocate_info.memoryTypeIndex= i;
-		}
-
-		vk_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
-		vk_device_.bindImageMemory(*vk_image_, *vk_image_memory_, 0u);
-
-		// Transfer image data.
-		const GPUDataUploader::RequestResult staging_buffer=
-			gpu_data_uploader_.RequestMemory(image_loaded.GetWidth() * image_loaded.GetHeight() * 4u);
-
-		std::memcpy(
-			static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
-			image_loaded.GetData(),
-			image_loaded.GetWidth() * image_loaded.GetHeight() * 4u);
-
-		const vk::ImageMemoryBarrier image_memory_transfer_init(
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-			queue_family_index_,
-			queue_family_index_,
-			*vk_image_,
-			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-		staging_buffer.command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &image_memory_transfer_init);
-
-		const vk::BufferImageCopy copy_region(
-			staging_buffer.buffer_offset,
-			image_loaded.GetWidth(), image_loaded.GetHeight(),
-			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
-			vk::Offset3D(0, 0, 0),
-			vk::Extent3D(image_loaded.GetWidth(), image_loaded.GetHeight(), 1u));
-
-		staging_buffer.command_buffer.copyBufferToImage(
-			staging_buffer.buffer,
-			*vk_image_,
-			vk::ImageLayout::eTransferDstOptimal,
-			1u, &copy_region);
-
-		const vk::ImageMemoryBarrier image_memory_transfer_final(
-			vk::AccessFlagBits::eTransferWrite,
-			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-			queue_family_index_,
-			queue_family_index_,
-			*vk_image_,
-			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
-
-		staging_buffer.command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			vk::DependencyFlags(),
-			0u, nullptr,
-			0u, nullptr,
-			1u, &image_memory_transfer_final);
-
-		// Create image view.
-		vk_image_view_= vk_device_.createImageViewUnique(
-			vk::ImageViewCreateInfo(
-				vk::ImageViewCreateFlags(),
-				*vk_image_,
-				vk::ImageViewType::e2D,
-				vk::Format::eR8G8B8A8Unorm,
-				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
-				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
-
-		gpu_data_uploader_.Flush();
-	}
+	test_material_id_= "test_image";
+	LoadMaterial(test_material_id_);
 
 	struct SegmentModelDescription
 	{
@@ -474,42 +374,13 @@ WorldRenderer::WorldRenderer(
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_size(
 		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(1u + materials_.size()));
+		uint32_t(materials_.size()));
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
 				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
 				1u, &vk_descriptor_pool_size));
-
-	{
-		// Create descriptor set.
-		vk_descriptor_set_=
-			std::move(
-			vk_device_.allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(
-					*vk_descriptor_pool_,
-					1u, &*vk_decriptor_set_layout_)).front());
-
-		// Write descriptor set.
-		const vk::DescriptorImageInfo descriptor_image_info(
-			vk::Sampler(),
-			*vk_image_view_,
-			vk::ImageLayout::eShaderReadOnlyOptimal);
-
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*vk_descriptor_set_,
-			g_tex_uniform_binding,
-			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
-		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
-			0u, nullptr);
-	}
 
 	for(auto& material_pair : materials_)
 	{
@@ -566,6 +437,8 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 
 void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
 {
+	const Material& test_material= materials_.find(test_material_id_)->second;
+
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
 
 	if(false)
@@ -581,7 +454,7 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 			vk::PipelineBindPoint::eGraphics,
 			*vk_pipeline_layout_,
 			0u,
-			1u, &*vk_descriptor_set_,
+			1u, &*test_material.descriptor_set,
 			0u, nullptr);
 
 		const vk::DeviceSize offsets= 0u;
@@ -615,7 +488,7 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 		{
 			const Material& material= materials_.find(triangle_group.material_id)->second;
 
-			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *vk_descriptor_set_;
+			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
 			command_buffer.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
 				*vk_pipeline_layout_,
@@ -662,7 +535,7 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 		{
 			const Material& material= materials_.find(triangle_group.material_id)->second;
 
-			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *vk_descriptor_set_;
+			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
 			command_buffer.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
 				*vk_pipeline_layout_,
@@ -901,8 +774,6 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 	{
 		const Image& image= *image_loaded_opt;
 
-		KK_ASSERT((image.GetWidth () & (image.GetWidth () - 1u)) == 0u);
-		KK_ASSERT((image.GetHeight() & (image.GetHeight() - 1u)) == 0u);
 		const uint32_t mip_levels= uint32_t(std::log2(float(std::min(image.GetWidth(), image.GetHeight()))) - 1.0f);
 
 		out_material.image= vk_device_.createImageUnique(
