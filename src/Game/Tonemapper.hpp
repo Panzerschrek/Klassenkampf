@@ -27,6 +27,7 @@ private:
 	vk::UniqueImage framebuffer_image_;
 	vk::UniqueDeviceMemory framebuffer_image_memory_;
 	vk::UniqueImageView framebuffer_image_view_;
+	vk::UniqueImageView framebuffer_attachment_image_view_;
 	vk::UniqueSampler framebuffer_image_sampler_;
 	uint32_t framebuffer_image_mip_levels_;
 
