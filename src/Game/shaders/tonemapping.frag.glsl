@@ -33,7 +33,8 @@ void main()
 			texture(tex, tex_coord_b).b
 			);
 
-	float exposure= 1.0; // TODO - read uniform
+	float brightness= dot(textureLod(tex, vec2(0.5, 0.5), 16).rgb, vec3(0.299, 0.587, 0.114));
+	float exposure= inversesqrt(brightness + 0.001);
 	color= tonemapping_function(color, exposure);
 
 	out_color= vec4(color, 1.0);
