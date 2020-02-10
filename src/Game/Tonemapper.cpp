@@ -126,6 +126,16 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 					framebuffer_image_format,
 					vk::ComponentMapping(),
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, framebuffer_image_mip_levels_, 0u, 1u)));
+
+		framebuffer_attachment_image_view_=
+			vk_device_.createImageViewUnique(
+				vk::ImageViewCreateInfo(
+					vk::ImageViewCreateFlags(),
+					*framebuffer_image_,
+					vk::ImageViewType::e2D,
+					framebuffer_image_format,
+					vk::ComponentMapping(),
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
 	}
 	{
 		framebuffer_depth_image_=
@@ -212,7 +222,7 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 				uint32_t(std::size(vk_attachment_description)), vk_attachment_description,
 				1u, &vk_subpass_description));
 
-	const vk::ImageView framebuffer_images[]{ *framebuffer_image_view_, *framebuffer_depth_image_view_ };
+	const vk::ImageView framebuffer_images[]{ *framebuffer_attachment_image_view_, *framebuffer_depth_image_view_ };
 	framebuffer_=
 		vk_device_.createFramebufferUnique(
 			vk::FramebufferCreateInfo(
