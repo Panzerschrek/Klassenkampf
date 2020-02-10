@@ -76,7 +76,6 @@ private:
 	vk::UniquePipeline vk_pipeline_;
 
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
-	vk::UniqueDescriptorSet vk_descriptor_set_;
 
 	vk::UniqueBuffer vk_vertex_buffer_;
 	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
@@ -85,14 +84,12 @@ private:
 	size_t index_count_= 0u;
 	vk::UniqueDeviceMemory vk_index_buffer_memory_;
 
-	vk::UniqueImage vk_image_;
-	vk::UniqueDeviceMemory vk_image_memory_;
-	vk::UniqueImageView vk_image_view_;
 	vk::UniqueSampler vk_image_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;
 	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models_;
 
+	std::string test_material_id_;
 	SegmentModel test_model_;
 };
 
