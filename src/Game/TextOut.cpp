@@ -361,7 +361,7 @@ TextOut::TextOut(
 				*font_image_,
 				vk::ImageViewType::e2D,
 				vk::Format::eR8G8B8A8Unorm,
-				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
+				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
 
