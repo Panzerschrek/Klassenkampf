@@ -86,7 +86,7 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 	framebuffer_size_.height= (framebuffer_size_.height + 7u) & ~7u;
 
 	framebuffer_image_mip_levels_=
-		uint32_t(std::ceil(std::log2(double(std::max(framebuffer_size_.width, framebuffer_size_.height)))));
+		1u + uint32_t(std::floor(std::log2(double(std::max(framebuffer_size_.width, framebuffer_size_.height)))));
 	{
 		framebuffer_image_=
 			vk_device_.createImageUnique(
