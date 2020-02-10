@@ -485,7 +485,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 	return file_data;
 }
 
-void WriteFile(const FileData& content, const char* file_name)
+void WriteFile(const FileData& content, const char* const file_name)
 {
 	std::FILE* const f= std::fopen(file_name, "wb");
 	if(f == nullptr)
@@ -688,7 +688,7 @@ int Main(const int argc, const char* const argv[])
 		return -1;
 	}
 
-	const MemoryMappedFilePtr input_file_mapped= MemoryMappedFile::Create(input_files.front().c_str());
+	const MemoryMappedFilePtr input_file_mapped= MemoryMappedFile::Create(input_files.front());
 	if(input_file_mapped == nullptr)
 		return -1;
 

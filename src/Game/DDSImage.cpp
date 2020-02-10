@@ -61,7 +61,7 @@ namespace DDSHeaderFlags
 
 } // namespace
 
-std::optional<DDSImage> DDSImage::Load(const char* const file_name)
+std::optional<DDSImage> DDSImage::Load(const std::string_view file_name)
 {
 	auto file= MemoryMappedFile::Create(file_name);
 	if(file == nullptr)

@@ -107,7 +107,7 @@ std::string MakeQuotedString(const std::string& str)
 Settings::Settings(const std::string_view file_name)
 	: file_name_(file_name)
 {
-	const MemoryMappedFilePtr mapped_file= MemoryMappedFile::Create(file_name_.c_str());
+	const MemoryMappedFilePtr mapped_file= MemoryMappedFile::Create(file_name);
 	if(mapped_file == nullptr)
 		return;
 

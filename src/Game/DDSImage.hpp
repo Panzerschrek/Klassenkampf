@@ -19,7 +19,7 @@ public:
 		size_t data_size= 0u;
 	};
 
-	static std::optional<DDSImage> Load(const char* file_name);
+	static std::optional<DDSImage> Load(std::string_view file_name);
 
 	DDSImage(DDSImage&&)= default;
 	DDSImage& operator=(DDSImage&&)= default;

@@ -15,13 +15,15 @@
 namespace KK
 {
 
-MemoryMappedFilePtr MemoryMappedFile::Create(const char* const file_name)
+MemoryMappedFilePtr MemoryMappedFile::Create(const std::string_view file_name)
 {
+	const std::string file_name_str(file_name);
+
 #ifdef WIN32
 	// TODO - maybe use "CreateFileW"?
 	const HANDLE file_descriptor=
 		::CreateFileA(
-			file_name,
+			file_name_str.c_str(),
 			GENERIC_READ,
 			0,
 			nullptr,
@@ -62,7 +64,7 @@ MemoryMappedFilePtr MemoryMappedFile::Create(const char* const file_name)
 
 	return MemoryMappedFilePtr(new MemoryMappedFile(data, file_size.QuadPart, file_descriptor, file_mapping_handle));
 #else
-	const FileDescriptor file_descriptor= ::open(file_name, O_LARGEFILE);
+	const FileDescriptor file_descriptor= ::open(file_name_str.c_str(), O_LARGEFILE);
 	if( file_descriptor == -1 )
 	{
 		std::cout << "Error, opening file \"" << file_name << "\". Error code: " << errno << std::endl;
