@@ -1,4 +1,5 @@
 #include "Tonemapper.hpp"
+#include "Log.hpp"
 
 
 namespace KK
@@ -87,6 +88,11 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 
 	framebuffer_image_mip_levels_=
 		1u + uint32_t(std::floor(std::log2(double(std::max(framebuffer_size_.width, framebuffer_size_.height)))));
+
+	Log::Info("Main framebuffer size: ", framebuffer_size_.width, "x", framebuffer_size_.height);
+	Log::Info("Main framebuffer color format: ", vk::to_string(framebuffer_image_format));
+	Log::Info("Main framebuffer depth format: ", vk::to_string(framebuffer_depth_format));
+
 	{
 		framebuffer_image_=
 			vk_device_.createImageUnique(
