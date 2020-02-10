@@ -5,6 +5,7 @@
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
 #include <optional>
+#include <string>
 
 
 namespace KK
@@ -24,28 +25,26 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
+	struct Material
+	{
+		vk::UniqueImage image;
+		vk::UniqueImageView image_view;
+		vk::UniqueDeviceMemory image_memory;
+
+		vk::UniqueDescriptorSet descriptor_set;
+	};
+
 	struct SegmentModel
 	{
-
 		struct TriangleGroup
 		{
 			uint32_t first_vertex;
 			uint32_t first_index;
 			uint32_t index_count;
-			size_t material_index;
-		};
-
-		struct Material
-		{
-			vk::UniqueImage image;
-			vk::UniqueImageView image_view;
-			vk::UniqueDeviceMemory image_memory;
-
-			vk::UniqueDescriptorSet descriptor_set;
+			std::string material_id;
 		};
 
 		std::vector<TriangleGroup> triangle_groups;
-		std::vector<Material> materials;
 
 		vk::UniqueBuffer vertex_buffer;
 		vk::UniqueDeviceMemory vertex_buffer_memory;
@@ -57,6 +56,7 @@ private:
 private:
 	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
 	std::optional<SegmentModel> LoadSegmentModel(const char* const file_name);
+	void LoadMaterial(const std::string& material_name);
 
 private:
 	GPUDataUploader& gpu_data_uploader_;
@@ -90,7 +90,10 @@ private:
 	vk::UniqueImageView vk_image_view_;
 	vk::UniqueSampler vk_image_sampler_;
 
+	std::unordered_map<std::string, Material> materials_;
 	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models_;
+
+	SegmentModel test_model_;
 };
 
 } // namespace KK
