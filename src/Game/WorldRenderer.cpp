@@ -768,7 +768,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				*out_material.image,
 				vk::ImageViewType::e2D,
 				image.GetFormat(),
-				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
+				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u)));
 	}
 	else if(const auto image_loaded_opt= Image::Load(("textures/" + material_name + ".png").c_str()))
@@ -944,7 +944,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				*out_material.image,
 				vk::ImageViewType::e2D,
 				vk::Format::eR8G8B8A8Unorm,
-				vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA),
+				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
 }
