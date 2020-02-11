@@ -20,13 +20,16 @@ public:
 
 private:
 	const vk::Device vk_device_;
+	const uint32_t queue_family_index_;
 	const vk::SampleCountFlagBits msaa_sample_count_;
 
 	vk::Extent2D framebuffer_size_;
 	vk::UniqueImage framebuffer_image_;
 	vk::UniqueDeviceMemory framebuffer_image_memory_;
 	vk::UniqueImageView framebuffer_image_view_;
+	vk::UniqueImageView framebuffer_attachment_image_view_;
 	vk::UniqueSampler framebuffer_image_sampler_;
+	uint32_t framebuffer_image_mip_levels_;
 
 	vk::UniqueImage framebuffer_depth_image_;
 	vk::UniqueDeviceMemory framebuffer_depth_image_memory_;

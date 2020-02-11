@@ -1,4 +1,5 @@
 #include "Tonemapper.hpp"
+#include "Log.hpp"
 
 
 namespace KK
@@ -22,16 +23,42 @@ const uint32_t g_tex_uniform_binding= 0u;
 
 Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 	: vk_device_(window_vulkan.GetVulkanDevice())
+	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, msaa_sample_count_(vk::SampleCountFlagBits::e1)
 {
 	const vk::Extent2D viewport_size= window_vulkan.GetViewportSize();
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
-	const auto framebuffer_image_format= vk::Format::eR8G8B8A8Unorm;
+
+	// Select color buffer format.
+	const vk::Format hdr_color_formats[]
+	{
+		// 16 bit formats have priority over 32bit formats.
+		// formats without alpha have priority over formats with alpha.
+		vk::Format::eR16G16B16Sfloat,
+		vk::Format::eR16G16B16A16Sfloat,
+		vk::Format::eR32G32B32Sfloat,
+		vk::Format::eR32G32B32A32Sfloat,
+		vk::Format::eB10G11R11UfloatPack32, // Keep it last, 5-6 bit mantissa is too low.
+	};
+	vk::Format framebuffer_image_format= hdr_color_formats[0];
+	for(const vk::Format format_candidate : hdr_color_formats)
+	{
+		const vk::FormatProperties format_properties=
+			window_vulkan.GetPhysicalDevice().getFormatProperties(format_candidate);
+
+		const vk::FormatFeatureFlags required_falgs=
+			vk::FormatFeatureFlagBits::eColorAttachment | vk::FormatFeatureFlagBits::eColorAttachmentBlend;
+		if((format_properties.optimalTilingFeatures & required_falgs) == required_falgs)
+		{
+			framebuffer_image_format= format_candidate;
+			break;
+		}
+	}
 
 	// Select depth buffer format.
 	const vk::Format depth_formats[]
 	{
-	// Depth formats by priority.
+		// Depth formats by priority.
 		vk::Format::eD32Sfloat,
 		vk::Format::eD24UnormS8Uint,
 		vk::Format::eX8D24UnormPack32,
@@ -59,6 +86,13 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 	framebuffer_size_.width = (framebuffer_size_.width  + 7u) & ~7u;
 	framebuffer_size_.height= (framebuffer_size_.height + 7u) & ~7u;
 
+	framebuffer_image_mip_levels_=
+		1u + uint32_t(std::floor(std::log2(double(std::max(framebuffer_size_.width, framebuffer_size_.height)))));
+
+	Log::Info("Main framebuffer size: ", framebuffer_size_.width, "x", framebuffer_size_.height);
+	Log::Info("Main framebuffer color format: ", vk::to_string(framebuffer_image_format));
+	Log::Info("Main framebuffer depth format: ", vk::to_string(framebuffer_depth_format));
+
 	{
 		framebuffer_image_=
 			vk_device_.createImageUnique(
@@ -67,11 +101,11 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 					vk::ImageType::e2D,
 					framebuffer_image_format,
 					vk::Extent3D(framebuffer_size_.width, framebuffer_size_.height, 1u),
-					1u,
+					framebuffer_image_mip_levels_,
 					1u,
 					msaa_sample_count_,
 					vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment,
+					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
 					vk::SharingMode::eExclusive,
 					0u, nullptr,
 					vk::ImageLayout::eUndefined));
@@ -90,6 +124,16 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 		vk_device_.bindImageMemory(*framebuffer_image_, *framebuffer_image_memory_, 0u);
 
 		framebuffer_image_view_=
+			vk_device_.createImageViewUnique(
+				vk::ImageViewCreateInfo(
+					vk::ImageViewCreateFlags(),
+					*framebuffer_image_,
+					vk::ImageViewType::e2D,
+					framebuffer_image_format,
+					vk::ComponentMapping(),
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, framebuffer_image_mip_levels_, 0u, 1u)));
+
+		framebuffer_attachment_image_view_=
 			vk_device_.createImageViewUnique(
 				vk::ImageViewCreateInfo(
 					vk::ImageViewCreateFlags(),
@@ -184,7 +228,7 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 				uint32_t(std::size(vk_attachment_description)), vk_attachment_description,
 				1u, &vk_subpass_description));
 
-	const vk::ImageView framebuffer_images[]{ *framebuffer_image_view_, *framebuffer_depth_image_view_ };
+	const vk::ImageView framebuffer_images[]{ *framebuffer_attachment_image_view_, *framebuffer_depth_image_view_ };
 	framebuffer_=
 		vk_device_.createFramebufferUnique(
 			vk::FramebufferCreateInfo(
@@ -225,7 +269,7 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 				VK_FALSE,
 				vk::CompareOp::eNever,
 				0.0f,
-				0.0f,
+				float(framebuffer_image_mip_levels_),
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
@@ -409,6 +453,87 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 	draw_function();
 
 	command_buffer.endRenderPass();
+
+	// Calculate exposure.
+	for(uint32_t i= 1u; i < framebuffer_image_mip_levels_; ++i)
+	{
+		// Transform previous mip level layout from dst_optimal to src_optimal
+		const vk::ImageMemoryBarrier image_memory_barrier_src(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			i == 1u ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eTransferDstOptimal,
+			vk::ImageLayout::eTransferSrcOptimal,
+			queue_family_index_,
+			queue_family_index_,
+			*framebuffer_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i - 1u, 1u, 0u, 1u));
+
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_barrier_src);
+
+		const vk::ImageMemoryBarrier image_memory_barrier_dst(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+			queue_family_index_,
+			queue_family_index_,
+			*framebuffer_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i, 1u, 0u, 1u));
+
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_barrier_dst);
+
+		const vk::ImageBlit image_blit(
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 1u, 0u, 1u),
+			{
+				vk::Offset3D(0, 0, 0),
+				vk::Offset3D(std::max(1u, framebuffer_size_.width  >> (i-1u)), std::max(1u, framebuffer_size_.height >> (i-1u)), 1),
+			},
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 0u, 0u, 1u),
+			{
+				vk::Offset3D(0, 0, 0),
+				vk::Offset3D(std::max(1u, framebuffer_size_.width >> i), std::max(1u, framebuffer_size_.height >> i), 1),
+			});
+
+		command_buffer.blitImage(
+			*framebuffer_image_,
+			vk::ImageLayout::eTransferSrcOptimal,
+			*framebuffer_image_,
+			vk::ImageLayout::eTransferDstOptimal,
+			1u, &image_blit,
+			vk::Filter::eLinear);
+	}
+
+	for(uint32_t i= 0u; i < framebuffer_image_mip_levels_; ++i)
+	{
+		const vk::ImageMemoryBarrier image_memory_barrier_final(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			(i + 1u == framebuffer_image_mip_levels_) ? vk::ImageLayout::eTransferDstOptimal : vk::ImageLayout::eTransferSrcOptimal,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			queue_family_index_,
+			queue_family_index_,
+			*framebuffer_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, i, 1u, 0u, 1u));
+
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_barrier_final);
+	}
 }
 
 void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
