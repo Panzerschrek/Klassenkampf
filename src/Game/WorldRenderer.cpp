@@ -537,13 +537,18 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
 {
-	m_Mat4 shadow_rotate_mat, shadow_scale_mat, shadow_translate_mat;
-	shadow_rotate_mat.RotateY(3.1415926535f);
+	const float pi= 3.1415926535f;
+	float sun_azimuth= 0.1f * pi;
+	float sun_elevation= pi * 0.45f;
+	m_Mat4 shadow_rotate_x_mat, shadow_rotate_z_mat, shadow_scale_mat, shadow_translate_mat;
+
+	shadow_rotate_x_mat.RotateX(1.5f * pi - sun_elevation);
+	shadow_rotate_z_mat.RotateZ(-sun_azimuth);
 	shadow_scale_mat.Scale(1.0f / 256.0f);
 	shadow_translate_mat.Translate(m_Vec3(0.0f, 0.0f, +1.0f));
-	shadow_matrix_= shadow_rotate_mat * shadow_scale_mat * shadow_translate_mat;
+	shadow_matrix_= shadow_rotate_z_mat * shadow_rotate_x_mat * shadow_scale_mat * shadow_translate_mat;
 
-	m_Vec3 light_dir(0.5f, 0.2f, 0.7f);
+	m_Vec3 light_dir(std::cos(sun_elevation) * std::sin(sun_azimuth), std::cos(sun_elevation) * std::cos(sun_azimuth), std::sin(sun_elevation));
 	light_dir/= light_dir.GetLength();
 
 	LightBuffer light_buffer;

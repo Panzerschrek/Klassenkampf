@@ -23,7 +23,7 @@ void main()
 	vec4 shadow_pos= shadowmap_mat * vec4(f_pos, 1.0);
 	shadow_pos.z-= 0.01;
 	float shadowmap_value= texture(shadowmap, shadow_pos.xyz * vec3(0.5, 0.5, 1.0) + vec3(0.5, 0.5, 0.0));
-	float direct_light= shadowmap_value * 1.0;//max(0.0, dot(light_pos.xyz, normalize(f_normal)));
+	float direct_light= shadowmap_value * max(0.0, dot(light_pos.xyz, normalize(f_normal)));
 	vec3 l= direct_light * light_color.xyz + ambient_light_color.xyz;
 
 	const vec4 tex_value= texture(tex, f_tex_coord);
