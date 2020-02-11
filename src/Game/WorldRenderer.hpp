@@ -1,6 +1,7 @@
 #pragma once
 #include "../MathLib/Mat.hpp"
 #include "GPUDataUploader.hpp"
+#include "Shadowmapper.hpp"
 #include "Tonemapper.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
@@ -67,6 +68,7 @@ private:
 
 	const WorldData::World world_;
 
+	Shadowmapper shadowmapper_;
 	Tonemapper tonemapper_;
 
 	vk::UniqueShaderModule shader_vert_;
