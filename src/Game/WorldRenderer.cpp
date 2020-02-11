@@ -71,7 +71,7 @@ WorldRenderer::WorldRenderer(
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, world_(std::move(world))
 	, tonemapper_(window_vulkan)
-	, shadowmapper_(window_vulkan)
+	, shadowmapper_(window_vulkan, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
 {
 	// Create shaders
 	shader_vert_=

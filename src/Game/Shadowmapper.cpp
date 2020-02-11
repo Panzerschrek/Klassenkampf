@@ -1,11 +1,33 @@
 #include "Shadowmapper.hpp"
 #include "Log.hpp"
+#include "../MathLib/Mat.hpp"
 
 
 namespace KK
 {
 
-Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
+namespace
+{
+
+namespace Shaders
+{
+
+#include "shaders/shadow.vert.sprv.h"
+
+} // namespace Shaders
+
+struct Uniforms
+{
+	m_Mat4 mat;
+};
+
+} // namespace
+
+Shadowmapper::Shadowmapper(
+	WindowVulkan& window_vulkan,
+	const size_t vertex_size,
+	const size_t vertex_pos_offset,
+	const vk::Format vertex_pos_format)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 {
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
@@ -118,6 +140,107 @@ Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
 					1u, &*depth_image_view_,
 					shadowmap_size_.width , shadowmap_size_.height, 1u));
 	}
+
+	// Create shaders.
+	shader_vert_=
+		vk_device_.createShaderModuleUnique(
+			vk::ShaderModuleCreateInfo(
+				vk::ShaderModuleCreateFlags(),
+				std::size(Shaders::c_shadow_vert_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_shadow_vert_file_content)));
+
+	// Create pipeline layout.
+	const vk::PushConstantRange push_constant_range(
+		vk::ShaderStageFlagBits::eVertex,
+		0u,
+		sizeof(Uniforms));
+
+	pipeline_layout_=
+		vk_device_.createPipelineLayoutUnique(
+			vk::PipelineLayoutCreateInfo(
+				vk::PipelineLayoutCreateFlags(),
+				0u, nullptr,
+				1u, &push_constant_range));
+
+	// Create pipeline.
+	const vk::PipelineShaderStageCreateInfo shader_stage_create_info[]
+	{
+		{
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eVertex,
+			*shader_vert_,
+			"main"
+		},
+	};
+
+	const vk::VertexInputBindingDescription vertex_input_binding_description(
+		0u, uint32_t(vertex_size), vk::VertexInputRate::eVertex);
+
+	const vk::VertexInputAttributeDescription vertex_input_attribute_description[]
+	{
+		{0u, 0u, vertex_pos_format, uint32_t(vertex_pos_offset)},
+	};
+
+	const vk::PipelineVertexInputStateCreateInfo pipiline_vertex_input_state_create_info(
+		vk::PipelineVertexInputStateCreateFlags(),
+		1u, &vertex_input_binding_description,
+		uint32_t(std::size(vertex_input_attribute_description)), vertex_input_attribute_description);
+
+	const vk::PipelineInputAssemblyStateCreateInfo pipeline_input_assembly_state_create_info(
+		vk::PipelineInputAssemblyStateCreateFlags(),
+		vk::PrimitiveTopology::eTriangleList);
+
+	const vk::Viewport viewport(0.0f, 0.0f, float(shadowmap_size_.width), float(shadowmap_size_.height), 0.0f, 1.0f);
+	const vk::Rect2D scissor(vk::Offset2D(0, 0), shadowmap_size_);
+
+	const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
+		vk::PipelineViewportStateCreateFlags(),
+		1u, &viewport,
+		1u, &scissor);
+
+	const vk::PipelineRasterizationStateCreateInfo pipilane_rasterization_state_create_info(
+		vk::PipelineRasterizationStateCreateFlags(),
+		VK_FALSE,
+		VK_FALSE,
+		vk::PolygonMode::eFill,
+		vk::CullModeFlagBits::eNone,
+		vk::FrontFace::eCounterClockwise,
+		VK_FALSE, 0.0f, 0.0f, 0.0f,
+		1.0f);
+
+	const vk::PipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info;
+
+	const vk::PipelineColorBlendAttachmentState pipeline_color_blend_attachment_state(
+		VK_FALSE,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+
+	const vk::PipelineColorBlendStateCreateInfo pipeline_color_blend_state_create_info(
+		vk::PipelineColorBlendStateCreateFlags(),
+		VK_FALSE,
+		vk::LogicOp::eCopy,
+		1u, &pipeline_color_blend_attachment_state);
+
+	pipeline_=
+		vk_device_.createGraphicsPipelineUnique(
+			nullptr,
+			vk::GraphicsPipelineCreateInfo(
+				vk::PipelineCreateFlags(),
+				uint32_t(std::size(shader_stage_create_info)),
+				shader_stage_create_info,
+				&pipiline_vertex_input_state_create_info,
+				&pipeline_input_assembly_state_create_info,
+				nullptr,
+				&pipieline_viewport_state_create_info,
+				&pipilane_rasterization_state_create_info,
+				&pipeline_multisample_state_create_info,
+				nullptr,
+				&pipeline_color_blend_state_create_info,
+				nullptr,
+				*pipeline_layout_,
+				window_vulkan.GetRenderPass(),
+				0u));
 }
 
 Shadowmapper::~Shadowmapper()

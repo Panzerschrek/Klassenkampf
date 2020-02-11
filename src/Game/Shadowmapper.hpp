@@ -8,7 +8,11 @@ namespace KK
 class Shadowmapper final
 {
 public:
-	explicit Shadowmapper(WindowVulkan& window_vulkan);
+	Shadowmapper(
+		WindowVulkan& window_vulkan,
+		size_t vertex_size,
+		size_t vertex_pos_offset,
+		vk::Format vertex_pos_format);
 	~Shadowmapper();
 
 private:
@@ -23,7 +27,6 @@ private:
 	vk::UniqueFramebuffer framebuffer_;
 
 	vk::UniqueShaderModule shader_vert_;
-	vk::UniqueShaderModule shader_frag_;
 	vk::UniqueDescriptorSetLayout decriptor_set_layout_;
 	vk::UniquePipelineLayout pipeline_layout_;
 	vk::UniquePipeline pipeline_;
