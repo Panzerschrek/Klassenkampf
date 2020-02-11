@@ -55,6 +55,7 @@ private:
 	};
 
 private:
+	void DrawFunctionShadow(vk::CommandBuffer command_buffer);
 	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
 	void LoadMaterial(const std::string& material_name);
@@ -91,12 +92,15 @@ private:
 	vk::UniqueDeviceMemory vk_light_data_buffer_memory_;
 
 	vk::UniqueSampler vk_image_sampler_;
+	vk::UniqueSampler vk_shadowmap_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;
 	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models_;
 
 	std::string test_material_id_;
 	SegmentModel test_model_;
+
+	m_Mat4 shadow_matrix_;
 };
 
 } // namespace KK

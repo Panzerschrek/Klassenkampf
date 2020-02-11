@@ -46,6 +46,7 @@ struct LightBuffer
 
 const uint32_t g_tex_uniform_binding= 0u;
 const uint32_t g_light_buffer_binding= 1u;
+const uint32_t g_shadowmap_binding= 2u;
 
 
 const float g_box_vertices[][3]
@@ -98,7 +99,7 @@ WorldRenderer::WorldRenderer(
 				std::size(Shaders::c_triangle_frag_file_content),
 				reinterpret_cast<const uint32_t*>(Shaders::c_triangle_frag_file_content)));
 
-	// Create image sampler
+	// Create image samplers
 	vk_image_sampler_=
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
@@ -119,6 +120,26 @@ WorldRenderer::WorldRenderer(
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	vk_shadowmap_sampler_=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eNearest,
+				vk::Filter::eNearest,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_TRUE,
+				vk::CompareOp::eLess,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 	{
@@ -135,6 +156,13 @@ WorldRenderer::WorldRenderer(
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
 			nullptr,
+		},
+		{
+			g_shadowmap_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*vk_shadowmap_sampler_,
 		},
 	};
 
@@ -417,6 +445,10 @@ WorldRenderer::WorldRenderer(
 			uint32_t(materials_.size())
 		},
 		{
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(materials_.size())
+		},
+		{
 			vk::DescriptorType::eStorageBuffer,
 			uint32_t(materials_.size())
 		}
@@ -448,6 +480,11 @@ WorldRenderer::WorldRenderer(
 			*material.image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
+		const vk::DescriptorImageInfo descriptor_shadowmap_image_info(
+			vk::Sampler(),
+			shadowmapper_.GetShadowmapImageView(),
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
 			*vk_light_data_buffer_,
 			0u,
@@ -475,6 +512,16 @@ WorldRenderer::WorldRenderer(
 				&descriptor_light_buffer_info,
 				nullptr
 			},
+			{
+				*material.descriptor_set,
+				g_shadowmap_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_shadowmap_image_info,
+				nullptr,
+				nullptr
+			},
 		};
 		vk_device_.updateDescriptorSets(
 			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
@@ -490,6 +537,12 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
 {
+	m_Mat4 shadow_rotate_mat, shadow_scale_mat, shadow_translate_mat;
+	shadow_rotate_mat.RotateY(3.1415926535f);
+	shadow_scale_mat.Scale(1.0f / 256.0f);
+	shadow_translate_mat.Translate(m_Vec3(0.0f, 0.0f, +1.0f));
+	shadow_matrix_= shadow_rotate_mat * shadow_scale_mat * shadow_translate_mat;
+
 	m_Vec3 light_dir(0.5f, 0.2f, 0.7f);
 	light_dir/= light_dir.GetLength();
 
@@ -506,8 +559,13 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 	light_buffer.ambient_intensity[1]= 0.125f;
 	light_buffer.ambient_intensity[2]= 0.135f;
 	light_buffer.ambient_intensity[3]= 0.0f;
+	light_buffer.shadow_matrix= shadow_matrix_;
 
 	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
+
+	shadowmapper_.DoRenderPass(
+		command_buffer,
+		[&]{ DrawFunctionShadow(command_buffer); });
 
 	tonemapper_.DoRenderPass(
 		command_buffer,
@@ -517,6 +575,23 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 {
 	tonemapper_.EndFrame(command_buffer);
+}
+
+void WorldRenderer::DrawFunctionShadow(const vk::CommandBuffer command_buffer)
+{
+	command_buffer.pushConstants(
+		shadowmapper_.GetPipelineLayout(),
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(shadow_matrix_),
+		&shadow_matrix_);
+
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*test_model_.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*test_model_.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const SegmentModel::TriangleGroup& triangle_group : test_model_.triangle_groups)
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 }
 
 void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)

@@ -15,6 +15,11 @@ public:
 		vk::Format vertex_pos_format);
 	~Shadowmapper();
 
+	void DoRenderPass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function);
+
+	vk::PipelineLayout GetPipelineLayout();
+	vk::ImageView GetShadowmapImageView();
+
 private:
 	const vk::Device vk_device_;
 

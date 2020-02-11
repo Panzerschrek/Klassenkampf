@@ -75,7 +75,7 @@ Shadowmapper::Shadowmapper(
 					1u,
 					vk::SampleCountFlagBits::e1,
 					vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eDepthStencilAttachment,
+					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eInputAttachment | vk::ImageUsageFlagBits::eSampled,
 					vk::SharingMode::eExclusive,
 					0u, nullptr,
 					vk::ImageLayout::eUndefined));
@@ -210,6 +210,18 @@ Shadowmapper::Shadowmapper(
 
 	const vk::PipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info;
 
+	const vk::PipelineDepthStencilStateCreateInfo pipeline_depth_state_create_info(
+		vk::PipelineDepthStencilStateCreateFlags(),
+		VK_TRUE,
+		VK_TRUE,
+		vk::CompareOp::eLess,
+		VK_FALSE,
+		VK_FALSE,
+		vk::StencilOpState(),
+		vk::StencilOpState(),
+		-1.0f,
+		+1.0f);
+
 	const vk::PipelineColorBlendAttachmentState pipeline_color_blend_attachment_state(
 		VK_FALSE,
 		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
@@ -235,11 +247,11 @@ Shadowmapper::Shadowmapper(
 				&pipieline_viewport_state_create_info,
 				&pipilane_rasterization_state_create_info,
 				&pipeline_multisample_state_create_info,
-				nullptr,
+				&pipeline_depth_state_create_info,
 				&pipeline_color_blend_state_create_info,
 				nullptr,
 				*pipeline_layout_,
-				window_vulkan.GetRenderPass(),
+				*render_pass_,
 				0u));
 }
 
@@ -247,6 +259,37 @@ Shadowmapper::~Shadowmapper()
 {
 	// Sync before destruction.
 	vk_device_.waitIdle();
+}
+
+void Shadowmapper::DoRenderPass(
+	const vk::CommandBuffer command_buffer,
+	const std::function<void()>& draw_function)
+{
+	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
+
+	command_buffer.beginRenderPass(
+		vk::RenderPassBeginInfo(
+			*render_pass_,
+			*framebuffer_,
+			vk::Rect2D(vk::Offset2D(0, 0), shadowmap_size_),
+			1u, &clear_value),
+		vk::SubpassContents::eInline);
+
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+
+	draw_function();
+
+	command_buffer.endRenderPass();
+}
+
+vk::PipelineLayout Shadowmapper::GetPipelineLayout()
+{
+	return *pipeline_layout_;
+}
+
+vk::ImageView Shadowmapper::GetShadowmapImageView()
+{
+	return *depth_image_view_;
 }
 
 } // namespace KK
