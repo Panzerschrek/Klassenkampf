@@ -86,6 +86,10 @@ private:
 	size_t index_count_= 0u;
 	vk::UniqueDeviceMemory vk_index_buffer_memory_;
 
+	// All light data, required by fragment shader - ligh sources with parameters (position, matrix), etc.
+	vk::UniqueBuffer vk_light_data_buffer_;
+	vk::UniqueDeviceMemory vk_light_data_buffer_memory_;
+
 	vk::UniqueSampler vk_image_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;

@@ -36,7 +36,17 @@ struct WorldVertex
 	int8_t normal[3];
 };
 
+struct LightBuffer
+{
+	float pos[4];
+	float intensity[4];
+	float ambient_intensity[4];
+	m_Mat4 shadow_matrix;
+};
+
 const uint32_t g_tex_uniform_binding= 0u;
+const uint32_t g_light_buffer_binding= 1u;
+
 
 const float g_box_vertices[][3]
 {
@@ -119,6 +129,13 @@ WorldRenderer::WorldRenderer(
 			vk::ShaderStageFlagBits::eFragment,
 			&*vk_image_sampler_,
 		},
+		{
+			g_light_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
 	};
 
 	vk_decriptor_set_layout_=
@@ -136,10 +153,8 @@ WorldRenderer::WorldRenderer(
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
-				1u,
-				&*vk_decriptor_set_layout_,
-				1u,
-				&vk_push_constant_range));
+				1u, &*vk_decriptor_set_layout_,
+				1u, &vk_push_constant_range));
 
 	// Create pipeline.
 	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
@@ -342,6 +357,28 @@ WorldRenderer::WorldRenderer(
 		vk_device_.unmapMemory(*vk_index_buffer_memory_);
 	}
 
+	{ // Prepare lighting buffer.
+		vk_light_data_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(LightBuffer),
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_light_data_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vk_light_data_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*vk_light_data_buffer_, *vk_light_data_buffer_memory_, 0u);
+	}
+
 	test_material_id_= "test_image";
 	LoadMaterial(test_material_id_);
 
@@ -373,15 +410,23 @@ WorldRenderer::WorldRenderer(
 		test_model_= std::move(*model);
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(
-		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(materials_.size()));
+	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
+	{
+		{
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(materials_.size())
+		},
+		{
+			vk::DescriptorType::eStorageBuffer,
+			uint32_t(materials_.size())
+		}
+	};
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
-				1u, &vk_descriptor_pool_size));
+				uint32_t(materials_.size()), // max sets.
+				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
 	for(auto& material_pair : materials_)
 	{
@@ -403,17 +448,36 @@ WorldRenderer::WorldRenderer(
 			*material.image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*material.descriptor_set,
-			g_tex_uniform_binding,
+		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
+			*vk_light_data_buffer_,
 			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
+			sizeof(LightBuffer));
+
+		const vk::WriteDescriptorSet write_descriptor_set[]
+		{
+			{
+				*material.descriptor_set,
+				g_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_light_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_light_buffer_info,
+				nullptr
+			},
+		};
 		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
+			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
 			0u, nullptr);
 	}
 }
@@ -426,6 +490,25 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
 {
+	m_Vec3 light_dir(0.5f, 0.2f, 0.7f);
+	light_dir/= light_dir.GetLength();
+
+	LightBuffer light_buffer;
+	light_buffer.pos[0]= light_dir.x;
+	light_buffer.pos[1]= light_dir.y;
+	light_buffer.pos[2]= light_dir.z;
+	light_buffer.pos[3]= 0.0f;
+	light_buffer.intensity[0]= 1.2f;
+	light_buffer.intensity[1]= 1.2f;
+	light_buffer.intensity[2]= 1.0f;
+	light_buffer.intensity[3]= 0.0f;
+	light_buffer.ambient_intensity[0]= 0.125f;
+	light_buffer.ambient_intensity[1]= 0.125f;
+	light_buffer.ambient_intensity[2]= 0.135f;
+	light_buffer.ambient_intensity[3]= 0.0f;
+
+	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
+
 	tonemapper_.DoRenderPass(
 		command_buffer,
 		[&]{ DrawFunction(command_buffer, view_matrix); });
