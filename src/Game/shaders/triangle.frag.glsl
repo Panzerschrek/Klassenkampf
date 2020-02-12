@@ -21,8 +21,21 @@ layout(location = 0) out vec4 out_color;
 void main()
 {
 	vec4 shadow_pos= shadowmap_mat * vec4(f_pos, 1.0);
-	shadow_pos.z-= 0.01;
-	float shadowmap_value= texture(shadowmap, shadow_pos.xyz * vec3(0.5, 0.5, 1.0) + vec3(0.5, 0.5, 0.0));
+	vec3 shadow_tc= shadow_pos.xyz * vec3(0.5, 0.5, 1.0) + vec3(0.5, 0.5, 0.0);
+	float tc_delta= 1.0 / 3072.0;
+	const float tc_delta_d= tc_delta * 0.7071;
+	float shadowmap_value=
+		texture(shadowmap, shadow_tc) +
+		texture(shadowmap, shadow_tc + vec3(0.0, +tc_delta, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(0.0, -tc_delta, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(-tc_delta, 0.0, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(-tc_delta, 0.0, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(+tc_delta_d, +tc_delta_d, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(+tc_delta_d, -tc_delta_d, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(-tc_delta_d, +tc_delta_d, 0.0)) +
+		texture(shadowmap, shadow_tc + vec3(-tc_delta_d, -tc_delta_d, 0.0));
+	shadowmap_value/= 9.0;
+
 	float direct_light= shadowmap_value * max(0.0, dot(light_pos.xyz, normalize(f_normal)));
 	vec3 l= direct_light * light_color.xyz + ambient_light_color.xyz;
 

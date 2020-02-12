@@ -57,8 +57,8 @@ Shadowmapper::Shadowmapper(
 		}
 	}
 
-	shadowmap_size_.width = 2048u;
-	shadowmap_size_.height= 2048u;
+	shadowmap_size_.width = 4096u;
+	shadowmap_size_.height= 4096u;
 
 	Log::Info("Shadowmap size: ", shadowmap_size_.width, "x", shadowmap_size_.height);
 	Log::Info("Shadowmap format: ", vk::to_string(depth_format));
@@ -205,7 +205,10 @@ Shadowmapper::Shadowmapper(
 		vk::PolygonMode::eFill,
 		vk::CullModeFlagBits::eNone,
 		vk::FrontFace::eCounterClockwise,
-		VK_FALSE, 0.0f, 0.0f, 0.0f,
+		VK_TRUE, // Depth bias enabled
+		0.0f, // Depth bias constant factor
+		0.0f, // Depth bias clamp
+		4.0f, // Depth bias slope factor
 		1.0f);
 
 	const vk::PipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info;
