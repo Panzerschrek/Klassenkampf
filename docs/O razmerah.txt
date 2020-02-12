@@ -1,0 +1,33 @@
+Dannyj dokument opisyvajet nekotoryje osnovnyje razmery elementov urovnej, igrovyh parametrov i t. d.
+
+Elementarnaja jacejka generatora - 2 metra.
+Malyje prohody - 1x1 jacejki v širinu, boleje serjoznyje - 2x2, 2x3, 3x3.
+Razmery svodcatogo potolka - 3x3 jacejki dlä malyh komnat, 4x4 dlä boleje krupnyh.
+Razmery komnat - kratnyje razmeru vybrannogo svoda, ot 3x3 do 64x64 jacejek.
+Razmery kolonn - 0.6 jacejki dlä svoda 3x3, 0.8 jacejki dlä svoda 4x4.
+Tolscina sten v mestah dvernyh projomov - cutj boleje 0.5 metra.
+
+V igre široko predstavleny tekstury iz kirpica. Ih parametry sledujuscije:
+Dlina kirpica - 0.25 metra.
+Širina kirpica - 0.125 metra.
+Vysota kirpica - 0.0625 metra.
+Razmery vzäty iz realjnyh standartov i okrugleny, ctoby v metre vsegda bylo çeloje kolicestvo kirpicej.
+
+Predpolagajemyje masštaby tekstur:
+Osnonvnyje tekstury pola, potolka, sten - 512 tekselej na metr.
+Dekali - do 1024 tekselej na metr.
+Svetokarty fonovogo osvescenija - 4 tekselä na metr.
+Tenevyje karty - 128 tekselej na metr na urovne osnovnoj osvescajemoj poverhnosti (pola).
+
+Itocniki sveta:
+Okna v potolke - razmerom ot 1x1 do 8x8 jacejek.
+Istocniki vsenapravlennogo sveta (fakely)  - 5 jacejek radiusa.
+Potolocnyje prožektory - osvescajut ploscadku 4x4 jacejki.
+Lokaljnyje dekorativnyje istocniki sveta bez tenej - do 1 jacejki radiusa.
+Istocniki sveta ot oružija, streläjuscego oceredju (plazmomöt) - do 1 jacejki radiusa, bez tenej.
+Istocniki sveta ot serjoznogo oružija, streläjuscigo odinocnymi vystrelami (raketniça, BFG) - 2-4 jacejki radiusa, s tenämi.
+
+Parametry igrovyh objektov:
+Rost igroka - 1.75 metra.
+Vysota pryžka - okolo poloviny rosta.
+Razmery aptecek, bonusov i t. d. - ot 1 do 2 raz ot širiny modeli igroka.
