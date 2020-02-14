@@ -251,9 +251,9 @@ void m_Mat4::PerspectiveProjection(const float aspect, const float fov_y, const 
 	value[0]= inv_half_fov_tan / aspect;
 	value[5]= inv_half_fov_tan;
 
-	const float inv_z_difff= 1.0f / (z_far - z_near);
-	value[14]= -2.0f * inv_z_difff * z_near * z_far;
-	value[10]= (z_near + z_far) * inv_z_difff;
+	// Vulkan depth range [0; 1]
+	value[14]= 1.0f / (1.0f / z_far - 1.0f / z_near);
+	value[10]= 1.0f / (1.0f - z_near / z_far);
 	value[11]= 1.0f;
 
 	value[1]= value[2]= value[3]= 0.0f;
