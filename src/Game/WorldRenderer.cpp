@@ -261,7 +261,7 @@ WorldRenderer::WorldRenderer(
 		{ WorldData::SegmentType::Column4, "column4_segment" },
 	};
 
-	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models;
+	SegmentModels segment_models;
 	for(const SegmentModelDescription& segment_model_description : segment_models_names)
 	{
 		const std::string file_path= "segment_models/" + std::string(segment_model_description.file_name) + ".kks";
@@ -273,17 +273,130 @@ WorldRenderer::WorldRenderer(
 	test_material_id_= "test_image";
 	LoadMaterial(test_material_id_);
 
+	world_model_= LoadWorld(world, segment_models);
+
 	gpu_data_uploader_.Flush();
+
+
+	// Create descriptor set pool.
+	const vk::DescriptorPoolSize vk_descriptor_pool_size(
+		vk::DescriptorType::eCombinedImageSampler,
+		uint32_t(materials_.size()));
+	vk_descriptor_pool_=
+		vk_device_.createDescriptorPoolUnique(
+			vk::DescriptorPoolCreateInfo(
+				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
+				1u, &vk_descriptor_pool_size));
+
+	for(auto& material_pair : materials_)
+	{
+		Material& material= material_pair.second;
+		if(!material.image_view)
+			continue;
+
+		// Create descriptor set.
+		material.descriptor_set=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*vk_descriptor_pool_,
+					1u, &*vk_decriptor_set_layout_)).front());
+
+		// Write descriptor set.
+		const vk::DescriptorImageInfo descriptor_image_info(
+			vk::Sampler(),
+			*material.image_view,
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::WriteDescriptorSet write_descriptor_set(
+			*material.descriptor_set,
+			g_tex_uniform_binding,
+			0u,
+			1u,
+			vk::DescriptorType::eCombinedImageSampler,
+			&descriptor_image_info,
+			nullptr,
+			nullptr);
+		vk_device_.updateDescriptorSets(
+			1u, &write_descriptor_set,
+			0u, nullptr);
+	}
+
+}
+
+WorldRenderer::~WorldRenderer()
+{
+	// Sync before destruction.
+	vk_device_.waitIdle();
+}
+
+void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
+{
+	tonemapper_.DoRenderPass(
+		command_buffer,
+		[&]{ DrawWorldModel(command_buffer, world_model_, view_matrix); });
+}
+
+void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
+{
+	tonemapper_.EndFrame(command_buffer);
+}
+
+void WorldRenderer::DrawWorldModel(const vk::CommandBuffer command_buffer, const WorldModel& world_model, const m_Mat4& view_matrix)
+{
+	const Material& test_material= materials_.find(test_material_id_)->second;
+
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
+
+	m_Mat4 world_scale_mat;
+	world_scale_mat.Scale(1.0f / 8.0f);
+
+	Uniforms uniforms;
+	uniforms.view_matrix= world_scale_mat * view_matrix;
+	uniforms.normals_matrix.MakeIdentity();
+
+	command_buffer.pushConstants(
+		*vk_pipeline_layout_,
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(uniforms),
+		&uniforms);
+
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const Sector& sector : world_model.sectors)
+	for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
+	{
+		const Material& material= materials_.find(triangle_group.material_id)->second;
+
+		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*vk_pipeline_layout_,
+			0u,
+			1u, &desctipor_set,
+			0u, nullptr);
+
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, sector.first_vertex, 0u);
+	}
+}
+
+WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world, const SegmentModels& segment_models)
+{
+	WorldModel world_model;
 
 	// Create vertex buffer.
 	std::vector<WorldVertex> world_vertices;
 	std::vector<uint16_t> world_indeces;
 
-	world_sectors_.resize(world.sectors.size());
-	for(size_t s= 0u; s < world_sectors_.size(); ++s)
+	world_model.sectors.resize(world.sectors.size());
+	for(size_t s= 0u; s < world_model.sectors.size(); ++s)
 	{
 		const WorldData::Sector& in_sector= world.sectors[s];
-		Sector& out_sector= world_sectors_[s];
+		Sector& out_sector= world_model.sectors[s];
 		out_sector.first_vertex= uint32_t(world_vertices.size());
 
 		std::unordered_map< std::string, std::vector<uint16_t> > sector_triangle_groups;
@@ -359,7 +472,7 @@ WorldRenderer::WorldRenderer(
 
 	} // for sectors
 
-	Log::Info("World sectors: ", world_sectors_.size());
+	Log::Info("World sectors: ", world_model.sectors.size());
 	Log::Info("World vertices: ", world_vertices.size(), " (", world_vertices.size() * sizeof(WorldVertex) / 1024u / 1024u, "MB)");
 	Log::Info("Worl triangles: ", world_indeces.size() / 3u, " (", world_indeces.size() * sizeof(uint16_t) / 1024u / 1024u, "MB)");
 
@@ -388,14 +501,14 @@ WorldRenderer::WorldRenderer(
 	};
 
 	{
-		vk_vertex_buffer_=
+		world_model.vertex_buffer=
 			vk_device_.createBufferUnique(
 				vk::BufferCreateInfo(
 					vk::BufferCreateFlags(),
 					world_vertices.size() * sizeof(WorldVertex),
 					vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst));
 
-		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_vertex_buffer_);
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*world_model.vertex_buffer);
 
 		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
 		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
@@ -405,21 +518,21 @@ WorldRenderer::WorldRenderer(
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
-		vk_vertex_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
-		vk_device_.bindBufferMemory(*vk_vertex_buffer_, *vk_vertex_buffer_memory_, 0u);
+		world_model.vertex_buffer_memory= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*world_model.vertex_buffer, *world_model.vertex_buffer_memory, 0u);
 
-		gpu_buffer_upload(world_vertices.data(), world_vertices.size() * sizeof(WorldVertex), *vk_vertex_buffer_);
+		gpu_buffer_upload(world_vertices.data(), world_vertices.size() * sizeof(WorldVertex), *world_model.vertex_buffer);
 	}
 
 	{
-		vk_index_buffer_=
+		world_model.index_buffer=
 			vk_device_.createBufferUnique(
 				vk::BufferCreateInfo(
 					vk::BufferCreateFlags(),
 					world_indeces.size() * sizeof(uint16_t),
 					vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst));
 
-		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_index_buffer_);
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*world_model.index_buffer);
 
 		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
 		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
@@ -429,118 +542,13 @@ WorldRenderer::WorldRenderer(
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
-		vk_index_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
-		vk_device_.bindBufferMemory(*vk_index_buffer_, *vk_index_buffer_memory_, 0u);
+		world_model.index_buffer_memory= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*world_model.index_buffer, *world_model.index_buffer_memory, 0u);
 
-		gpu_buffer_upload(world_indeces.data(), world_indeces.size() * sizeof(uint16_t), *vk_index_buffer_);
+		gpu_buffer_upload(world_indeces.data(), world_indeces.size() * sizeof(uint16_t), *world_model.index_buffer);
 	}
 
-	gpu_data_uploader_.Flush();
-
-	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(
-		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(materials_.size()));
-	vk_descriptor_pool_=
-		vk_device_.createDescriptorPoolUnique(
-			vk::DescriptorPoolCreateInfo(
-				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
-				1u, &vk_descriptor_pool_size));
-
-	for(auto& material_pair : materials_)
-	{
-		Material& material= material_pair.second;
-		if(!material.image_view)
-			continue;
-
-		// Create descriptor set.
-		material.descriptor_set=
-			std::move(
-			vk_device_.allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(
-					*vk_descriptor_pool_,
-					1u, &*vk_decriptor_set_layout_)).front());
-
-		// Write descriptor set.
-		const vk::DescriptorImageInfo descriptor_image_info(
-			vk::Sampler(),
-			*material.image_view,
-			vk::ImageLayout::eShaderReadOnlyOptimal);
-
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*material.descriptor_set,
-			g_tex_uniform_binding,
-			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
-		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
-			0u, nullptr);
-	}
-
-}
-
-WorldRenderer::~WorldRenderer()
-{
-	// Sync before destruction.
-	vk_device_.waitIdle();
-}
-
-void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
-{
-	tonemapper_.DoRenderPass(
-		command_buffer,
-		[&]{ DrawFunction(command_buffer, view_matrix); });
-}
-
-void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
-{
-	tonemapper_.EndFrame(command_buffer);
-}
-
-void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
-{
-	const Material& test_material= materials_.find(test_material_id_)->second;
-
-	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
-
-	m_Mat4 world_scale_mat;
-	world_scale_mat.Scale(1.0f / 8.0f);
-
-	Uniforms uniforms;
-	uniforms.view_matrix= world_scale_mat * view_matrix;
-	uniforms.normals_matrix.MakeIdentity();
-
-	command_buffer.pushConstants(
-		*vk_pipeline_layout_,
-		vk::ShaderStageFlagBits::eVertex,
-		0,
-		sizeof(uniforms),
-		&uniforms);
-
-	const vk::DeviceSize offsets= 0u;
-	command_buffer.bindVertexBuffers(0u, 1u, &*vk_vertex_buffer_, &offsets);
-	command_buffer.bindIndexBuffer(*vk_index_buffer_, 0u, vk::IndexType::eUint16);
-
-	for(const Sector& sector : world_sectors_)
-	for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
-	{
-		const Material& material= materials_.find(triangle_group.material_id)->second;
-
-		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-		command_buffer.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*vk_pipeline_layout_,
-			0u,
-			1u, &desctipor_set,
-			0u, nullptr);
-
-		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, sector.first_vertex, 0u);
-	}
+	return world_model;
 }
 
 std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const std::string_view file_name)

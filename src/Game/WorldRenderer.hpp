@@ -46,6 +46,8 @@ private:
 		std::vector<std::string> local_to_global_material_id;
 	};
 
+	using SegmentModels= std::unordered_map<WorldData::SegmentType, SegmentModel>;
+
 	struct Sector
 	{
 		struct TriangleGroup
@@ -61,9 +63,20 @@ private:
 
 	using WorldSectors= std::vector<Sector>;
 
-private:
-	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
+	struct WorldModel
+	{
+		WorldSectors world_sectors_;
+		vk::UniqueBuffer vertex_buffer;
+		vk::UniqueDeviceMemory vertex_buffer_memory;
+		vk::UniqueBuffer index_buffer;
+		vk::UniqueDeviceMemory index_buffer_memory;
+		WorldSectors sectors;
+	};
 
+private:
+	void DrawWorldModel(vk::CommandBuffer command_buffer, const WorldModel& world_model, const m_Mat4& view_matrix);
+
+	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
 
 	void LoadMaterial(const std::string& material_name);
@@ -85,11 +98,7 @@ private:
 
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
-	WorldSectors world_sectors_;
-	vk::UniqueBuffer vk_vertex_buffer_;
-	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
-	vk::UniqueBuffer vk_index_buffer_;
-	vk::UniqueDeviceMemory vk_index_buffer_memory_;
+	WorldModel world_model_;
 
 	vk::UniqueSampler vk_image_sampler_;
 
