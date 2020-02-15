@@ -349,11 +349,11 @@ WorldRenderer::~WorldRenderer()
 	vk_device_.waitIdle();
 }
 
-void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix)
+void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos)
 {
 	tonemapper_.DoRenderPass(
 		command_buffer,
-		[&]{ DrawWorldModel(command_buffer, world_model_, view_matrix); });
+		[&]{ DrawWorldModel(command_buffer, world_model_, view_matrix, cam_pos); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
@@ -361,7 +361,11 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 	tonemapper_.EndFrame(command_buffer);
 }
 
-void WorldRenderer::DrawWorldModel(const vk::CommandBuffer command_buffer, const WorldModel& world_model, const m_Mat4& view_matrix)
+void WorldRenderer::DrawWorldModel(
+	const vk::CommandBuffer command_buffer,
+	const WorldModel& world_model,
+	const m_Mat4& view_matrix,
+	const m_Vec3& cam_pos)
 {
 	const Material& test_material= materials_.find(test_material_id_)->second;
 
@@ -382,20 +386,48 @@ void WorldRenderer::DrawWorldModel(const vk::CommandBuffer command_buffer, const
 	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
 	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
 
+	const Sector* cam_sector= nullptr;
 	for(const Sector& sector : world_model.sectors)
-	for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
 	{
-		const Material& material= materials_.find(triangle_group.material_id)->second;
+		if(cam_pos.x >= sector.bb_min.x && cam_pos.x <= sector.bb_max.x &&
+			cam_pos.y >= sector.bb_min.y && cam_pos.y <= sector.bb_max.y &&
+			cam_pos.z >= sector.bb_min.z && cam_pos.z <= sector.bb_max.z)
+		{
+			cam_sector= &sector;
+			break;
+		}
+	}
 
-		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-		command_buffer.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
-			*vk_pipeline_layout_,
-			0u,
-			1u, &desctipor_set,
-			0u, nullptr);
+	for(const Sector& sector : world_model.sectors)
+	{
+		if(cam_sector != nullptr)
+		{
+			// Find adjacent sectors.
+			const bool intersects= !(
+				sector.bb_min.x > cam_sector->bb_max.x ||
+				sector.bb_min.y > cam_sector->bb_max.y ||
+				sector.bb_min.z > cam_sector->bb_max.z ||
+				sector.bb_max.x < cam_sector->bb_min.x ||
+				sector.bb_max.y < cam_sector->bb_min.y ||
+				sector.bb_max.z < cam_sector->bb_min.z );
+			if(!intersects)
+				continue;
+		}
 
-		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+		for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
+		{
+			const Material& material= materials_.find(triangle_group.material_id)->second;
+
+			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+			command_buffer.bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*vk_pipeline_layout_,
+				0u,
+				1u, &desctipor_set,
+				0u, nullptr);
+
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+		}
 	}
 }
 
@@ -421,6 +453,13 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 	{
 		const WorldData::Sector& in_sector= world.sectors[s];
 		Sector& out_sector= world_model.sectors[s];
+
+		out_sector.bb_min.x= float(in_sector.bb_min[0]);
+		out_sector.bb_min.y= float(in_sector.bb_min[1]);
+		out_sector.bb_min.z= float(in_sector.bb_min[2]);
+		out_sector.bb_max.x= float(in_sector.bb_max[0]);
+		out_sector.bb_max.y= float(in_sector.bb_max[1]);
+		out_sector.bb_max.z= float(in_sector.bb_max[2]);
 
 		std::unordered_map< std::string, SectorTriangleGroup > sector_triangle_groups;
 

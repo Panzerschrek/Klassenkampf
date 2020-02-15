@@ -23,7 +23,7 @@ public:
 
 	~WorldRenderer();
 
-	void BeginFrame(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
+	void BeginFrame(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos);
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
@@ -58,6 +58,8 @@ private:
 			std::string material_id;
 		};
 
+		m_Vec3 bb_min;
+		m_Vec3 bb_max;
 		std::vector<TriangleGroup> triangle_groups;
 	};
 
@@ -74,7 +76,11 @@ private:
 	};
 
 private:
-	void DrawWorldModel(vk::CommandBuffer command_buffer, const WorldModel& world_model, const m_Mat4& view_matrix);
+	void DrawWorldModel(
+		vk::CommandBuffer command_buffer,
+		const WorldModel& world_model,
+		const m_Mat4& view_matrix,
+		const m_Vec3& cam_pos);
 
 	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);

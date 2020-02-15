@@ -15,6 +15,7 @@ public:
 	void Update(float time_delta_s, const InputState& input_state);
 
 	m_Mat4 CalculateViewMatrix() const;
+	m_Vec3 GetCameraPosition() const;
 
 private:
 	Settings& settings_;

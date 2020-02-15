@@ -86,7 +86,10 @@ bool Host::Loop()
 
 	const auto command_buffer= window_vulkan_.BeginFrame();
 
-	world_renderer_.BeginFrame(command_buffer, camera_controller_.CalculateViewMatrix());
+	world_renderer_.BeginFrame(
+		command_buffer,
+		camera_controller_.CalculateViewMatrix(),
+		camera_controller_.GetCameraPosition());
 	text_out_.BeginFrame(command_buffer);
 
 	window_vulkan_.EndFrame(

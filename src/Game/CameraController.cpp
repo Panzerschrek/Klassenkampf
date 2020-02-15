@@ -89,4 +89,9 @@ m_Mat4 CameraController::CalculateViewMatrix() const
 	return translate * rotate_z * rotate_x * basis_change * perspective;
 }
 
+m_Vec3 CameraController::GetCameraPosition() const
+{
+	return pos_;
+}
+
 } // namespace KK
