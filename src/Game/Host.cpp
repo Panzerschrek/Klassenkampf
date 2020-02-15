@@ -59,9 +59,9 @@ bool Host::Loop()
 				console_.Toggle();
 		}
 	}
-	console_.ProcessEvents(system_events);
-
-	if(!console_.IsActive())
+	if(console_.IsActive())
+		console_.ProcessEvents(system_events);
+	else
 		camera_controller_.Update(dt_s, system_window_.GetInputState());
 
 	ticks_counter_.Tick();
