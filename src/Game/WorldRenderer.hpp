@@ -19,7 +19,7 @@ public:
 	WorldRenderer(
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
-		WorldData::World world);
+		const WorldData::World& world);
 
 	~WorldRenderer();
 
@@ -74,8 +74,6 @@ private:
 	const vk::Extent2D viewport_size_;
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 	const uint32_t queue_family_index_;
-
-	const WorldData::World world_;
 
 	Tonemapper tonemapper_;
 

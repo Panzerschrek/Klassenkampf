@@ -62,13 +62,12 @@ const uint16_t g_box_indices[]
 WorldRenderer::WorldRenderer(
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
-	WorldData::World world)
+	const WorldData::World& world)
 	: gpu_data_uploader_(gpu_data_uploader)
 	, vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
-	, world_(std::move(world))
 	, tonemapper_(window_vulkan)
 {
 	// Create shaders
@@ -279,10 +278,10 @@ WorldRenderer::WorldRenderer(
 	std::vector<WorldVertex> world_vertices;
 	std::vector<uint16_t> world_indeces;
 
-	world_sectors_.resize(world_.sectors.size());
+	world_sectors_.resize(world.sectors.size());
 	for(size_t s= 0u; s < world_sectors_.size(); ++s)
 	{
-		const WorldData::Sector& in_sector= world_.sectors[s];
+		const WorldData::Sector& in_sector= world.sectors[s];
 		Sector& out_sector= world_sectors_[s];
 		out_sector.first_vertex= uint32_t(world_vertices.size());
 
