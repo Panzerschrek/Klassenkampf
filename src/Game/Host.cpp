@@ -25,7 +25,7 @@ Host::Host()
 	, text_out_(window_vulkan_, gpu_data_uploader_)
 	, console_(commands_processor_, text_out_)
 	, world_renderer_(window_vulkan_, gpu_data_uploader_, GenerateWorld())
-	, camera_controller_(CalculateAspect(window_vulkan_.GetViewportSize()))
+	, camera_controller_(settings_, CalculateAspect(window_vulkan_.GetViewportSize()))
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {

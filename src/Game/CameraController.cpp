@@ -12,15 +12,18 @@ const float g_pi= 3.1415926535f;
 
 } // namespace
 
-CameraController::CameraController(const float aspect)
-	: aspect_(std::move(aspect))
+CameraController::CameraController(Settings& settings, const float aspect)
+	: settings_(settings), aspect_(std::move(aspect))
 {}
 
 void CameraController::Update(const float time_delta_s, const InputState& input_state)
 {
-	const float speed= 1.0f;
-	const float jump_speed= 0.8f;
-	const float angle_speed= 1.0f;
+	const float speed= std::max(0.125f, std::min(float(settings_.GetReal("cl_speed", 1.0f)), 3.0f));
+	const float jump_speed= 0.8f * speed;
+	const float angle_speed= std::max(0.125f, std::min(float(settings_.GetReal("cl_angle_speed", 1.0f)), 4.0f));
+
+	settings_.SetReal("cl_speed", speed);
+	settings_.SetReal("cl_angle_speed", angle_speed);
 
 	const m_Vec3 forward_vector(-std::sin(azimuth_), +std::cos(azimuth_), 0.0f);
 	const m_Vec3 left_vector(std::cos(azimuth_), std::sin(azimuth_), 0.0f);

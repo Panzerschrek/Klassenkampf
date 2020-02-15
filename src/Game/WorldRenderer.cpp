@@ -367,11 +367,8 @@ void WorldRenderer::DrawWorldModel(const vk::CommandBuffer command_buffer, const
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *vk_pipeline_);
 
-	m_Mat4 world_scale_mat;
-	world_scale_mat.Scale(1.0f / 8.0f);
-
 	Uniforms uniforms;
-	uniforms.view_matrix= world_scale_mat * view_matrix;
+	uniforms.view_matrix= view_matrix;
 	uniforms.normals_matrix.MakeIdentity();
 
 	command_buffer.pushConstants(
