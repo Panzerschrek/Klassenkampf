@@ -240,10 +240,44 @@ std::string_view Settings::GetString(const std::string_view key, const std::stri
 	return it->second;
 }
 
+Settings::IntType Settings::GetInt(std::string_view key, const IntType default_value)
+{
+	temp_key_= key;
+	const auto it= values_map_.find(temp_key_);
+	if(it == values_map_.end())
+		return default_value;
+	if(const std::optional<IntType> value_parsed= StrToInt(it->second.data()))
+		return *value_parsed;
+	return default_value;
+}
+
+Settings::RealType Settings::GetReal(std::string_view key, const RealType default_value)
+{
+	temp_key_= key;
+	const auto it= values_map_.find(temp_key_);
+	if(it == values_map_.end())
+		return default_value;
+	if(const std::optional<RealType> value_parsed= StrToReal(it->second.data()))
+		return *value_parsed;
+	return default_value;
+}
+
 void Settings::SetString(const std::string_view key, const std::string_view value)
 {
 	temp_key_= key;
 	values_map_[temp_key_]= value;
+}
+
+void Settings::SetInt(const std::string_view key, const IntType value)
+{
+	temp_key_= key;
+	values_map_[temp_key_]= NumberToString(value);
+}
+
+void Settings::SetReal(const std::string_view key, const RealType value)
+{
+	temp_key_= key;
+	values_map_[temp_key_]= NumberToString(value);
 }
 
 bool Settings::HasValue(const std::string_view key)
