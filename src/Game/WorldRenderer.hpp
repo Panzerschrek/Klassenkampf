@@ -91,7 +91,6 @@ private:
 	vk::UniqueBuffer vk_vertex_buffer_;
 	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
 	vk::UniqueBuffer vk_index_buffer_;
-	size_t index_count_= 0u;
 	vk::UniqueDeviceMemory vk_index_buffer_memory_;
 
 	vk::UniqueSampler vk_image_sampler_;

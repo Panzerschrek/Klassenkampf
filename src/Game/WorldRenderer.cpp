@@ -360,8 +360,6 @@ WorldRenderer::WorldRenderer(
 
 	} // for sectors
 
-	index_count_= world_indeces.size();
-
 	{
 		vk_vertex_buffer_=
 			vk_device_.createBufferUnique(
