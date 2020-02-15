@@ -18,7 +18,7 @@ CameraController::CameraController(Settings& settings, const float aspect)
 
 void CameraController::Update(const float time_delta_s, const InputState& input_state)
 {
-	const float speed= std::max(0.125f, std::min(float(settings_.GetReal("cl_speed", 1.0f)), 3.0f));
+	const float speed= std::max(0.125f, std::min(float(settings_.GetReal("cl_speed", 3.0f)), 32.0f));
 	const float jump_speed= 0.8f * speed;
 	const float angle_speed= std::max(0.125f, std::min(float(settings_.GetReal("cl_angle_speed", 1.0f)), 4.0f));
 
