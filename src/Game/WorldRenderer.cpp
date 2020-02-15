@@ -275,8 +275,26 @@ WorldRenderer::WorldRenderer(
 
 	world_model_= LoadWorld(world, segment_models);
 
-	gpu_data_uploader_.Flush();
+	// Load test world model.
+	{
+		SegmentModels test_segment_models;
+		if(std::optional<SegmentModel> model= LoadSegmentModel("segment_models/sponza.kks"))
+			test_segment_models.emplace(WorldData::SegmentType::Floor, std::move(*model));
 
+		WorldData::World test_world;
+		test_world.sectors.emplace_back();
+
+		WorldData::Segment segment;
+		segment.pos[0]= 0;
+		segment.pos[1]= 0;
+		segment.pos[2]= 0;
+		segment.type= WorldData::SegmentType::Floor;
+		test_world.sectors.back().segments.push_back(std::move(segment));
+
+		test_world_model_= LoadWorld(test_world, test_segment_models);
+	}
+
+	gpu_data_uploader_.Flush();
 
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_size(
@@ -380,12 +398,21 @@ void WorldRenderer::DrawWorldModel(const vk::CommandBuffer command_buffer, const
 			1u, &desctipor_set,
 			0u, nullptr);
 
-		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, sector.first_vertex, 0u);
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 	}
 }
 
 WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world, const SegmentModels& segment_models)
 {
+	// Combine triangle groups with same material into single triangle groups.
+	// Each sector has own set of triangle groups.
+
+	struct SectorTriangleGroup
+	{
+		std::vector<uint16_t> indices;
+		std::vector<WorldVertex> vertcies;
+	};
+
 	WorldModel world_model;
 
 	// Create vertex buffer.
@@ -397,9 +424,8 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 	{
 		const WorldData::Sector& in_sector= world.sectors[s];
 		Sector& out_sector= world_model.sectors[s];
-		out_sector.first_vertex= uint32_t(world_vertices.size());
 
-		std::unordered_map< std::string, std::vector<uint16_t> > sector_triangle_groups;
+		std::unordered_map< std::string, SectorTriangleGroup > sector_triangle_groups;
 
 		for(const WorldData::Segment& segment : in_sector.segments)
 		{
@@ -416,60 +442,65 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 			translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
 			segment_mat= to_center_mat * rotate_mat * from_center_mat * translate_mat;
 
-			const size_t segment_first_vertex= world_vertices.size() - size_t(out_sector.first_vertex);
-			for(size_t i= 0u; i < size_t(model.header.vertex_count); ++i)
-			{
-				const SegmentModelFormat::Vertex& in_v = model.vetices[i];
-				m_Vec3 pos_scaled(
-					model.header.shift[0] + model.header.scale[0] * float(in_v.pos[0]),
-					model.header.shift[1] + model.header.scale[1] * float(in_v.pos[1]),
-					model.header.shift[2] + model.header.scale[2] * float(in_v.pos[2]));
-				const m_Vec3 pos_transformed= pos_scaled * segment_mat;
-
-				WorldVertex out_v;
-				out_v.pos[0]= pos_transformed.x;
-				out_v.pos[1]= pos_transformed.y;
-				out_v.pos[2]= pos_transformed.z;
-
-				const m_Vec3 normal(float(in_v.normal[0]), float(in_v.normal[1]), float(in_v.normal[2]));
-				const m_Vec3 normal_transformed= normal * rotate_mat;
-
-				out_v.normal[0]= int8_t(normal_transformed.x);
-				out_v.normal[1]= int8_t(normal_transformed.y);
-				out_v.normal[2]= int8_t(normal_transformed.z);
-
-				for(size_t j= 0u; j < 2u; ++j)
-					out_v.tex_coord[j]= float(in_v.tex_coord[j]) / float(SegmentModelFormat::c_tex_coord_scale);
-
-				world_vertices.push_back(out_v);
-			}
-
+			//const size_t segment_first_vertex= world_vertices.size() - size_t(out_sector.first_vertex);
 			for(size_t i= 0u; i < size_t(model.header.triangle_group_count); ++i)
 			{
 				const SegmentModelFormat::TriangleGroup& in_triangle_group= model.triangle_groups[i];
-				std::vector<uint16_t>& out_indeces= sector_triangle_groups[ model.local_to_global_material_id[in_triangle_group.material_id] ];
+				SectorTriangleGroup& out_triangle_group= sector_triangle_groups[ model.local_to_global_material_id[in_triangle_group.material_id] ];
+
+				// TODO - maybe also remove duplicated vertices?
+				const size_t first_vertex= out_triangle_group.vertcies.size();
+				for(size_t j= 0u; j < size_t(in_triangle_group.vertex_count); ++j)
+				{
+					const SegmentModelFormat::Vertex& in_v= model.vetices[in_triangle_group.first_vertex + j];
+					m_Vec3 pos_scaled(
+						model.header.shift[0] + model.header.scale[0] * float(in_v.pos[0]),
+						model.header.shift[1] + model.header.scale[1] * float(in_v.pos[1]),
+						model.header.shift[2] + model.header.scale[2] * float(in_v.pos[2]));
+					const m_Vec3 pos_transformed= pos_scaled * segment_mat;
+
+					WorldVertex out_v;
+					out_v.pos[0]= pos_transformed.x;
+					out_v.pos[1]= pos_transformed.y;
+					out_v.pos[2]= pos_transformed.z;
+
+					const m_Vec3 normal(float(in_v.normal[0]), float(in_v.normal[1]), float(in_v.normal[2]));
+					const m_Vec3 normal_transformed= normal * rotate_mat;
+
+					out_v.normal[0]= int8_t(normal_transformed.x);
+					out_v.normal[1]= int8_t(normal_transformed.y);
+					out_v.normal[2]= int8_t(normal_transformed.z);
+
+					for(size_t j= 0u; j < 2u; ++j)
+						out_v.tex_coord[j]= float(in_v.tex_coord[j]) / float(SegmentModelFormat::c_tex_coord_scale);
+
+					out_triangle_group.vertcies.push_back(out_v);
+				}
 
 				for(size_t j= 0u; j < in_triangle_group.index_count; ++j)
 				{
-					const size_t index= model.indices[ in_triangle_group.first_index + j ] + in_triangle_group.first_vertex + segment_first_vertex;
+					const size_t index= model.indices[ in_triangle_group.first_index + j ] + first_vertex;
 					KK_ASSERT(index < 65535u);
-					out_indeces.push_back(uint16_t(index));
+					out_triangle_group.indices.push_back(uint16_t(index));
 				}
 			}
 		} // for sector segments
 
-		for(const auto& triangle_group : sector_triangle_groups)
+		for(const auto& triangle_group_pair : sector_triangle_groups)
 		{
-			Sector::TriangleGroup out_triangle_group;
-			out_triangle_group.material_id= triangle_group.first;
-			out_triangle_group.first_index= uint32_t(world_indeces.size());
-			out_triangle_group.index_count= uint32_t(triangle_group.second.size());
+			const SectorTriangleGroup& triangle_group= triangle_group_pair.second;
 
-			world_indeces.insert(world_indeces.end(), triangle_group.second.begin(), triangle_group.second.end());
+			Sector::TriangleGroup out_triangle_group;
+			out_triangle_group.material_id= triangle_group_pair.first;
+			out_triangle_group.first_vertex= uint32_t(world_vertices.size());
+			out_triangle_group.first_index= uint32_t(world_indeces.size());
+			out_triangle_group.index_count= uint32_t(triangle_group.indices.size());
+
+			world_vertices.insert(world_vertices.end(), triangle_group.vertcies.begin(), triangle_group.vertcies.end());
+			world_indeces.insert(world_indeces.end(), triangle_group.indices.begin(), triangle_group.indices.end());
 
 			out_sector.triangle_groups.push_back(std::move(out_triangle_group));
 		}
-
 	} // for sectors
 
 	Log::Info("World sectors: ", world_model.sectors.size());

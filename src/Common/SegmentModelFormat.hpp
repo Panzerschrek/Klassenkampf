@@ -13,7 +13,7 @@ constexpr const int32_t c_tex_coord_scale= 1024;
 struct SegmentModelHeader
 {
 	static constexpr const char c_expected_header[16]= "KK-SegmentModel";
-	static constexpr const uint32_t c_expected_version= 3u; // Change this each time, when "SegmentModelFormat" structs changed.
+	static constexpr const uint32_t c_expected_version= 4u; // Change this each time, when "SegmentModelFormat" structs changed.
 
 	uint8_t header[16];
 	uint32_t version;
@@ -52,11 +52,12 @@ using IndexType= uint16_t;
 struct TriangleGroup
 {
 	uint32_t first_vertex;
+	uint32_t vertex_count;
 	uint32_t first_index;
 	uint32_t index_count;
 	uint32_t material_id;
 };
-static_assert(sizeof(TriangleGroup) == 16u, "Invalid size");
+static_assert(sizeof(TriangleGroup) == 20u, "Invalid size");
 
 struct Material
 {

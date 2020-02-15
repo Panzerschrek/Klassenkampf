@@ -52,12 +52,12 @@ private:
 	{
 		struct TriangleGroup
 		{
+			uint32_t first_vertex;
 			uint32_t first_index;
 			uint32_t index_count;
 			std::string material_id;
 		};
 
-		uint32_t first_vertex;
 		std::vector<TriangleGroup> triangle_groups;
 	};
 
@@ -99,6 +99,7 @@ private:
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
 	WorldModel world_model_;
+	WorldModel test_world_model_;
 
 	vk::UniqueSampler vk_image_sampler_;
 
