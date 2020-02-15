@@ -2,8 +2,7 @@
 #include "Assert.hpp"
 #include "DDSImage.hpp"
 #include "Image.hpp"
-#include "../Common/MemoryMappedFile.hpp"
-#include "../Common/SegmentModelFormat.hpp"
+#include "Log.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -359,6 +358,10 @@ WorldRenderer::WorldRenderer(
 		}
 
 	} // for sectors
+
+	Log::Info("World sectors: ", world_sectors_.size());
+	Log::Info("World vertices: ", world_vertices.size(), " (", world_vertices.size() * sizeof(WorldVertex) / 1024u / 1024u, "MB)");
+	Log::Info("Worl triangles: ", world_indeces.size() / 3u, " (", world_indeces.size() * sizeof(uint16_t) / 1024u / 1024u, "MB)");
 
 	// Create world vertex and index buffers.
 	const auto gpu_buffer_upload=
