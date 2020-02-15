@@ -36,7 +36,7 @@ private:
 		vk::UniqueDescriptorSet descriptor_set;
 	};
 
-	struct SegmentModelPreloaded
+	struct SegmentModel
 	{
 		MemoryMappedFilePtr file_mapped;
 		const SegmentModelFormat::SegmentModelHeader& header;
@@ -59,12 +59,12 @@ private:
 		std::vector<TriangleGroup> triangle_groups;
 	};
 
-	using WorldSectors = std::vector<Sector>;
+	using WorldSectors= std::vector<Sector>;
 
 private:
 	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
 
-	std::optional<SegmentModelPreloaded> PreloadSegmentModel(std::string_view file_name);
+	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
 
 	void LoadMaterial(const std::string& material_name);
 
@@ -94,7 +94,6 @@ private:
 	vk::UniqueSampler vk_image_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;
-
 	std::string test_material_id_;
 };
 

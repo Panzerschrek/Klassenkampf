@@ -243,7 +243,7 @@ WorldRenderer::WorldRenderer(
 				tonemapper_.GetRenderPass(),
 				0u));
 
-	// Preload segment models.
+	// Load segment models.
 	struct SegmentModelDescription
 	{
 		WorldData::SegmentType type;
@@ -261,20 +261,21 @@ WorldRenderer::WorldRenderer(
 		{ WorldData::SegmentType::Column4, "column4_segment" },
 	};
 
-	std::unordered_map<WorldData::SegmentType, SegmentModelPreloaded> preloaded_segment_models;
+	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models;
 	for(const SegmentModelDescription& segment_model_description : segment_models_names)
 	{
 		const std::string file_path= "segment_models/" + std::string(segment_model_description.file_name) + ".kks";
-		if(std::optional<SegmentModelPreloaded> model= PreloadSegmentModel(file_path))
-			preloaded_segment_models.emplace(segment_model_description.type, std::move(*model));
+		if(std::optional<SegmentModel> model= LoadSegmentModel(file_path))
+			segment_models.emplace(segment_model_description.type, std::move(*model));
 	}
 
+	// Load materials.
 	test_material_id_= "test_image";
 	LoadMaterial(test_material_id_);
 
 	gpu_data_uploader_.Flush();
 
-	// Create vertex buffer
+	// Create vertex buffer.
 	std::vector<WorldVertex> world_vertices;
 	std::vector<uint16_t> world_indeces;
 
@@ -289,11 +290,11 @@ WorldRenderer::WorldRenderer(
 
 		for(const WorldData::Segment& segment : in_sector.segments)
 		{
-			const auto model_it= preloaded_segment_models.find(segment.type);
-			if(model_it == preloaded_segment_models.end())
+			const auto model_it= segment_models.find(segment.type);
+			if(model_it == segment_models.end())
 				continue;
 
-			const SegmentModelPreloaded& model = model_it->second;
+			const SegmentModel& model = model_it->second;
 
 			m_Mat4 to_center_mat, rotate_mat, from_center_mat, translate_mat, segment_mat;
 			to_center_mat.Translate(m_Vec3(-0.5f, -0.5f, 0.0f));
@@ -542,7 +543,7 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 	}
 }
 
-std::optional<WorldRenderer::SegmentModelPreloaded> WorldRenderer::PreloadSegmentModel(const std::string_view file_name)
+std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const std::string_view file_name)
 {
 	MemoryMappedFilePtr file_mapped= MemoryMappedFile::Create(file_name);
 	if(file_mapped == nullptr)
@@ -564,7 +565,7 @@ std::optional<WorldRenderer::SegmentModelPreloaded> WorldRenderer::PreloadSegmen
 	}
 
 	return
-		SegmentModelPreloaded
+		SegmentModel
 		{
 			std::move(file_mapped),
 			header,
