@@ -13,7 +13,7 @@ constexpr const int32_t c_tex_coord_scale= 1024;
 struct SegmentModelHeader
 {
 	static constexpr const char c_expected_header[16]= "KK-SegmentModel";
-	static constexpr const uint32_t c_expected_version= 4u; // Change this each time, when "SegmentModelFormat" structs changed.
+	static constexpr const uint32_t c_expected_version= 5u; // Change this each time, when "SegmentModelFormat" structs changed.
 
 	uint8_t header[16];
 	uint32_t version;
@@ -33,8 +33,11 @@ struct SegmentModelHeader
 
 	uint32_t materials_offset;
 	uint32_t material_count;
+
+	uint32_t lights_offset;
+	uint32_t light_count;
 };
-static_assert(sizeof(SegmentModelHeader) == 76u, "Invalid size");
+static_assert(sizeof(SegmentModelHeader) == 84u, "Invalid size");
 
 struct Vertex
 {
@@ -64,6 +67,15 @@ struct Material
 	char name[32];
 };
 static_assert(sizeof(Material) == 32u, "Invalid size");
+
+struct Light
+{
+	// Pos, radius - in same scale, as vertex data
+	int16_t pos[3];
+	int16_t radius;
+	uint16_t color[3]; // In 8.8 format
+};
+static_assert(sizeof(Light) == 14u, "Invalid size");
 
 } // namespace ModelFormat
 

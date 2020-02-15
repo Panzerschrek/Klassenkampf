@@ -12,6 +12,22 @@
 namespace KK
 {
 
+struct Light
+{
+	float color[3];
+};
+
+using Lights= std::unordered_map<std::string, Light>;
+
+struct LightTransformed
+{
+	float pos[3];
+	float color[3];
+	float radius;
+};
+
+using LightsTransformed= std::vector<LightTransformed>;
+
 struct CoordSource
 {
 	std::vector<float> data;
@@ -78,6 +94,7 @@ struct SceneNode
 {
 	m_Mat4 transform_matrix;
 	std::vector<std::string> geometries_id;
+	std::vector<std::string> lights_id;
 };
 
 CoordSource ReadCoordSource(const tinyxml2::XMLElement& source_element)
@@ -345,7 +362,7 @@ TriangleGroupIndexed MakeTriangleGroupIndexed(const TriangleGroup& triangle_grou
 
 using FileData= std::vector<std::byte>;
 
-FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
+FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, const LightsTransformed& lights)
 {
 	FileData file_data;
 
@@ -369,6 +386,14 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 				bb_min[i]= std::min(bb_min[i], vertex.pos[i]);
 				bb_max[i]= std::max(bb_max[i], vertex.pos[i]);
 			}
+		}
+	}
+	for(const LightTransformed& light : lights)
+	{
+		for(size_t i= 0u; i < 3u; ++i)
+		{
+			bb_min[i]= std::min(bb_min[i], light.pos[i]);
+			bb_max[i]= std::max(bb_max[i], light.pos[i]);
 		}
 	}
 
@@ -483,6 +508,22 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups)
 		get_data_file().index_count+= uint32_t(triangle_group.indices.size());
 	}
 
+	// Write lights
+	get_data_file().lights_offset= uint32_t(file_data.size());
+	get_data_file().light_count= uint32_t(lights.size());
+	for(const LightTransformed& light : lights)
+	{
+		file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Light));
+		SegmentModelFormat::Light& out_light= *reinterpret_cast<SegmentModelFormat::Light*>(file_data.data() + file_data.size() - sizeof(SegmentModelFormat::Light));
+
+		for(size_t i= 0u; i < 3u; ++i)
+		{
+			const float pos_transformed= (light.pos[i] - bb_min[i]) * inv_scale[i] - c_max_coord_value;
+			out_light.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, pos_transformed), +c_max_coord_value));
+		}
+		out_light.radius= int16_t(std::min(std::max(-c_max_coord_value, light.radius), +c_max_coord_value));
+	}
+
 	return file_data;
 }
 
@@ -591,6 +632,45 @@ Geometries ReadGeometries(const tinyxml2::XMLElement& collada_element)
 	return geometries;
 }
 
+Lights ReadLights(const tinyxml2::XMLElement& collada_element)
+{
+	Lights lights;
+
+	const tinyxml2::XMLElement* const library_lights= collada_element.FirstChildElement("library_lights");
+	for(const tinyxml2::XMLElement* light= library_lights->FirstChildElement("light");
+		light != nullptr;
+		light= light->NextSiblingElement("light"))
+	{
+		const char* const id= light->Attribute("id");
+		if(id == nullptr)
+			continue;
+
+		const tinyxml2::XMLElement* const technique_common= light->FirstChildElement("technique_common");
+		if(technique_common == nullptr)
+			continue;
+		const tinyxml2::XMLElement* const point= technique_common->FirstChildElement("point");
+		if(point == nullptr)
+			continue;
+		const tinyxml2::XMLElement* const color= point->FirstChildElement("color");
+		if(color == nullptr)
+			continue;
+		const char* const color_text= color->GetText();
+		if(color_text == nullptr )
+			continue;
+
+		Light out_light;
+		out_light.color[0]= out_light.color[1]= out_light.color[2]= 0.0f;
+
+		std::istringstream ss(color_text);
+		for(size_t i= 0u; i < 3u; ++i)
+			ss >> out_light.color[i];
+
+		lights[id]= std::move(out_light);
+	}
+
+	return lights;
+}
+
 std::vector<SceneNode> ReadScene(const tinyxml2::XMLElement& collada_element)
 {
 	std::vector<SceneNode> out_nodes;
@@ -637,6 +717,18 @@ std::vector<SceneNode> ReadScene(const tinyxml2::XMLElement& collada_element)
 				if(url[0] == '#')
 					++url;
 				out_node.geometries_id.push_back(url);
+			}
+
+			for(const tinyxml2::XMLElement* instance_light= node->FirstChildElement("instance_light");
+				instance_light != nullptr;
+				instance_light= instance_light->NextSiblingElement("instance_light"))
+			{
+				const char* url= instance_light->Attribute("url");
+				if(url == nullptr)
+					continue;
+				if(url[0] == '#')
+					++url;
+				out_node.lights_id.push_back(url);
 			}
 
 			out_nodes.push_back(std::move(out_node));
@@ -712,9 +804,11 @@ int Main(const int argc, const char* const argv[])
 	}
 
 	const Geometries geometries= ReadGeometries(*collada_element);
+	const Lights lights= ReadLights(*collada_element);
 	const std::vector<SceneNode> scene_nodes= ReadScene(*collada_element);
 
 	std::vector<TriangleGroupIndexed> triangle_groups;
+	LightsTransformed lights_transformed;
 	for(const SceneNode& node : scene_nodes)
 	{
 		m_Mat4 normals_matrix= node.transform_matrix;
@@ -749,9 +843,30 @@ int Main(const int argc, const char* const argv[])
 				triangle_groups.push_back(MakeTriangleGroupIndexed(group_copy));
 			}
 		}
+
+		for(const std::string& light_id : node.lights_id)
+		{
+			const auto it= lights.find(light_id);
+			if(it == lights.end())
+				continue;
+
+			const Light& in_light= it->second;
+			const m_Vec3 pos_transformed= m_Vec3(0.0f, 0.0f, 0.0f) * node.transform_matrix;
+
+			LightTransformed out_light;
+			out_light.pos[0]= pos_transformed.x;
+			out_light.pos[1]= pos_transformed.y;
+			out_light.pos[2]= pos_transformed.z;
+			out_light.color[0]= in_light.color[0];
+			out_light.color[1]= in_light.color[1];
+			out_light.color[2]= in_light.color[2];
+			out_light.radius= 5.0f;
+
+			lights_transformed.push_back(std::move(out_light));
+		}
 	}
 
-	const FileData out_file_data= DoExport(triangle_groups);
+	const FileData out_file_data= DoExport(triangle_groups, lights_transformed);
 	WriteFile(out_file_data, output_file.c_str());
 
 	return 0;
