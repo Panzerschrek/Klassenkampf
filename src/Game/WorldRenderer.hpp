@@ -1,4 +1,6 @@
 #pragma once
+#include "../Common/MemoryMappedFile.hpp"
+#include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
 #include "GPUDataUploader.hpp"
 #include "Tonemapper.hpp"
@@ -34,7 +36,17 @@ private:
 		vk::UniqueDescriptorSet descriptor_set;
 	};
 
-	struct SegmentModel
+	struct SegmentModelPreloaded
+	{
+		MemoryMappedFilePtr file_mapped;
+		const SegmentModelFormat::SegmentModelHeader& header;
+		const SegmentModelFormat::Vertex* vetices;
+		const SegmentModelFormat::IndexType* indices;
+		const SegmentModelFormat::TriangleGroup* triangle_groups;
+		std::vector<std::string> local_to_global_material_id;
+	};
+
+	struct Sector
 	{
 		struct TriangleGroup
 		{
@@ -45,17 +57,15 @@ private:
 		};
 
 		std::vector<TriangleGroup> triangle_groups;
-
-		vk::UniqueBuffer vertex_buffer;
-		vk::UniqueDeviceMemory vertex_buffer_memory;
-
-		vk::UniqueBuffer index_buffer;
-		vk::UniqueDeviceMemory index_buffer_memory;
 	};
+
+	using WorldSectors = std::vector<Sector>;
 
 private:
 	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
-	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
+
+	std::optional<SegmentModelPreloaded> PreloadSegmentModel(std::string_view file_name);
+
 	void LoadMaterial(const std::string& material_name);
 
 private:
@@ -77,9 +87,9 @@ private:
 
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
+	WorldSectors world_sectors_;
 	vk::UniqueBuffer vk_vertex_buffer_;
 	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
-
 	vk::UniqueBuffer vk_index_buffer_;
 	size_t index_count_= 0u;
 	vk::UniqueDeviceMemory vk_index_buffer_memory_;
@@ -87,10 +97,8 @@ private:
 	vk::UniqueSampler vk_image_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;
-	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models_;
 
 	std::string test_material_id_;
-	SegmentModel test_model_;
 };
 
 } // namespace KK
