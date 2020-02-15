@@ -285,6 +285,7 @@ WorldRenderer::WorldRenderer(
 	{
 		const WorldData::Sector& in_sector= world_.sectors[s];
 		Sector& out_sector= world_sectors_[s];
+		out_sector.first_vertex= uint32_t(world_vertices.size());
 
 		std::unordered_map< std::string, std::vector<uint16_t> > sector_triangle_groups;
 
@@ -303,7 +304,7 @@ WorldRenderer::WorldRenderer(
 			translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
 			segment_mat= to_center_mat * rotate_mat * from_center_mat * translate_mat;
 
-			const size_t first_vertex= world_vertices.size();
+			const size_t segment_first_vertex= world_vertices.size() - size_t(out_sector.first_vertex);
 			for(size_t i= 0u; i < size_t(model.header.vertex_count); ++i)
 			{
 				const SegmentModelFormat::Vertex& in_v = model.vetices[i];
@@ -338,7 +339,7 @@ WorldRenderer::WorldRenderer(
 
 				for(size_t j= 0u; j < in_triangle_group.index_count; ++j)
 				{
-					const size_t index= model.indices[ in_triangle_group.first_index + j ] + in_triangle_group.first_vertex + first_vertex;
+					const size_t index= model.indices[ in_triangle_group.first_index + j ] + in_triangle_group.first_vertex + segment_first_vertex;
 					KK_ASSERT(index < 65535u);
 					out_indeces.push_back(uint16_t(index));
 				}
@@ -519,7 +520,7 @@ void WorldRenderer::DrawFunction(const vk::CommandBuffer command_buffer, const m
 			1u, &desctipor_set,
 			0u, nullptr);
 
-		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, 0u, 0u);
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, sector.first_vertex, 0u);
 	}
 }
 
