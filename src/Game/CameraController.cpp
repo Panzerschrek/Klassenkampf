@@ -1,4 +1,5 @@
 #include "CameraController.hpp"
+#include "../MathLib/MathConstants.hpp"
 #include <algorithm>
 
 
@@ -69,7 +70,7 @@ void CameraController::Update(const float time_delta_s, const InputState& input_
 
 m_Mat4 CameraController::CalculateViewMatrix() const
 {
-	const float fov= g_pi / 2.0f;
+	const float fov= MathConstants::half_pi;
 	const float z_near= 0.125f;
 	const float z_far= 128.0f;
 

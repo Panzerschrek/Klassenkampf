@@ -1,4 +1,5 @@
 #include "WorldRenderer.hpp"
+#include "../MathLib/MathConstants.hpp"
 #include "Assert.hpp"
 #include "DDSImage.hpp"
 #include "Image.hpp"
@@ -481,7 +482,7 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 			base_transform_mat.value[14]= model.header.shift[2];
 
 			to_center_mat.Translate(m_Vec3(-0.5f, -0.5f, 0.0f));
-			rotate_mat.RotateZ(float(segment.angle) * (3.1415926535f / 2.0f));
+			rotate_mat.RotateZ(float(segment.angle) * MathConstants::half_pi);
 			from_center_mat.Translate(m_Vec3(+0.5f, +0.5f, 0.0f));
 			translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
 			segment_mat= base_transform_mat * to_center_mat * rotate_mat * from_center_mat * translate_mat;
