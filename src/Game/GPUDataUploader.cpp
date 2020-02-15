@@ -108,6 +108,11 @@ GPUDataUploader::RequestResult GPUDataUploader::RequestMemory(size_t size)
 	return result;
 }
 
+size_t GPUDataUploader::GetMaxMemoryBlockSize() const
+{
+	return buffer_data_size_;
+}
+
 void GPUDataUploader::Flush()
 {
 	DataBuffer& current_buffer= data_buffer_queue_[current_data_buffer_index_];

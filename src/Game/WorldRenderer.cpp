@@ -360,13 +360,37 @@ WorldRenderer::WorldRenderer(
 
 	} // for sectors
 
+	// Create world vertex and index buffers.
+	const auto gpu_buffer_upload=
+	[&](const void* const buffer_data, const size_t buffer_size, const vk::Buffer dst_buffer)
+	{
+		size_t offset= 0u;
+		const size_t block_size= gpu_data_uploader_.GetMaxMemoryBlockSize();
+		while(offset < buffer_size)
+		{
+			const size_t request_size= std::min(block_size, buffer_size - offset);
+			const auto staging_buffer= gpu_data_uploader_.RequestMemory(request_size);
+
+			std::memcpy(
+				reinterpret_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+				reinterpret_cast<const char*>(buffer_data) + offset,
+				request_size);
+
+			staging_buffer.command_buffer.copyBuffer(
+				staging_buffer.buffer,
+				dst_buffer,
+				{ vk::BufferCopy(staging_buffer.buffer_offset, offset, request_size) });
+			offset+= request_size;
+		}
+	};
+
 	{
 		vk_vertex_buffer_=
 			vk_device_.createBufferUnique(
 				vk::BufferCreateInfo(
 					vk::BufferCreateFlags(),
 					world_vertices.size() * sizeof(WorldVertex),
-					vk::BufferUsageFlagBits::eVertexBuffer));
+					vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst));
 
 		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_vertex_buffer_);
 
@@ -374,18 +398,14 @@ WorldRenderer::WorldRenderer(
 		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 		{
 			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
 		vk_vertex_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindBufferMemory(*vk_vertex_buffer_, *vk_vertex_buffer_memory_, 0u);
 
-		void* vertex_data_gpu_size= nullptr;
-		vk_device_.mapMemory(*vk_vertex_buffer_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &vertex_data_gpu_size);
-		std::memcpy(vertex_data_gpu_size, world_vertices.data(), world_vertices.size() * sizeof(WorldVertex));
-		vk_device_.unmapMemory(*vk_vertex_buffer_memory_);
+		gpu_buffer_upload(world_vertices.data(), world_vertices.size() * sizeof(WorldVertex), *vk_vertex_buffer_);
 	}
 
 	{
@@ -394,7 +414,7 @@ WorldRenderer::WorldRenderer(
 				vk::BufferCreateInfo(
 					vk::BufferCreateFlags(),
 					world_indeces.size() * sizeof(uint16_t),
-					vk::BufferUsageFlagBits::eIndexBuffer));
+					vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst));
 
 		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_index_buffer_);
 
@@ -402,19 +422,17 @@ WorldRenderer::WorldRenderer(
 		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
 		{
 			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible) != vk::MemoryPropertyFlags() &&
-				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) != vk::MemoryPropertyFlags())
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
 		vk_index_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindBufferMemory(*vk_index_buffer_, *vk_index_buffer_memory_, 0u);
 
-		void* vertex_data_gpu_size= nullptr;
-		vk_device_.mapMemory(*vk_index_buffer_memory_, 0u, vk_memory_allocate_info.allocationSize, vk::MemoryMapFlags(), &vertex_data_gpu_size);
-		std::memcpy(vertex_data_gpu_size, world_indeces.data(), world_indeces.size() * sizeof(uint16_t));
-		vk_device_.unmapMemory(*vk_index_buffer_memory_);
+		gpu_buffer_upload(world_indeces.data(), world_indeces.size() * sizeof(uint16_t), *vk_index_buffer_);
 	}
+
+	gpu_data_uploader_.Flush();
 
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_size(
