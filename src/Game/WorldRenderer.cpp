@@ -435,12 +435,20 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 
 			const SegmentModel& model = model_it->second;
 
-			m_Mat4 to_center_mat, rotate_mat, from_center_mat, translate_mat, segment_mat;
+			m_Mat4 base_transform_mat, to_center_mat, rotate_mat, from_center_mat, translate_mat, segment_mat;
+			base_transform_mat.MakeIdentity();
+			base_transform_mat.value[ 0]= model.header.scale[0];
+			base_transform_mat.value[ 5]= model.header.scale[1];
+			base_transform_mat.value[10]= model.header.scale[2];
+			base_transform_mat.value[12]= model.header.shift[0];
+			base_transform_mat.value[13]= model.header.shift[1];
+			base_transform_mat.value[14]= model.header.shift[2];
+
 			to_center_mat.Translate(m_Vec3(-0.5f, -0.5f, 0.0f));
 			rotate_mat.RotateZ(float(segment.angle) * (3.1415926535f / 2.0f));
 			from_center_mat.Translate(m_Vec3(+0.5f, +0.5f, 0.0f));
 			translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
-			segment_mat= to_center_mat * rotate_mat * from_center_mat * translate_mat;
+			segment_mat= base_transform_mat * to_center_mat * rotate_mat * from_center_mat * translate_mat;
 
 			//const size_t segment_first_vertex= world_vertices.size() - size_t(out_sector.first_vertex);
 			for(size_t i= 0u; i < size_t(model.header.triangle_group_count); ++i)
@@ -453,11 +461,8 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 				for(size_t j= 0u; j < size_t(in_triangle_group.vertex_count); ++j)
 				{
 					const SegmentModelFormat::Vertex& in_v= model.vetices[in_triangle_group.first_vertex + j];
-					m_Vec3 pos_scaled(
-						model.header.shift[0] + model.header.scale[0] * float(in_v.pos[0]),
-						model.header.shift[1] + model.header.scale[1] * float(in_v.pos[1]),
-						model.header.shift[2] + model.header.scale[2] * float(in_v.pos[2]));
-					const m_Vec3 pos_transformed= pos_scaled * segment_mat;
+					const m_Vec3 pos(float(in_v.pos[0]), float(in_v.pos[1]), float(in_v.pos[2]));
+					const m_Vec3 pos_transformed= pos * segment_mat;
 
 					WorldVertex out_v;
 					out_v.pos[0]= pos_transformed.x;
