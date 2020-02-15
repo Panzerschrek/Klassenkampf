@@ -245,54 +245,6 @@ WorldRenderer::WorldRenderer(
 				tonemapper_.GetRenderPass(),
 				0u));
 
-	test_material_id_= "test_image";
-	LoadMaterial(test_material_id_);
-
-	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(
-		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(materials_.size()));
-	vk_descriptor_pool_=
-		vk_device_.createDescriptorPoolUnique(
-			vk::DescriptorPoolCreateInfo(
-				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
-				1u, &vk_descriptor_pool_size));
-
-	for(auto& material_pair : materials_)
-	{
-		Material& material= material_pair.second;
-		if(!material.image_view)
-			continue;
-
-		// Create descriptor set.
-		material.descriptor_set=
-			std::move(
-			vk_device_.allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(
-					*vk_descriptor_pool_,
-					1u, &*vk_decriptor_set_layout_)).front());
-
-		// Write descriptor set.
-		const vk::DescriptorImageInfo descriptor_image_info(
-			vk::Sampler(),
-			*material.image_view,
-			vk::ImageLayout::eShaderReadOnlyOptimal);
-
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*material.descriptor_set,
-			g_tex_uniform_binding,
-			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
-		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
-			0u, nullptr);
-	}
-
 	// Preload segment models.
 	struct SegmentModelDescription
 	{
@@ -318,6 +270,11 @@ WorldRenderer::WorldRenderer(
 		if(std::optional<SegmentModelPreloaded> model= PreloadSegmentModel(file_path))
 			preloaded_segment_models.emplace(segment_model_description.type, std::move(*model));
 	}
+
+	test_material_id_= "test_image";
+	LoadMaterial(test_material_id_);
+
+	gpu_data_uploader_.Flush();
 
 	// Create vertex buffer
 	std::vector<WorldVertex> world_vertices;
@@ -459,6 +416,52 @@ WorldRenderer::WorldRenderer(
 		std::memcpy(vertex_data_gpu_size, world_indeces.data(), world_indeces.size() * sizeof(uint16_t));
 		vk_device_.unmapMemory(*vk_index_buffer_memory_);
 	}
+
+	// Create descriptor set pool.
+	const vk::DescriptorPoolSize vk_descriptor_pool_size(
+		vk::DescriptorType::eCombinedImageSampler,
+		uint32_t(materials_.size()));
+	vk_descriptor_pool_=
+		vk_device_.createDescriptorPoolUnique(
+			vk::DescriptorPoolCreateInfo(
+				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
+				1u, &vk_descriptor_pool_size));
+
+	for(auto& material_pair : materials_)
+	{
+		Material& material= material_pair.second;
+		if(!material.image_view)
+			continue;
+
+		// Create descriptor set.
+		material.descriptor_set=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*vk_descriptor_pool_,
+					1u, &*vk_decriptor_set_layout_)).front());
+
+		// Write descriptor set.
+		const vk::DescriptorImageInfo descriptor_image_info(
+			vk::Sampler(),
+			*material.image_view,
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::WriteDescriptorSet write_descriptor_set(
+			*material.descriptor_set,
+			g_tex_uniform_binding,
+			0u,
+			1u,
+			vk::DescriptorType::eCombinedImageSampler,
+			&descriptor_image_info,
+			nullptr,
+			nullptr);
+		vk_device_.updateDescriptorSets(
+			1u, &write_descriptor_set,
+			0u, nullptr);
+	}
+
 }
 
 WorldRenderer::~WorldRenderer()
