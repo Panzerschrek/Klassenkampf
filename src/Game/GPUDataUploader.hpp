@@ -21,6 +21,8 @@ public:
 
 	RequestResult RequestMemory(size_t size);
 
+	size_t GetMaxMemoryBlockSize() const;
+
 	void Flush();
 
 private:

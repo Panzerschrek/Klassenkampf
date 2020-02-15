@@ -1,4 +1,6 @@
 #pragma once
+#include "../Common/MemoryMappedFile.hpp"
+#include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
 #include "GPUDataUploader.hpp"
 #include "Tonemapper.hpp"
@@ -17,7 +19,7 @@ public:
 	WorldRenderer(
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
-		WorldData::World world);
+		const WorldData::World& world);
 
 	~WorldRenderer();
 
@@ -36,6 +38,18 @@ private:
 
 	struct SegmentModel
 	{
+		MemoryMappedFilePtr file_mapped;
+		const SegmentModelFormat::SegmentModelHeader& header;
+		const SegmentModelFormat::Vertex* vetices;
+		const SegmentModelFormat::IndexType* indices;
+		const SegmentModelFormat::TriangleGroup* triangle_groups;
+		std::vector<std::string> local_to_global_material_id;
+	};
+
+	using SegmentModels= std::unordered_map<WorldData::SegmentType, SegmentModel>;
+
+	struct Sector
+	{
 		struct TriangleGroup
 		{
 			uint32_t first_vertex;
@@ -45,17 +59,26 @@ private:
 		};
 
 		std::vector<TriangleGroup> triangle_groups;
+	};
 
+	using WorldSectors= std::vector<Sector>;
+
+	struct WorldModel
+	{
+		WorldSectors world_sectors_;
 		vk::UniqueBuffer vertex_buffer;
 		vk::UniqueDeviceMemory vertex_buffer_memory;
-
 		vk::UniqueBuffer index_buffer;
 		vk::UniqueDeviceMemory index_buffer_memory;
+		WorldSectors sectors;
 	};
 
 private:
-	void DrawFunction(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix);
+	void DrawWorldModel(vk::CommandBuffer command_buffer, const WorldModel& world_model, const m_Mat4& view_matrix);
+
+	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
+
 	void LoadMaterial(const std::string& material_name);
 
 private:
@@ -64,8 +87,6 @@ private:
 	const vk::Extent2D viewport_size_;
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 	const uint32_t queue_family_index_;
-
-	const WorldData::World world_;
 
 	Tonemapper tonemapper_;
 
@@ -77,20 +98,13 @@ private:
 
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
-	vk::UniqueBuffer vk_vertex_buffer_;
-	vk::UniqueDeviceMemory vk_vertex_buffer_memory_;
-
-	vk::UniqueBuffer vk_index_buffer_;
-	size_t index_count_= 0u;
-	vk::UniqueDeviceMemory vk_index_buffer_memory_;
+	WorldModel world_model_;
+	WorldModel test_world_model_;
 
 	vk::UniqueSampler vk_image_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;
-	std::unordered_map<WorldData::SegmentType, SegmentModel> segment_models_;
-
 	std::string test_material_id_;
-	SegmentModel test_model_;
 };
 
 } // namespace KK
