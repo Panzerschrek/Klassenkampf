@@ -102,6 +102,10 @@ private:
 	vk::UniquePipelineLayout vk_pipeline_layout_;
 	vk::UniquePipeline vk_pipeline_;
 
+	// All light data, required by fragment shader - ligh sources with parameters (position, matrix), etc.
+	vk::UniqueBuffer vk_light_data_buffer_;
+	vk::UniqueDeviceMemory vk_light_data_buffer_memory_;
+
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
 	WorldModel world_model_;

@@ -29,6 +29,24 @@ struct Uniforms
 };
 static_assert(sizeof(Uniforms) <= 128u, "Uniforms size is too big, limit is 128 bytes");
 
+struct LightBuffer
+{
+	struct Light
+	{
+		float pos[4];
+		float color[4];
+	};
+
+	static constexpr size_t c_max_lights= 256u;
+
+	float ambient_color[4];
+	uint32_t light_count;
+	Light lights[256];
+};
+
+static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 20u + 256u * 32u, "Invalid size");
+
 struct WorldVertex
 {
 	float pos[3];
@@ -37,6 +55,7 @@ struct WorldVertex
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
+const uint32_t g_light_buffer_binding= 1u;
 
 } // namespace
 
@@ -97,6 +116,13 @@ WorldRenderer::WorldRenderer(
 			vk::ShaderStageFlagBits::eFragment,
 			&*vk_image_sampler_,
 		},
+		{
+			g_light_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
 	};
 
 	vk_decriptor_set_layout_=
@@ -114,10 +140,8 @@ WorldRenderer::WorldRenderer(
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
-				1u,
-				&*vk_decriptor_set_layout_,
-				1u,
-				&vk_push_constant_range));
+				1u, &*vk_decriptor_set_layout_,
+				1u, &vk_push_constant_range));
 
 	// Create pipeline.
 	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
@@ -224,6 +248,28 @@ WorldRenderer::WorldRenderer(
 				tonemapper_.GetRenderPass(),
 				0u));
 
+	{ // Prepare lighting buffer.
+		vk_light_data_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(LightBuffer),
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_light_data_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vk_light_data_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*vk_light_data_buffer_, *vk_light_data_buffer_memory_, 0u);
+	}
+
 	// Load segment models.
 	struct SegmentModelDescription
 	{
@@ -308,20 +354,39 @@ WorldRenderer::WorldRenderer(
 			*material.image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*material.descriptor_set,
-			g_tex_uniform_binding,
-			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
+		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
+			*vk_light_data_buffer_,
+				0u,
+			sizeof(LightBuffer));
+
+		const vk::WriteDescriptorSet write_descriptor_set[]
+		{
+			{
+				*material.descriptor_set,
+				g_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_light_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_light_buffer_info,
+				nullptr
+			},
+		};
+
 		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
+			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
 			0u, nullptr);
 	}
-
 }
 
 WorldRenderer::~WorldRenderer()
@@ -332,6 +397,15 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos)
 {
+	LightBuffer light_buffer;
+	light_buffer.ambient_color[0]= 0.1f;
+	light_buffer.ambient_color[1]= 0.1f;
+	light_buffer.ambient_color[2]= 0.1f;
+	light_buffer.ambient_color[3]= 0.0f;
+	light_buffer.light_count= 0;
+
+	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
+
 	tonemapper_.DoRenderPass(
 		command_buffer,
 		[&]{ DrawWorldModel(command_buffer, world_model_, view_matrix, cam_pos); });
