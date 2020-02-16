@@ -43,7 +43,7 @@ void ClusterVolumeBuilder::ClearClusters()
 		cluster.elements.clear();
 }
 
-void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, const ElementId id)
+bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, const ElementId id)
 {
 	// Createworld space bounding box.
 	const m_Vec3 box_corners[8]
@@ -93,11 +93,12 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	depth_min= std::max(depth_min, 0.0f);
 	depth_max= std::min(depth_max, 0.9999f);
 	if(depth_min > 1.0f || depth_max < 0.0f)
-		return;
+		return false;
 
 	const float depth_min_mapped= DepthMappingFunction(depth_min);
 	const float depth_max_mapped= DepthMappingFunction(depth_max);
 
+	bool added= false;
 	const int32_t slice_min= int32_t(float(size_[2]) * depth_min_mapped);
 	const int32_t slice_max= int32_t(float(size_[2]) * depth_max_mapped);
 	for(int32_t slice= slice_min; slice <= slice_max; ++slice)
@@ -119,6 +120,7 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 		const int32_t cluster_min_y= int32_t((slice_min_y * 0.5f + 0.5f) * float(size_[1]));
 		const int32_t cluster_max_y= int32_t((slice_max_y * 0.5f + 0.5f) * float(size_[1]));
 
+		added= added | (cluster_min_x <= cluster_max_x && cluster_min_y <= cluster_max_y);
 		for(int32_t x= cluster_min_x; x <= cluster_max_x; ++x)
 		for(int32_t y= cluster_min_y; y <= cluster_max_y; ++y)
 		{
@@ -132,6 +134,7 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 				slice * int32_t(size_[0] * size_[1])].elements.push_back(id);
 		}
 	}
+	return added;
 }
 
 uint32_t ClusterVolumeBuilder::GetWidth () const

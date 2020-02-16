@@ -556,40 +556,38 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.viewport_size[2]= 0.0f;
 	light_buffer.viewport_size[3]= 0.0f;
 
+	cluster_volume_builder_.ClearClusters();
+	cluster_volume_builder_.SetMatrix(view_matrix.mat, view_matrix.m10, view_matrix.m14);
+
 	for(const size_t sector_index : visible_sectors)
 	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
 	{
 		if(light_buffer.light_count >= LightBuffer::c_max_lights)
 			goto end_fill_lights;
 
-		LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
-		++light_buffer.light_count;
+		const float radius= 1.0f;
 
+		const bool added=
+			cluster_volume_builder_.AddSphere(
+				sector_light.pos,
+				radius,
+				ClusterVolumeBuilder::ElementId(light_buffer.light_count));
+		if(!added)
+			continue;
+
+		LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
 		out_light.pos[0]= sector_light.pos.x;
 		out_light.pos[1]= sector_light.pos.y;
 		out_light.pos[2]= sector_light.pos.z;
-		out_light.pos[3]= 1.0f; // radius
+		out_light.pos[3]= radius;
 		out_light.color[0]= sector_light.color.x / 16.0f;
 		out_light.color[1]= sector_light.color.y / 16.0f;
 		out_light.color[2]= sector_light.color.z / 16.0f;
 		out_light.color[3]= 0.0f;
+
+		++light_buffer.light_count;
 	}
 	end_fill_lights:
-
-	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
-
-	// Prepare clusters.
-	cluster_volume_builder_.ClearClusters();
-	cluster_volume_builder_.SetMatrix(view_matrix.mat, view_matrix.m10, view_matrix.m14);
-
-	for(size_t i= 0u; i < light_buffer.light_count; ++i)
-	{
-		const LightBuffer::Light& light= light_buffer.lights[i];
-		cluster_volume_builder_.AddSphere(
-			m_Vec3(light.pos[0], light.pos[1], light.pos[2]),
-			light.pos[3],
-			ClusterVolumeBuilder::ElementId(i));
-	}
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
 	std::vector<ClusterVolumeBuilder::ElementId> ligts_list_buffer;
@@ -603,6 +601,11 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 			clusters[i].elements.begin(), clusters[i].elements.end());
 	}
 
+	command_buffer.updateBuffer(
+		*vk_light_data_buffer_,
+		0u,
+		offsetof(LightBuffer, lights) + sizeof(LightBuffer::Light) * light_buffer.light_count, // Update only visible lights.
+		&light_buffer);
 	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
 	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
 

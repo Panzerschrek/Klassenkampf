@@ -24,7 +24,8 @@ public:
 	void SetMatrix(const m_Mat4& mat, float m10, float m14);
 	void ClearClusters();
 
-	void AddSphere(const m_Vec3& center, float radius, ElementId id);
+	// Returns true, if added.
+	bool AddSphere(const m_Vec3& center, float radius, ElementId id);
 
 	uint32_t GetWidth () const;
 	uint32_t GetHeight() const;
