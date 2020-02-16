@@ -103,8 +103,8 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	const int32_t slice_max= int32_t(float(size_[2]) * depth_max_mapped);
 	for(int32_t slice= slice_min; slice <= slice_max; ++slice)
 	{
-		const float slice_depth_min= DepthUnmappingFunction(float(slice    ) / float(size_[2]));
-		const float slice_depth_max= DepthUnmappingFunction(float(slice + 1) / float(size_[2]));
+		const float slice_depth_min= std::max(depth_min, DepthUnmappingFunction(float(slice    ) / float(size_[2])));
+		const float slice_depth_max= std::min(depth_max, DepthUnmappingFunction(float(slice + 1) / float(size_[2])));
 		const float slice_w_min= m14_ / (slice_depth_min - m10_);
 		const float slice_w_max= m14_ / (slice_depth_max - m10_);
 		KK_ASSERT(slice_w_min > 0.0f);
