@@ -521,6 +521,9 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 			const float pos_transformed= (light.pos[i] - bb_min[i]) * inv_scale[i] - c_max_coord_value;
 			out_light.pos[i]= int16_t(std::min(std::max(-c_max_coord_value, pos_transformed), +c_max_coord_value));
 		}
+		for(size_t i= 0u; i < 3u; ++i)
+			out_light.color[i]= int16_t(light.color[i] * 256.0f);
+
 		out_light.radius= int16_t(std::min(std::max(-c_max_coord_value, light.radius), +c_max_coord_value));
 	}
 
