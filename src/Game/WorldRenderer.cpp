@@ -287,6 +287,7 @@ WorldRenderer::WorldRenderer(
 		{ WorldData::SegmentType::Wall, "wall_segment" },
 		{ WorldData::SegmentType::CeilingArch4, "arc4_segment" },
 		{ WorldData::SegmentType::Column4, "column4_segment" },
+		{ WorldData::SegmentType::Column4Lights, "column4_lights" },
 	};
 
 	SegmentModels segment_models;
@@ -437,9 +438,6 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 		{
 			if(light_buffer.light_count >= LightBuffer::c_max_lights)
 				break;
-
-			if(sector_light.color.x >= 25.0f)
-				continue;
 
 			LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
 			++light_buffer.light_count;
