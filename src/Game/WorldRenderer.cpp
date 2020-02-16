@@ -501,7 +501,7 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 {
-	const m_Mat4 view_matrix= camera_controller_.CalculateViewMatrix();
+	const CameraController::ViewMatrix view_matrix= camera_controller_.CalculateViewMatrix();
 	const m_Vec3 cam_pos= camera_controller_.GetCameraPosition();
 	const WorldModel& model= world_model_;
 
@@ -568,10 +568,35 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 
 	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
 
+	// Prepare clusters.
+	cluster_volume_builder_.ClearClusters();
+	cluster_volume_builder_.SetMatrix(view_matrix.mat, view_matrix.m10, view_matrix.m14);
+
+	for(size_t i= 0u; i < light_buffer.light_count; ++i)
+	{
+		const LightBuffer::Light& light= light_buffer.lights[i];
+		cluster_volume_builder_.AddSphere(m_Vec3(light.pos[0], light.pos[1], light.pos[2]), 1.0f, ClusterVolumeBuilder::ElementId(i));
+	}
+
+	const auto& clusters= cluster_volume_builder_.GetClusters();
+	std::vector<ClusterVolumeBuilder::ElementId> ligts_list_buffer;
+	std::vector<uint32_t> offsets_buffer(clusters.size());
+	for(size_t i= 0u; i < clusters.size(); ++i)
+	{
+		offsets_buffer[i]= uint32_t(ligts_list_buffer.size());
+		ligts_list_buffer.push_back(ClusterVolumeBuilder::ElementId(clusters[i].elements.size()));
+		ligts_list_buffer.insert(
+			ligts_list_buffer.end(),
+			clusters[i].elements.begin(), clusters[i].elements.end());
+	}
+
+	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
+	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
+
 	// Draw
 	tonemapper_.DoRenderPass(
 		command_buffer,
-		[&]{ DrawWorldModel(command_buffer, model, visible_sectors, view_matrix); });
+		[&]{ DrawWorldModel(command_buffer, model, visible_sectors, view_matrix.mat); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)

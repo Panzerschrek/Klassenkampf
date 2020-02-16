@@ -10,11 +10,18 @@ namespace KK
 class CameraController final
 {
 public:
+	struct ViewMatrix
+	{
+		m_Mat4 mat;
+		float m10;
+		float m14;
+	};
+public:
 	CameraController(Settings& settings, float aspect);
 
 	void Update(float time_delta_s, const InputState& input_state);
 
-	m_Mat4 CalculateViewMatrix() const;
+	ViewMatrix CalculateViewMatrix() const;
 	m_Vec3 GetCameraPosition() const;
 
 private:

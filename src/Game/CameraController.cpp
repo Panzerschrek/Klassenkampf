@@ -68,7 +68,7 @@ void CameraController::Update(const float time_delta_s, const InputState& input_
 	elevation_= std::max(-0.5f * g_pi, std::min(elevation_, +0.5f * g_pi));
 }
 
-m_Mat4 CameraController::CalculateViewMatrix() const
+CameraController::ViewMatrix CameraController::CalculateViewMatrix() const
 {
 	const float fov= MathConstants::half_pi;
 	const float z_near= 0.125f;
@@ -87,7 +87,12 @@ m_Mat4 CameraController::CalculateViewMatrix() const
 
 	perspective.PerspectiveProjection(aspect_, fov, z_near, z_far);
 
-	return translate * rotate_z * rotate_x * basis_change * perspective;
+	ViewMatrix result;
+	result.mat= translate * rotate_z * rotate_x * basis_change * perspective;
+	result.m10= perspective.value[10];
+	result.m14= perspective.value[14];
+
+	return result;
 }
 
 m_Vec3 CameraController::GetCameraPosition() const

@@ -22,7 +22,6 @@ layout(binding= 2, std430) buffer readonly cluster_offset_buffer_block
 	int light_offsets[];
 };
 
-
 layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 {
 	int8_t light_list[];
@@ -31,6 +30,7 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
 layout(location= 2) in vec3 f_pos; // World space position.
+layout(location= 3) in vec2 f_depth;
 
 layout(location = 0) out vec4 out_color;
 
@@ -38,12 +38,22 @@ void main()
 {
 	vec3 normal_normalized= normalize(f_normal);
 
+	const ivec3 cluster_volume_size= ivec3(8, 8, 16);
+	vec2 cluster_coord_xy= gl_FragCoord.xy * vec2(float(cluster_volume_size.x) / 1368.0, float(cluster_volume_size.y) / 1024.0);
+	float cluster_coord_z= float(cluster_volume_size.z) * f_depth.x / f_depth.y;
+	int offset= light_offsets[
+		int(cluster_coord_xy.x) +
+		int(cluster_coord_xy.y) * cluster_volume_size.x +
+		int(cluster_coord_z   ) * (cluster_volume_size.x * cluster_volume_size.y) ];
+
 	vec3 l= ambient_color.rgb;
-	for(int i= 0; i < light_count.x; ++i)
+	int current_light_count= light_list[offset];
+	for(int i= 0; i < current_light_count; ++i)
 	{
-		vec3 vec_to_light= lights[i].pos.xyz - f_pos;
+		Light light= lights[ int(light_list[offset + i]) ];
+		vec3 vec_to_light= light.pos.xyz - f_pos;
 		float k= max(dot(f_normal, vec_to_light), 0.0) / (dot(vec_to_light, vec_to_light) * length(vec_to_light));
-		l+= lights[i].color.xyz * k;
+		l+= light.color.xyz * k;
 	}
 
 	const vec4 tex_value= texture(tex, f_tex_coord);
