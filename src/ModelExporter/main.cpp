@@ -554,7 +554,10 @@ Geometries ReadGeometries(const tinyxml2::XMLElement& collada_element)
 {
 	Geometries geometries;
 
-	const tinyxml2::XMLElement* library_geometries= collada_element.FirstChildElement("library_geometries");
+	const tinyxml2::XMLElement* const library_geometries= collada_element.FirstChildElement("library_geometries");
+	if(library_geometries == nullptr)
+		return geometries;
+
 	for(const tinyxml2::XMLElement* geometry= library_geometries->FirstChildElement("geometry");
 		geometry != nullptr;
 		geometry= geometry->NextSiblingElement("geometry"))
@@ -640,6 +643,9 @@ Lights ReadLights(const tinyxml2::XMLElement& collada_element)
 	Lights lights;
 
 	const tinyxml2::XMLElement* const library_lights= collada_element.FirstChildElement("library_lights");
+	if(library_lights == nullptr)
+		return lights;
+
 	for(const tinyxml2::XMLElement* light= library_lights->FirstChildElement("light");
 		light != nullptr;
 		light= light->NextSiblingElement("light"))
