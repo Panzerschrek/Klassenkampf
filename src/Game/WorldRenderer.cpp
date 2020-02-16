@@ -42,11 +42,13 @@ struct LightBuffer
 	float ambient_color[4];
 	uint32_t light_count;
 	uint32_t padding0[3];
+	uint32_t cluster_volume_size[4];
+	float viewport_size[4];
 	Light lights[256];
 };
 
 static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 32u + 256u * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 64u + 256u * 32u, "Invalid size");
 
 struct WorldVertex
 {
@@ -74,7 +76,7 @@ WorldRenderer::WorldRenderer(
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(window_vulkan)
-	, cluster_volume_builder_(16u, 16u, 24u)
+	, cluster_volume_builder_(16u, 8u, 24u)
 {
 	// Create shaders
 	shader_vert_=
@@ -545,6 +547,14 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.ambient_color[2]= 0.1f;
 	light_buffer.ambient_color[3]= 0.0f;
 	light_buffer.light_count= 0;
+	light_buffer.cluster_volume_size[0]= cluster_volume_builder_.GetWidth ();
+	light_buffer.cluster_volume_size[1]= cluster_volume_builder_.GetHeight();
+	light_buffer.cluster_volume_size[2]= cluster_volume_builder_.GetDepth ();
+	light_buffer.cluster_volume_size[3]= 0;
+	light_buffer.viewport_size[0]= float(tonemapper_.GetFramebufferSize().width );
+	light_buffer.viewport_size[1]= float(tonemapper_.GetFramebufferSize().height);
+	light_buffer.viewport_size[2]= 0.0f;
+	light_buffer.viewport_size[3]= 0.0f;
 
 	for(const size_t sector_index : visible_sectors)
 	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)

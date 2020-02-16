@@ -15,6 +15,8 @@ layout(binding= 1, std430) buffer readonly light_buffer_block
 	// Use vec4 for fit alignment.
 	vec4 ambient_color;
 	ivec4 light_count;
+	ivec4 cluster_volume_size;
+	vec4 viewport_size;
 	Light lights[];
 };
 
@@ -31,21 +33,19 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
 layout(location= 2) in vec3 f_pos; // World space position.
-layout(location= 3) in vec2 f_depth;
 
 layout(location = 0) out vec4 out_color;
 
 void main()
 {
 	vec3 normal_normalized= normalize(f_normal);
+	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size.xy;
 
-	const ivec3 cluster_volume_size= ivec3(16, 16, 24);
-	vec2 cluster_coord_xy= gl_FragCoord.xy * vec2(float(cluster_volume_size.x) / 1368.0, float(cluster_volume_size.y) / 1024.0);
-	float cluster_coord_z= float(cluster_volume_size.z) * pow(f_depth.x / f_depth.y, 64.0);
+	vec3 cluster_coord= vec3(cluster_volume_size.xyz) * vec3(frag_coord_normalized, pow(gl_FragCoord.z, 64.0));
 	int offset= int(light_offsets[
-		int(cluster_coord_xy.x) +
-		int(cluster_coord_xy.y) * cluster_volume_size.x +
-		int(cluster_coord_z   ) * (cluster_volume_size.x * cluster_volume_size.y) ]);
+		int(cluster_coord.x) +
+		int(cluster_coord.y) * cluster_volume_size.x +
+		int(cluster_coord.z) * (cluster_volume_size.x * cluster_volume_size.y) ]);
 
 	vec3 l= ambient_color.rgb;
 	int current_light_count= light_list[offset];
