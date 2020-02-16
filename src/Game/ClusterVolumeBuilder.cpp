@@ -49,7 +49,11 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	for(size_t i= 0u; i < 8u; ++i)
 	{
 		box_corners_projected[i]= box_corners[i] * matrix_;
-		box_corners_projected_w[i]= box_corners[i].x + matrix_.value[3] + box_corners[i].y * matrix_.value[7] + box_corners[i].z + matrix_.value[11] + matrix_.value[15];
+		box_corners_projected_w[i]=
+			matrix_.value[ 3] * box_corners[i].x +
+			matrix_.value[ 7] * box_corners[i].y +
+			matrix_.value[11] * box_corners[i].z +
+			matrix_.value[15];
 		box_corners_depth[i]= box_corners_projected[i].z / box_corners_projected_w[i];
 	}
 
@@ -77,13 +81,15 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	const int32_t slice_max= int32_t(float(size_[2]) * depth_max);
 	for(int32_t slice= slice_min; slice <= slice_max; ++slice)
 	{
-		const float slice_depth= float(slice) / float(size_[2]);
-		const float slice_w= m14_ / (slice_depth - m10_);
+		const float slice_depth_min= float(slice    ) / float(size_[2]);
+		const float slice_depth_max= float(slice + 1) / float(size_[2]);
+		const float slice_w_min= m14_ / (slice_depth_min - m10_);
+		const float slice_w_max= m14_ / (slice_depth_max - m10_);
 
-		const float slice_min_x= std::max(bb_min.x / slice_w, -0.95f);
-		const float slice_max_x= std::min(bb_max.x / slice_w, +0.95f);
-		const float slice_min_y= std::max(bb_min.y / slice_w, -0.95f);
-		const float slice_max_y= std::min(bb_max.y / slice_w, +0.95f);
+		const float slice_min_x= std::max(std::min(bb_min.x / slice_w_min, bb_min.x / slice_w_max), -0.95f);
+		const float slice_max_x= std::min(std::max(bb_max.x / slice_w_min, bb_max.x / slice_w_max), +0.95f);
+		const float slice_min_y= std::max(std::min(bb_min.y / slice_w_min, bb_min.y / slice_w_max), -0.95f);
+		const float slice_max_y= std::min(std::max(bb_max.y / slice_w_min, bb_max.y / slice_w_max), +0.95f);
 
 		const int32_t cluster_min_x= int32_t((slice_min_x * 0.5f + 0.5f) * float(size_[0]));
 		const int32_t cluster_max_x= int32_t((slice_max_x * 0.5f + 0.5f) * float(size_[0]));
@@ -93,8 +99,9 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 		for(int32_t x= cluster_min_x; x <= cluster_max_x; ++x)
 		for(int32_t y= cluster_min_y; y <= cluster_max_y; ++y)
 		{
-			KK_ASSERT(x < int32_t(size_[0]));
-			KK_ASSERT(y < int32_t(size_[1]));
+			KK_ASSERT(x >= 0 && x < int32_t(size_[0]));
+			KK_ASSERT(y >= 0 && y < int32_t(size_[1]));
+			KK_ASSERT(slice >= 0 && slice < int32_t(size_[2]));
 
 			clusters_[x + y * int32_t(size_[0]) + slice * int32_t(size_[0] * size_[1])].elements.push_back(id);
 		}

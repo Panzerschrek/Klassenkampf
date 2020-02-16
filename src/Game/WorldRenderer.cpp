@@ -74,7 +74,7 @@ WorldRenderer::WorldRenderer(
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(window_vulkan)
-	, cluster_volume_builder_(8u, 8u, 16u)
+	, cluster_volume_builder_(16u, 16u, 24u)
 {
 	// Create shaders
 	shader_vert_=
@@ -575,7 +575,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	for(size_t i= 0u; i < light_buffer.light_count; ++i)
 	{
 		const LightBuffer::Light& light= light_buffer.lights[i];
-		cluster_volume_builder_.AddSphere(m_Vec3(light.pos[0], light.pos[1], light.pos[2]), 1.0f, ClusterVolumeBuilder::ElementId(i));
+		cluster_volume_builder_.AddSphere(m_Vec3(light.pos[0], light.pos[1], light.pos[2]), 0.1f, ClusterVolumeBuilder::ElementId(i));
 	}
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
