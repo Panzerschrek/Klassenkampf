@@ -63,13 +63,16 @@ const uint32_t g_light_buffer_binding= 1u;
 WorldRenderer::WorldRenderer(
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
+	const CameraController& camera_controller,
 	const WorldData::World& world)
 	: gpu_data_uploader_(gpu_data_uploader)
+	, camera_controller_(camera_controller)
 	, vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(window_vulkan)
+	, cluster_volume_builder_(8u, 8u, 16u)
 {
 	// Create shaders
 	shader_vert_=
@@ -397,8 +400,10 @@ WorldRenderer::~WorldRenderer()
 	vk_device_.waitIdle();
 }
 
-void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos)
+void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 {
+	const m_Mat4 view_matrix= camera_controller_.CalculateViewMatrix();
+	const m_Vec3 cam_pos= camera_controller_.GetCameraPosition();
 	const WorldModel& model= world_model_;
 
 	// Calculate visible sectors.
