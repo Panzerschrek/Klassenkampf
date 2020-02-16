@@ -399,15 +399,11 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos)
 {
-	LightBuffer light_buffer;
-	light_buffer.ambient_color[0]= 0.1f;
-	light_buffer.ambient_color[1]= 0.1f;
-	light_buffer.ambient_color[2]= 0.1f;
-	light_buffer.ambient_color[3]= 0.0f;
-	light_buffer.light_count= 0;
+	const WorldModel& model= world_model_;
 
+	// Calculate visible sectors.
 	const Sector* cam_sector= nullptr;
-	for(const Sector& sector : world_model_.sectors)
+	for(const Sector& sector : model.sectors)
 	{
 		if(cam_pos.x >= sector.bb_min.x && cam_pos.x <= sector.bb_max.x &&
 			cam_pos.y >= sector.bb_min.y && cam_pos.y <= sector.bb_max.y &&
@@ -418,7 +414,8 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 		}
 	}
 
-	for(const Sector& sector : world_model_.sectors)
+	VisibleSectors visible_sectors;
+	for(const Sector& sector : model.sectors)
 	{
 		if(cam_sector != nullptr)
 		{
@@ -434,30 +431,43 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 				continue;
 		}
 
-		for(const Sector::Light& sector_light : sector.lights)
-		{
-			if(light_buffer.light_count >= LightBuffer::c_max_lights)
-				break;
-
-			LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
-			++light_buffer.light_count;
-
-			out_light.pos[0]= sector_light.pos.x;
-			out_light.pos[1]= sector_light.pos.y;
-			out_light.pos[2]= sector_light.pos.z;
-			out_light.pos[3]= 0.0f;
-			out_light.color[0]= sector_light.color.x / 16.0f;
-			out_light.color[1]= sector_light.color.y / 16.0f;
-			out_light.color[2]= sector_light.color.z / 16.0f;
-			out_light.color[3]= 0.0f;
-		}
+		visible_sectors.push_back(size_t(&sector - model.sectors.data()));
 	}
+
+	// Prepare light.
+	LightBuffer light_buffer;
+	light_buffer.ambient_color[0]= 0.1f;
+	light_buffer.ambient_color[1]= 0.1f;
+	light_buffer.ambient_color[2]= 0.1f;
+	light_buffer.ambient_color[3]= 0.0f;
+	light_buffer.light_count= 0;
+
+	for(const size_t sector_index : visible_sectors)
+	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
+	{
+		if(light_buffer.light_count >= LightBuffer::c_max_lights)
+			goto end_fill_lights;
+
+		LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
+		++light_buffer.light_count;
+
+		out_light.pos[0]= sector_light.pos.x;
+		out_light.pos[1]= sector_light.pos.y;
+		out_light.pos[2]= sector_light.pos.z;
+		out_light.pos[3]= 0.0f;
+		out_light.color[0]= sector_light.color.x / 16.0f;
+		out_light.color[1]= sector_light.color.y / 16.0f;
+		out_light.color[2]= sector_light.color.z / 16.0f;
+		out_light.color[3]= 0.0f;
+	}
+	end_fill_lights:
 
 	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
 
+	// Draw
 	tonemapper_.DoRenderPass(
 		command_buffer,
-		[&]{ DrawWorldModel(command_buffer, world_model_, view_matrix, cam_pos); });
+		[&]{ DrawWorldModel(command_buffer, model, visible_sectors, view_matrix); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
@@ -468,8 +478,8 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 void WorldRenderer::DrawWorldModel(
 	const vk::CommandBuffer command_buffer,
 	const WorldModel& world_model,
-	const m_Mat4& view_matrix,
-	const m_Vec3& cam_pos)
+	const VisibleSectors& visible_setors,
+	const m_Mat4& view_matrix)
 {
 	const Material& test_material= materials_.find(test_material_id_)->second;
 
@@ -490,48 +500,20 @@ void WorldRenderer::DrawWorldModel(
 	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
 	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
 
-	const Sector* cam_sector= nullptr;
-	for(const Sector& sector : world_model.sectors)
+	for(const size_t sector_index : visible_setors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
 	{
-		if(cam_pos.x >= sector.bb_min.x && cam_pos.x <= sector.bb_max.x &&
-			cam_pos.y >= sector.bb_min.y && cam_pos.y <= sector.bb_max.y &&
-			cam_pos.z >= sector.bb_min.z && cam_pos.z <= sector.bb_max.z)
-		{
-			cam_sector= &sector;
-			break;
-		}
-	}
+		const Material& material= materials_.find(triangle_group.material_id)->second;
 
-	for(const Sector& sector : world_model.sectors)
-	{
-		if(cam_sector != nullptr)
-		{
-			// Find adjacent sectors.
-			const bool intersects= !(
-				sector.bb_min.x > cam_sector->bb_max.x ||
-				sector.bb_min.y > cam_sector->bb_max.y ||
-				sector.bb_min.z > cam_sector->bb_max.z ||
-				sector.bb_max.x < cam_sector->bb_min.x ||
-				sector.bb_max.y < cam_sector->bb_min.y ||
-				sector.bb_max.z < cam_sector->bb_min.z );
-			if(!intersects)
-				continue;
-		}
+		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*vk_pipeline_layout_,
+			0u,
+			1u, &desctipor_set,
+			0u, nullptr);
 
-		for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
-		{
-			const Material& material= materials_.find(triangle_group.material_id)->second;
-
-			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-			command_buffer.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*vk_pipeline_layout_,
-				0u,
-				1u, &desctipor_set,
-				0u, nullptr);
-
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-		}
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 	}
 }
 

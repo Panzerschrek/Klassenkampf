@@ -83,12 +83,14 @@ private:
 		WorldSectors sectors;
 	};
 
+	using VisibleSectors= std::vector<size_t>;
+
 private:
 	void DrawWorldModel(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
-		const m_Mat4& view_matrix,
-		const m_Vec3& cam_pos);
+		const VisibleSectors& visible_setors,
+		const m_Mat4& view_matrix);
 
 	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
