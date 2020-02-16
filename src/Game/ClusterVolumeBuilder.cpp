@@ -5,6 +5,22 @@
 namespace KK
 {
 
+namespace
+{
+
+const float c_pow_factor= 64.0f;
+
+float DepthMappingFunction(const float x)
+{
+	return std::pow(x, c_pow_factor);
+}
+
+float DepthUnmappingFunction(const float x)
+{
+	return std::pow(x, 1.0f / c_pow_factor);
+}
+
+} // namespace
 
 ClusterVolumeBuilder::ClusterVolumeBuilder(
 	const uint32_t width,
@@ -44,47 +60,51 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 
 	// Project it.
 	m_Vec3 box_corners_projected[8];
-	float box_corners_projected_w[8];
 	float box_corners_depth[8];
 	for(size_t i= 0u; i < 8u; ++i)
 	{
 		box_corners_projected[i]= box_corners[i] * matrix_;
-		box_corners_projected_w[i]=
+		const float w=
 			matrix_.value[ 3] * box_corners[i].x +
 			matrix_.value[ 7] * box_corners[i].y +
 			matrix_.value[11] * box_corners[i].z +
 			matrix_.value[15];
-		box_corners_depth[i]= box_corners_projected[i].z / box_corners_projected_w[i];
+		box_corners_depth[i]= box_corners_projected[i].z / w;
 	}
 
 	// Calculate view space min/max.
-	m_Vec3 bb_min= box_corners_projected[0];
-	m_Vec3 bb_max= box_corners_projected[0];
+	m_Vec2 bb_min= box_corners_projected[0].xy();
+	m_Vec2 bb_max= box_corners_projected[0].xy();
 	float depth_min= box_corners_depth[0];
 	float depth_max= box_corners_depth[0];
 	for(size_t i= 1u; i < 8u; ++i)
 	{
 		bb_min.x= std::min(bb_min.x, box_corners_projected[i].x);
 		bb_min.y= std::min(bb_min.y, box_corners_projected[i].y);
-		bb_min.z= std::min(bb_min.x, box_corners_projected[i].z);
 		bb_max.x= std::max(bb_max.x, box_corners_projected[i].x);
 		bb_max.y= std::max(bb_max.y, box_corners_projected[i].y);
-		bb_max.z= std::max(bb_max.x, box_corners_projected[i].z);
 		depth_min= std::min(depth_min, box_corners_depth[i]);
 		depth_max= std::max(depth_max, box_corners_depth[i]);
 	}
 
 	depth_min= std::max(depth_min, 0.0f);
 	depth_max= std::min(depth_max, 0.9999f);
+	if(depth_min > 1.0f || depth_max < 0.0f)
+		return;
 
-	const int32_t slice_min= int32_t(float(size_[2]) * depth_min);
-	const int32_t slice_max= int32_t(float(size_[2]) * depth_max);
+	const float depth_min_mapped= DepthMappingFunction(depth_min);
+	const float depth_max_mapped= DepthMappingFunction(depth_max);
+
+	const int32_t slice_min= int32_t(float(size_[2]) * depth_min_mapped);
+	const int32_t slice_max= int32_t(float(size_[2]) * depth_max_mapped);
 	for(int32_t slice= slice_min; slice <= slice_max; ++slice)
 	{
-		const float slice_depth_min= float(slice    ) / float(size_[2]);
-		const float slice_depth_max= float(slice + 1) / float(size_[2]);
+		const float slice_depth_min= DepthUnmappingFunction(float(slice    ) / float(size_[2]));
+		const float slice_depth_max= DepthUnmappingFunction(float(slice + 1) / float(size_[2]));
 		const float slice_w_min= m14_ / (slice_depth_min - m10_);
 		const float slice_w_max= m14_ / (slice_depth_max - m10_);
+		KK_ASSERT(slice_w_min > 0.0f);
+		KK_ASSERT(slice_w_max > 0.0f);
 
 		const float slice_min_x= std::max(std::min(bb_min.x / slice_w_min, bb_min.x / slice_w_max), -0.95f);
 		const float slice_max_x= std::min(std::max(bb_max.x / slice_w_min, bb_max.x / slice_w_max), +0.95f);
@@ -103,7 +123,10 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 			KK_ASSERT(y >= 0 && y < int32_t(size_[1]));
 			KK_ASSERT(slice >= 0 && slice < int32_t(size_[2]));
 
-			clusters_[x + y * int32_t(size_[0]) + slice * int32_t(size_[0] * size_[1])].elements.push_back(id);
+			clusters_[
+				x +
+				y * int32_t(size_[0]) +
+				slice * int32_t(size_[0] * size_[1])].elements.push_back(id);
 		}
 	}
 }

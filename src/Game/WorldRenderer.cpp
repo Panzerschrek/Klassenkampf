@@ -37,7 +37,7 @@ struct LightBuffer
 		float color[4];
 	};
 
-	static constexpr size_t c_max_lights= 64u; // TODO - make 256
+	static constexpr size_t c_max_lights= 256u;
 
 	float ambient_color[4];
 	uint32_t light_count;
@@ -558,7 +558,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.pos[0]= sector_light.pos.x;
 		out_light.pos[1]= sector_light.pos.y;
 		out_light.pos[2]= sector_light.pos.z;
-		out_light.pos[3]= 0.0f;
+		out_light.pos[3]= 1.0f; // radius
 		out_light.color[0]= sector_light.color.x / 16.0f;
 		out_light.color[1]= sector_light.color.y / 16.0f;
 		out_light.color[2]= sector_light.color.z / 16.0f;
@@ -575,7 +575,10 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	for(size_t i= 0u; i < light_buffer.light_count; ++i)
 	{
 		const LightBuffer::Light& light= light_buffer.lights[i];
-		cluster_volume_builder_.AddSphere(m_Vec3(light.pos[0], light.pos[1], light.pos[2]), 0.1f, ClusterVolumeBuilder::ElementId(i));
+		cluster_volume_builder_.AddSphere(
+			m_Vec3(light.pos[0], light.pos[1], light.pos[2]),
+			light.pos[3],
+			ClusterVolumeBuilder::ElementId(i));
 	}
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
