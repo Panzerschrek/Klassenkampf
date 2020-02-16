@@ -126,7 +126,7 @@ private:
 	vk::UniqueDeviceMemory cluster_offset_buffer_memory_;
 
 	// List of light sources for each cluster.
-	size_t lights_list_buffer_size_= 0u;
+	size_t lights_list_buffer_size_= 0u; // In elements
 	vk::UniqueBuffer lights_list_buffer_;
 	vk::UniqueDeviceMemory lights_list_buffer_memory_;
 

@@ -57,6 +57,8 @@ struct WorldVertex
 
 const uint32_t g_tex_uniform_binding= 0u;
 const uint32_t g_light_buffer_binding= 1u;
+const uint32_t g_cluster_offset_buffer_binding= 2u;
+const uint32_t g_lights_list_buffer_binding= 3u;
 
 } // namespace
 
@@ -122,6 +124,20 @@ WorldRenderer::WorldRenderer(
 		},
 		{
 			g_light_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			g_cluster_offset_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			g_lights_list_buffer_binding,
 			vk::DescriptorType::eStorageBuffer,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
@@ -373,15 +389,24 @@ WorldRenderer::WorldRenderer(
 	gpu_data_uploader_.Flush();
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(
-		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(materials_.size()));
+	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
+	{
+		{
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(materials_.size())
+		},
+		{
+			vk::DescriptorType::eStorageBuffer,
+			uint32_t(materials_.size()) * 3u
+		}
+	};
+
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
-				1u, &vk_descriptor_pool_size));
+				uint32_t(materials_.size()), // max sets.
+				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
 	for(auto& material_pair : materials_)
 	{
@@ -405,8 +430,18 @@ WorldRenderer::WorldRenderer(
 
 		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
 			*vk_light_data_buffer_,
-				0u,
+			0u,
 			sizeof(LightBuffer));
+
+		const vk::DescriptorBufferInfo descriptor_offset_buffer_info(
+			*cluster_offset_buffer_,
+			0u,
+			sizeof(uint32_t) * cluster_volume_builder_.GetWidth() * cluster_volume_builder_.GetHeight() * cluster_volume_builder_.GetDepth());
+
+		const vk::DescriptorBufferInfo lights_list_buffer_info(
+			*lights_list_buffer_,
+			0u,
+			sizeof(uint8_t) * lights_list_buffer_size_);
 
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
@@ -428,6 +463,26 @@ WorldRenderer::WorldRenderer(
 				vk::DescriptorType::eStorageBuffer,
 				nullptr,
 				&descriptor_light_buffer_info,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_cluster_offset_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_offset_buffer_info,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_lights_list_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&lights_list_buffer_info,
 				nullptr
 			},
 		};

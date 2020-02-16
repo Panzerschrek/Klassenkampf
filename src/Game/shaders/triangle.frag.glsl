@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
 
 struct Light
 {
@@ -14,6 +15,17 @@ layout(binding= 1, std430) buffer readonly light_buffer_block
 	vec4 ambient_color;
 	ivec4 light_count;
 	Light lights[];
+};
+
+layout(binding= 2, std430) buffer readonly cluster_offset_buffer_block
+{
+	int light_offsets[];
+};
+
+
+layout(binding= 3, std430) buffer readonly lights_list_buffer_block
+{
+	int8_t light_list[];
 };
 
 layout(location= 0) in vec3 f_normal;
