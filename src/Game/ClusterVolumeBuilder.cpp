@@ -69,7 +69,10 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 			matrix_.value[ 7] * box_corners[i].y +
 			matrix_.value[11] * box_corners[i].z +
 			matrix_.value[15];
-		box_corners_depth[i]= box_corners_projected[i].z / w;
+		if(w > 0.0f)
+			box_corners_depth[i]= box_corners_projected[i].z / w;
+		else
+			box_corners_depth[i]= 0.0f;
 	}
 
 	// Calculate view space min/max.
