@@ -43,6 +43,7 @@ private:
 		const SegmentModelFormat::Vertex* vetices;
 		const SegmentModelFormat::IndexType* indices;
 		const SegmentModelFormat::TriangleGroup* triangle_groups;
+		const SegmentModelFormat::Light* lights;
 		std::vector<std::string> local_to_global_material_id;
 	};
 
@@ -58,9 +59,16 @@ private:
 			std::string material_id;
 		};
 
+		struct Light
+		{
+			m_Vec3 pos;
+			m_Vec3 color;
+		};
+
 		m_Vec3 bb_min;
 		m_Vec3 bb_max;
 		std::vector<TriangleGroup> triangle_groups;
+		std::vector<Light> lights;
 	};
 
 	using WorldSectors= std::vector<Sector>;

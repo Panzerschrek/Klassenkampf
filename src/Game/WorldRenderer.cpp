@@ -37,15 +37,16 @@ struct LightBuffer
 		float color[4];
 	};
 
-	static constexpr size_t c_max_lights= 256u;
+	static constexpr size_t c_max_lights= 64u; // TODO - make 256
 
 	float ambient_color[4];
 	uint32_t light_count;
+	uint32_t padding0[3];
 	Light lights[256];
 };
 
 static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 20u + 256u * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 32u + 256u * 32u, "Invalid size");
 
 struct WorldVertex
 {
@@ -404,6 +405,56 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_M
 	light_buffer.ambient_color[3]= 0.0f;
 	light_buffer.light_count= 0;
 
+	const Sector* cam_sector= nullptr;
+	for(const Sector& sector : world_model_.sectors)
+	{
+		if(cam_pos.x >= sector.bb_min.x && cam_pos.x <= sector.bb_max.x &&
+			cam_pos.y >= sector.bb_min.y && cam_pos.y <= sector.bb_max.y &&
+			cam_pos.z >= sector.bb_min.z && cam_pos.z <= sector.bb_max.z)
+		{
+			cam_sector= &sector;
+			break;
+		}
+	}
+
+	for(const Sector& sector : world_model_.sectors)
+	{
+		if(cam_sector != nullptr)
+		{
+			// Find adjacent sectors.
+			const bool intersects= !(
+				sector.bb_min.x > cam_sector->bb_max.x ||
+				sector.bb_min.y > cam_sector->bb_max.y ||
+				sector.bb_min.z > cam_sector->bb_max.z ||
+				sector.bb_max.x < cam_sector->bb_min.x ||
+				sector.bb_max.y < cam_sector->bb_min.y ||
+				sector.bb_max.z < cam_sector->bb_min.z );
+			if(!intersects)
+				continue;
+		}
+
+		for(const Sector::Light& sector_light : sector.lights)
+		{
+			if(light_buffer.light_count >= LightBuffer::c_max_lights)
+				break;
+
+			if(sector_light.color.x >= 25.0f)
+				continue;
+
+			LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
+			++light_buffer.light_count;
+
+			out_light.pos[0]= sector_light.pos.x;
+			out_light.pos[1]= sector_light.pos.y;
+			out_light.pos[2]= sector_light.pos.z;
+			out_light.pos[3]= 0.0f;
+			out_light.color[0]= sector_light.color.x / 16.0f;
+			out_light.color[1]= sector_light.color.y / 16.0f;
+			out_light.color[2]= sector_light.color.z / 16.0f;
+			out_light.color[3]= 0.0f;
+		}
+	}
+
 	command_buffer.updateBuffer(*vk_light_data_buffer_, 0u, sizeof(light_buffer), &light_buffer);
 
 	tonemapper_.DoRenderPass(
@@ -541,7 +592,6 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 			translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
 			segment_mat= base_transform_mat * to_center_mat * rotate_mat * from_center_mat * translate_mat;
 
-			//const size_t segment_first_vertex= world_vertices.size() - size_t(out_sector.first_vertex);
 			for(size_t i= 0u; i < size_t(model.header.triangle_group_count); ++i)
 			{
 				const SegmentModelFormat::TriangleGroup& in_triangle_group= model.triangle_groups[i];
@@ -579,6 +629,18 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 					KK_ASSERT(index < 65535u);
 					out_triangle_group.indices.push_back(uint16_t(index));
 				}
+			}
+
+			for(size_t i= 0u; i < model.header.light_count; ++i)
+			{
+				const SegmentModelFormat::Light& in_light= model.lights[i];
+				Sector::Light out_light;
+
+				const m_Vec3 pos(float(in_light.pos[0]), float(in_light.pos[1]), float(in_light.pos[2]));
+				out_light.pos= pos * segment_mat;
+				out_light.color= m_Vec3(float(in_light.color[0]), float(in_light.color[1]), float(in_light.color[2])) / 256.0f;
+
+				out_sector.lights.push_back(std::move(out_light));
 			}
 		} // for sector segments
 
@@ -686,10 +748,19 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 
 	const char* const file_data= static_cast<const char*>(file_mapped->Data());
 	const auto& header= *reinterpret_cast<const SegmentModelFormat::SegmentModelHeader*>(file_data);
+
+	if(header.version != SegmentModelFormat::SegmentModelHeader::c_expected_version ||
+		std::memcmp(header.header, SegmentModelFormat::SegmentModelHeader::c_expected_header, sizeof(header.header)) != 0)
+	{
+		Log::Warning("Loading invalid model \"", file_name, "\"");
+		return std::nullopt;
+	}
+
 	const auto* const in_vertices= reinterpret_cast<const SegmentModelFormat::Vertex*>(file_data + header.vertices_offset);
 	const auto* const in_indices= reinterpret_cast<const SegmentModelFormat::IndexType*>(file_data + header.indices_offset);
 	const auto* const in_triangle_groups= reinterpret_cast<const SegmentModelFormat::TriangleGroup*>(file_data + header.triangle_groups_offset);
 	const auto* const in_materials= reinterpret_cast<const SegmentModelFormat::Material*>(file_data + header.materials_offset);
+	const auto* const in_lights= reinterpret_cast<const SegmentModelFormat::Light*>(file_data + header.lights_offset);
 
 	std::vector<std::string> local_to_global_material_id;
 	local_to_global_material_id.resize(header.material_count);
@@ -707,6 +778,7 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 			in_vertices,
 			in_indices,
 			in_triangle_groups,
+			in_lights,
 			std::move(local_to_global_material_id)
 		};
 }
