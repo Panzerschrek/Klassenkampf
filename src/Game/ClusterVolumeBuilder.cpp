@@ -8,6 +8,7 @@ namespace KK
 namespace
 {
 
+// If this changed, it must be changed in shader code too!
 const float c_pow_factor= 64.0f;
 
 float DepthMappingFunction(const float x)
@@ -45,7 +46,7 @@ void ClusterVolumeBuilder::ClearClusters()
 
 bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, const ElementId id)
 {
-	// Createworld space bounding box.
+	// Create world space bounding box.
 	const m_Vec3 box_corners[8]
 	{
 		m_Vec3(center.x + radius, center.y + radius, center.z + radius),
@@ -59,25 +60,26 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	};
 
 	// Project it.
-	m_Vec3 box_corners_projected[8];
+	m_Vec2 box_corners_projected[8];
 	float box_corners_depth[8];
 	for(size_t i= 0u; i < 8u; ++i)
 	{
-		box_corners_projected[i]= box_corners[i] * matrix_;
+		const m_Vec3 proj= box_corners[i] * matrix_;
+		box_corners_projected[i]= proj.xy();
 		const float w=
 			matrix_.value[ 3] * box_corners[i].x +
 			matrix_.value[ 7] * box_corners[i].y +
 			matrix_.value[11] * box_corners[i].z +
 			matrix_.value[15];
 		if(w > 0.0f)
-			box_corners_depth[i]= box_corners_projected[i].z / w;
+			box_corners_depth[i]= proj.z / w;
 		else
 			box_corners_depth[i]= 0.0f;
 	}
 
-	// Calculate view space min/max.
-	m_Vec2 bb_min= box_corners_projected[0].xy();
-	m_Vec2 bb_max= box_corners_projected[0].xy();
+	// Calculate view space depth min/max.
+	m_Vec2 bb_min= box_corners_projected[0];
+	m_Vec2 bb_max= box_corners_projected[0];
 	float depth_min= box_corners_depth[0];
 	float depth_max= box_corners_depth[0];
 	for(size_t i= 1u; i < 8u; ++i)
@@ -95,6 +97,7 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	if(depth_min > 1.0f || depth_max < 0.0f)
 		return false;
 
+	// Convert depth to more even slices destribution.
 	const float depth_min_mapped= DepthMappingFunction(depth_min);
 	const float depth_max_mapped= DepthMappingFunction(depth_max);
 
@@ -110,10 +113,10 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 		KK_ASSERT(slice_w_min > 0.0f);
 		KK_ASSERT(slice_w_max > 0.0f);
 
-		const float slice_min_x= std::max(std::min(bb_min.x / slice_w_min, bb_min.x / slice_w_max), -0.95f);
-		const float slice_max_x= std::min(std::max(bb_max.x / slice_w_min, bb_max.x / slice_w_max), +0.95f);
-		const float slice_min_y= std::max(std::min(bb_min.y / slice_w_min, bb_min.y / slice_w_max), -0.95f);
-		const float slice_max_y= std::min(std::max(bb_max.y / slice_w_min, bb_max.y / slice_w_max), +0.95f);
+		const float slice_min_x= std::max(std::min(bb_min.x / slice_w_min, bb_min.x / slice_w_max), -0.99f);
+		const float slice_max_x= std::min(std::max(bb_max.x / slice_w_min, bb_max.x / slice_w_max), +0.99f);
+		const float slice_min_y= std::max(std::min(bb_min.y / slice_w_min, bb_min.y / slice_w_max), -0.99f);
+		const float slice_max_y= std::min(std::max(bb_max.y / slice_w_min, bb_max.y / slice_w_max), +0.99f);
 
 		const int32_t cluster_min_x= int32_t((slice_min_x * 0.5f + 0.5f) * float(size_[0]));
 		const int32_t cluster_max_x= int32_t((slice_max_x * 0.5f + 0.5f) * float(size_[0]));
@@ -121,8 +124,8 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 		const int32_t cluster_max_y= int32_t((slice_max_y * 0.5f + 0.5f) * float(size_[1]));
 
 		added= added | (cluster_min_x <= cluster_max_x && cluster_min_y <= cluster_max_y);
-		for(int32_t x= cluster_min_x; x <= cluster_max_x; ++x)
 		for(int32_t y= cluster_min_y; y <= cluster_max_y; ++y)
+		for(int32_t x= cluster_min_x; x <= cluster_max_x; ++x)
 		{
 			KK_ASSERT(x >= 0 && x < int32_t(size_[0]));
 			KK_ASSERT(y >= 0 && y < int32_t(size_[1]));
