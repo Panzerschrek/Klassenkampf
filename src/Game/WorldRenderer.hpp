@@ -121,6 +121,15 @@ private:
 	vk::UniqueBuffer vk_light_data_buffer_;
 	vk::UniqueDeviceMemory vk_light_data_buffer_memory_;
 
+	// 3D table of offsets to lights list for each cluster.
+	vk::UniqueBuffer cluster_offset_buffer_;
+	vk::UniqueDeviceMemory cluster_offset_buffer_memory_;
+
+	// List of light sources for each cluster.
+	size_t lights_list_buffer_size_= 0u;
+	vk::UniqueBuffer lights_list_buffer_;
+	vk::UniqueDeviceMemory lights_list_buffer_memory_;
+
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
 	WorldModel world_model_;

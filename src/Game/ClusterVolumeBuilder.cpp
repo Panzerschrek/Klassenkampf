@@ -94,4 +94,19 @@ void ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 	}
 }
 
+uint32_t ClusterVolumeBuilder::GetWidth () const
+{
+	return size_[0];
+}
+
+uint32_t ClusterVolumeBuilder::GetHeight() const
+{
+	return size_[1];
+}
+
+uint32_t ClusterVolumeBuilder::GetDepth () const
+{
+	return size_[2];
+}
+
 } // namespace KK

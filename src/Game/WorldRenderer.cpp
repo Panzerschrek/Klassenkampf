@@ -273,6 +273,50 @@ WorldRenderer::WorldRenderer(
 		vk_light_data_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindBufferMemory(*vk_light_data_buffer_, *vk_light_data_buffer_memory_, 0u);
 	}
+	{ // Prepare cluster offset buffer.
+		const size_t size= cluster_volume_builder_.GetWidth() * cluster_volume_builder_.GetHeight() * cluster_volume_builder_.GetDepth();
+		cluster_offset_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(uint32_t) * size,
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*cluster_offset_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		cluster_offset_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*cluster_offset_buffer_, *cluster_offset_buffer_memory_, 0u);
+	}
+	{ // Prepare lights list buffer.
+		lights_list_buffer_size_= cluster_volume_builder_.GetWidth() * cluster_volume_builder_.GetHeight() * cluster_volume_builder_.GetDepth() * 32u;
+		lights_list_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(uint8_t) * lights_list_buffer_size_,
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*lights_list_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		lights_list_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*lights_list_buffer_, *lights_list_buffer_memory_, 0u);
+	}
 
 	// Load segment models.
 	struct SegmentModelDescription

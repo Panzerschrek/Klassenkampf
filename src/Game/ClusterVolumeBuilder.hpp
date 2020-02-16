@@ -18,6 +18,10 @@ public:
 
 	void AddSphere(const m_Vec3& center, float radius, ElementId id);
 
+	uint32_t GetWidth () const;
+	uint32_t GetHeight() const;
+	uint32_t GetDepth () const;
+
 private:
 	struct Cluster
 	{
