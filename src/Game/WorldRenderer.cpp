@@ -565,7 +565,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		if(light_count >= LightBuffer::c_max_lights)
 			goto end_fill_lights;
 
-		const float radius= 1.0f;
+		const float radius= 3.0f;
 
 		const bool added=
 			cluster_volume_builder_.AddSphere(
@@ -579,7 +579,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.pos[0]= sector_light.pos.x;
 		out_light.pos[1]= sector_light.pos.y;
 		out_light.pos[2]= sector_light.pos.z;
-		out_light.pos[3]= radius;
+		out_light.pos[3]= 1.0f / (radius * radius); // Fade to zero at radius.
 		out_light.color[0]= sector_light.color.x / 16.0f;
 		out_light.color[1]= sector_light.color.y / 16.0f;
 		out_light.color[2]= sector_light.color.z / 16.0f;

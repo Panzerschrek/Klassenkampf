@@ -4,7 +4,7 @@
 
 struct Light
 {
-	vec4 pos;
+	vec4 pos; // .z contains fade factor for light radius.
 	vec4 color;
 };
 
@@ -56,11 +56,12 @@ void main()
 	{
 		Light light= lights[ int(light_list[offset + 1 + i]) ];
 		vec3 vec_to_light= light.pos.xyz - f_pos;
-		//float k= max(dot(f_normal, vec_to_light), 0.0) / (dot(vec_to_light, vec_to_light) * length(vec_to_light));
+		vec3 vec_to_light_normalized= normalize(vec_to_light);
+		float vec_to_light_square_length= dot(vec_to_light, vec_to_light);
+		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
+		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
 
-		float k= 1.0 - smoothstep(0.0, light.pos.w, length(vec_to_light));
-		k*= max(dot(normal_normalized, normalize(vec_to_light)), 0.0);
-		l+= light.color.xyz * k;
+		l+= light.color.xyz * (cos_factor * fade_factor);
 	}
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 
