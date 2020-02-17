@@ -24,8 +24,8 @@ Host::Host()
 	, gpu_data_uploader_(window_vulkan_)
 	, text_out_(window_vulkan_, gpu_data_uploader_)
 	, console_(commands_processor_, text_out_)
-	, world_renderer_(window_vulkan_, gpu_data_uploader_, GenerateWorld())
 	, camera_controller_(settings_, CalculateAspect(window_vulkan_.GetViewportSize()))
+	, world_renderer_(window_vulkan_, gpu_data_uploader_, camera_controller_, GenerateWorld())
 	, init_time_(Clock::now())
 	, prev_tick_time_(init_time_)
 {
@@ -86,10 +86,7 @@ bool Host::Loop()
 
 	const auto command_buffer= window_vulkan_.BeginFrame();
 
-	world_renderer_.BeginFrame(
-		command_buffer,
-		camera_controller_.CalculateViewMatrix(),
-		camera_controller_.GetCameraPosition());
+	world_renderer_.BeginFrame(command_buffer);
 	text_out_.BeginFrame(command_buffer);
 
 	window_vulkan_.EndFrame(
