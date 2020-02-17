@@ -93,11 +93,11 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 
 	const int32_t slice_min= int32_t(WMappingFunction(w_convert_values_, w_min));
 	const int32_t slice_max= int32_t(WMappingFunction(w_convert_values_, w_max));
-	if(slice_min < 0 || slice_min >= int32_t(size_[2]))
+	if(slice_max < 0 || slice_min >= int32_t(size_[2]))
 		return false;
 
 	bool added= false;
-	for(int32_t slice= slice_min; slice <= slice_max; ++slice)
+	for(int32_t slice= std::max(0, slice_min); slice <= std::min(slice_max, int32_t(size_[2])); ++slice)
 	{
 		const float slice_w_min= std::max(w_min, WUnmappingFunction(w_convert_values_, float(slice    )));
 		const float slice_w_max= std::min(w_max, WUnmappingFunction(w_convert_values_, float(slice + 1)));
