@@ -17,6 +17,7 @@ layout(binding= 1, std430) buffer readonly light_buffer_block
 	ivec4 light_count;
 	ivec4 cluster_volume_size;
 	vec4 viewport_size;
+	vec4 w_convert_values;
 	Light lights[];
 };
 
@@ -41,7 +42,10 @@ void main()
 	vec3 normal_normalized= normalize(f_normal);
 	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size.xy;
 
-	vec3 cluster_coord= vec3(cluster_volume_size.xyz) * vec3(frag_coord_normalized, pow(gl_FragCoord.z, 64.0));
+	vec3 cluster_coord=
+		vec3(
+			cluster_volume_size.xy * frag_coord_normalized,
+			w_convert_values.x * log2(w_convert_values.y * gl_FragCoord.w));
 	int offset= int(light_offsets[
 		int(cluster_coord.x) +
 		int(cluster_coord.y) * cluster_volume_size.x +

@@ -71,6 +71,8 @@ void CameraController::Update(const float time_delta_s, const InputState& input_
 CameraController::ViewMatrix CameraController::CalculateViewMatrix() const
 {
 	const float fov= MathConstants::half_pi;
+
+	// Must be power of 2.
 	const float z_near= 0.125f;
 	const float z_far= 128.0f;
 
@@ -89,8 +91,8 @@ CameraController::ViewMatrix CameraController::CalculateViewMatrix() const
 
 	ViewMatrix result;
 	result.mat= translate * rotate_z * rotate_x * basis_change * perspective;
-	result.m10= perspective.value[10];
-	result.m14= perspective.value[14];
+	result.z_near= z_near;
+	result.z_far= z_far;
 
 	return result;
 }

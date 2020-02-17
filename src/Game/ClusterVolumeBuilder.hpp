@@ -21,7 +21,7 @@ public:
 public:
 	ClusterVolumeBuilder(uint32_t width, uint32_t height, uint32_t depth);
 
-	void SetMatrix(const m_Mat4& mat, float m10, float m14);
+	void SetMatrix(const m_Mat4& mat, float z_near, float z_far);
 	void ClearClusters();
 
 	// Returns true, if added.
@@ -31,12 +31,13 @@ public:
 	uint32_t GetHeight() const;
 	uint32_t GetDepth () const;
 	const std::vector<Cluster>& GetClusters() const;
+	m_Vec2 GetWConvertValues() const;
 
 private:
 	const uint32_t size_[3];
 	std::vector<Cluster> clusters_;
 	m_Mat4 matrix_;
-	float m10_, m14_; // Numbers of perspective matrix.
+	m_Vec2 w_convert_values_;
 };
 
 } // namespace KK

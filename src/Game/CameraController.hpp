@@ -13,8 +13,8 @@ public:
 	struct ViewMatrix
 	{
 		m_Mat4 mat;
-		float m10;
-		float m14;
+		float z_near;
+		float z_far;
 	};
 public:
 	CameraController(Settings& settings, float aspect);

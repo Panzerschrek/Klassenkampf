@@ -9,16 +9,14 @@ namespace
 {
 
 // If this changed, it must be changed in shader code too!
-const float c_pow_factor= 64.0f;
-
-float DepthMappingFunction(const float x)
+float WMappingFunction(const m_Vec2& w_convert_values, const float w)
 {
-	return std::pow(x, c_pow_factor);
+	return w_convert_values.x * std::log2(w_convert_values.y / w);
 }
 
-float DepthUnmappingFunction(const float x)
+float WUnmappingFunction(const m_Vec2& w_convert_values, const float slice_number)
 {
-	return std::pow(x, 1.0f / c_pow_factor);
+	return w_convert_values.y / std::exp2(slice_number / w_convert_values.x);
 }
 
 } // namespace
@@ -31,11 +29,19 @@ ClusterVolumeBuilder::ClusterVolumeBuilder(
 	, clusters_(width * height * depth)
 {}
 
-void ClusterVolumeBuilder::SetMatrix(const m_Mat4& mat, const float m10, const float m14)
+void ClusterVolumeBuilder::SetMatrix(const m_Mat4& mat, const float z_near, const float z_far)
 {
 	matrix_= mat;
-	m10_= m10;
-	m14_= m14;
+
+	/* Use logaritmical distribution of slices.
+	slice_number= slice_count * log2(w / z_near) / log(z_far / z_near)
+	slice_number= (slice_count / log2(z_far / z_near)) * log2(w / z_near)
+	slice_number= (slice_count / log2(z_near / z_far)) * log2(z_near / w)
+	slice_number= w_convert_values_.x * log2(w_convert_values_.y * w); // With regular W
+	slice_number= w_convert_values_.x * log2(w_convert_values_.y * gl_FragCoord.w); // In shader
+	*/
+	w_convert_values_.x= float(size_[2]) / std::log2(z_near / z_far);
+	w_convert_values_.y= z_near;
 }
 
 void ClusterVolumeBuilder::ClearClusters()
@@ -61,55 +67,47 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 
 	// Project it.
 	m_Vec2 box_corners_projected[8];
-	float box_corners_depth[8];
+	float box_corners_w[8];
 	for(size_t i= 0u; i < 8u; ++i)
 	{
 		const m_Vec3 proj= box_corners[i] * matrix_;
 		box_corners_projected[i]= proj.xy();
-		const float w=
+		box_corners_w[i]=
 			matrix_.value[ 3] * box_corners[i].x +
 			matrix_.value[ 7] * box_corners[i].y +
 			matrix_.value[11] * box_corners[i].z +
 			matrix_.value[15];
-		if(w > 0.0f)
-			box_corners_depth[i]= proj.z / w;
-		else
-			box_corners_depth[i]= 0.0f;
 	}
 
 	// Calculate view space depth min/max.
 	m_Vec2 bb_min= box_corners_projected[0];
 	m_Vec2 bb_max= box_corners_projected[0];
-	float depth_min= box_corners_depth[0];
-	float depth_max= box_corners_depth[0];
+	float w_min= box_corners_w[0];
+	float w_max= box_corners_w[0];
 	for(size_t i= 1u; i < 8u; ++i)
 	{
 		bb_min.x= std::min(bb_min.x, box_corners_projected[i].x);
 		bb_min.y= std::min(bb_min.y, box_corners_projected[i].y);
 		bb_max.x= std::max(bb_max.x, box_corners_projected[i].x);
 		bb_max.y= std::max(bb_max.y, box_corners_projected[i].y);
-		depth_min= std::min(depth_min, box_corners_depth[i]);
-		depth_max= std::max(depth_max, box_corners_depth[i]);
+		w_min= std::min(w_min, box_corners_w[i]);
+		w_max= std::max(w_max, box_corners_w[i]);
 	}
 
-	depth_min= std::max(depth_min, 0.0f);
-	depth_max= std::min(depth_max, 0.9999f);
-	if(depth_min > 1.0f || depth_max < 0.0f)
+	// Clamp values - logarith function exists only for positive numbers.
+	w_min= std::max(w_min, 0.0001f);
+	w_max= std::max(w_max, 0.0001f);
+
+	const int32_t slice_min= int32_t(WMappingFunction(w_convert_values_, w_min));
+	const int32_t slice_max= int32_t(WMappingFunction(w_convert_values_, w_max));
+	if(slice_min < 0 || slice_min >= int32_t(size_[2]))
 		return false;
 
-	// Convert depth to more even slices destribution.
-	const float depth_min_mapped= DepthMappingFunction(depth_min);
-	const float depth_max_mapped= DepthMappingFunction(depth_max);
-
 	bool added= false;
-	const int32_t slice_min= int32_t(float(size_[2]) * depth_min_mapped);
-	const int32_t slice_max= int32_t(float(size_[2]) * depth_max_mapped);
 	for(int32_t slice= slice_min; slice <= slice_max; ++slice)
 	{
-		const float slice_depth_min= std::max(depth_min, DepthUnmappingFunction(float(slice    ) / float(size_[2])));
-		const float slice_depth_max= std::min(depth_max, DepthUnmappingFunction(float(slice + 1) / float(size_[2])));
-		const float slice_w_min= m14_ / (slice_depth_min - m10_);
-		const float slice_w_max= m14_ / (slice_depth_max - m10_);
+		const float slice_w_min= std::max(w_min, WUnmappingFunction(w_convert_values_, float(slice    )));
+		const float slice_w_max= std::min(w_max, WUnmappingFunction(w_convert_values_, float(slice + 1)));
 		KK_ASSERT(slice_w_min > 0.0f);
 		KK_ASSERT(slice_w_max > 0.0f);
 
@@ -158,6 +156,11 @@ uint32_t ClusterVolumeBuilder::GetDepth () const
 const std::vector<ClusterVolumeBuilder::Cluster>& ClusterVolumeBuilder::GetClusters() const
 {
 	return clusters_;
+}
+
+m_Vec2 ClusterVolumeBuilder::GetWConvertValues() const
+{
+	return w_convert_values_;
 }
 
 } // namespace KK

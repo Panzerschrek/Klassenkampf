@@ -44,11 +44,12 @@ struct LightBuffer
 	uint32_t padding0[3];
 	uint32_t cluster_volume_size[4];
 	float viewport_size[4];
+	float w_convert_values[4];
 	Light lights[256];
 };
 
 static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 64u + 256u * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 80u + 256u * 32u, "Invalid size");
 
 struct WorldVertex
 {
@@ -557,7 +558,12 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.viewport_size[3]= 0.0f;
 
 	cluster_volume_builder_.ClearClusters();
-	cluster_volume_builder_.SetMatrix(view_matrix.mat, view_matrix.m10, view_matrix.m14);
+	cluster_volume_builder_.SetMatrix(view_matrix.mat, view_matrix.z_near, view_matrix.z_far);
+
+	light_buffer.w_convert_values[0]= cluster_volume_builder_.GetWConvertValues().x;
+	light_buffer.w_convert_values[1]= cluster_volume_builder_.GetWConvertValues().y;
+	light_buffer.w_convert_values[2]= 0.0f;
+	light_buffer.w_convert_values[3]= 0.0f;
 
 	for(const size_t sector_index : visible_sectors)
 	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
