@@ -14,7 +14,6 @@ layout(binding= 1, std430) buffer readonly light_buffer_block
 {
 	// Use vec4 for fit alignment.
 	vec4 ambient_color;
-	ivec4 light_count;
 	ivec4 cluster_volume_size;
 	vec4 viewport_size;
 	vec4 w_convert_values;

@@ -40,8 +40,6 @@ struct LightBuffer
 	static constexpr size_t c_max_lights= 256u;
 
 	float ambient_color[4];
-	uint32_t light_count;
-	uint32_t padding0[3];
 	uint32_t cluster_volume_size[4];
 	float viewport_size[4];
 	float w_convert_values[4];
@@ -49,7 +47,7 @@ struct LightBuffer
 };
 
 static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 80u + 256u * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 64u + 256u * 32u, "Invalid size");
 
 struct WorldVertex
 {
@@ -547,7 +545,6 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.ambient_color[1]= 0.1f;
 	light_buffer.ambient_color[2]= 0.1f;
 	light_buffer.ambient_color[3]= 0.0f;
-	light_buffer.light_count= 0;
 	light_buffer.cluster_volume_size[0]= cluster_volume_builder_.GetWidth ();
 	light_buffer.cluster_volume_size[1]= cluster_volume_builder_.GetHeight();
 	light_buffer.cluster_volume_size[2]= cluster_volume_builder_.GetDepth ();
@@ -565,10 +562,11 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.w_convert_values[2]= 0.0f;
 	light_buffer.w_convert_values[3]= 0.0f;
 
+	uint32_t light_count= 0u;
 	for(const size_t sector_index : visible_sectors)
 	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
 	{
-		if(light_buffer.light_count >= LightBuffer::c_max_lights)
+		if(light_count >= LightBuffer::c_max_lights)
 			goto end_fill_lights;
 
 		const float radius= 1.0f;
@@ -577,11 +575,11 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 			cluster_volume_builder_.AddSphere(
 				sector_light.pos,
 				radius,
-				ClusterVolumeBuilder::ElementId(light_buffer.light_count));
+				ClusterVolumeBuilder::ElementId(light_count));
 		if(!added)
 			continue;
 
-		LightBuffer::Light& out_light= light_buffer.lights[light_buffer.light_count];
+		LightBuffer::Light& out_light= light_buffer.lights[light_count];
 		out_light.pos[0]= sector_light.pos.x;
 		out_light.pos[1]= sector_light.pos.y;
 		out_light.pos[2]= sector_light.pos.z;
@@ -591,7 +589,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.color[2]= sector_light.color.z / 16.0f;
 		out_light.color[3]= 0.0f;
 
-		++light_buffer.light_count;
+		++light_count;
 	}
 	end_fill_lights:
 
@@ -610,7 +608,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	command_buffer.updateBuffer(
 		*vk_light_data_buffer_,
 		0u,
-		offsetof(LightBuffer, lights) + sizeof(LightBuffer::Light) * light_buffer.light_count, // Update only visible lights.
+		offsetof(LightBuffer, lights) + sizeof(LightBuffer::Light) * light_count, // Update only visible lights.
 		&light_buffer);
 	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
 	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
