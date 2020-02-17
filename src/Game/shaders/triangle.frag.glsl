@@ -15,8 +15,8 @@ layout(binding= 1, std430) buffer readonly light_buffer_block
 	// Use vec4 for fit alignment.
 	vec4 ambient_color;
 	ivec4 cluster_volume_size;
-	vec4 viewport_size;
-	vec4 w_convert_values;
+	vec2 viewport_size;
+	vec2 w_convert_values;
 	Light lights[];
 };
 
@@ -39,7 +39,7 @@ layout(location = 0) out vec4 out_color;
 void main()
 {
 	vec3 normal_normalized= normalize(f_normal);
-	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size.xy;
+	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size;
 
 	vec3 cluster_coord=
 		vec3(
