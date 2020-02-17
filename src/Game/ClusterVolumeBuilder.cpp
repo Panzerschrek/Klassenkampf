@@ -65,33 +65,26 @@ bool ClusterVolumeBuilder::AddSphere(const m_Vec3& center, const float radius, c
 		m_Vec3(center.x - radius, center.y - radius, center.z - radius),
 	};
 
-	// Project it.
-	m_Vec2 box_corners_projected[8];
-	float box_corners_w[8];
+	// Project it and calculate bounding box.
+	m_Vec2 bb_min(+1e24f, +1e24f);
+	m_Vec2 bb_max(-1e24f, -1e24f);
+	float w_min= +1e24f;
+	float w_max= -1e24f;
 	for(size_t i= 0u; i < 8u; ++i)
 	{
 		const m_Vec3 proj= box_corners[i] * matrix_;
-		box_corners_projected[i]= proj.xy();
-		box_corners_w[i]=
+		const float w=
 			matrix_.value[ 3] * box_corners[i].x +
 			matrix_.value[ 7] * box_corners[i].y +
 			matrix_.value[11] * box_corners[i].z +
 			matrix_.value[15];
-	}
 
-	// Calculate view space depth min/max.
-	m_Vec2 bb_min= box_corners_projected[0];
-	m_Vec2 bb_max= box_corners_projected[0];
-	float w_min= box_corners_w[0];
-	float w_max= box_corners_w[0];
-	for(size_t i= 1u; i < 8u; ++i)
-	{
-		bb_min.x= std::min(bb_min.x, box_corners_projected[i].x);
-		bb_min.y= std::min(bb_min.y, box_corners_projected[i].y);
-		bb_max.x= std::max(bb_max.x, box_corners_projected[i].x);
-		bb_max.y= std::max(bb_max.y, box_corners_projected[i].y);
-		w_min= std::min(w_min, box_corners_w[i]);
-		w_max= std::max(w_max, box_corners_w[i]);
+		bb_min.x= std::min(bb_min.x, proj.x);
+		bb_min.y= std::min(bb_min.y, proj.y);
+		bb_max.x= std::max(bb_max.x, proj.x);
+		bb_max.y= std::max(bb_max.y, proj.y);
+		w_min= std::min(w_min, w);
+		w_max= std::max(w_max, w);
 	}
 
 	// Clamp values - logarith function exists only for positive numbers.
