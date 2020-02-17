@@ -1,4 +1,5 @@
 #pragma once
+#include "../MathLib/Vec.hpp"
 #include "GPUDataUploader.hpp"
 #include "WindowVulkan.hpp"
 #include <string_view>
@@ -42,14 +43,15 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
-	struct TextVertex
+	struct Glyph
 	{
-		float pos[2];
+		// Position and height, in scaled pixels.
+		int16_t pos[2];
+		int16_t size;
 		uint8_t color[4];
-		uint8_t tex_coord[2];
-		uint8_t reserved[2];
+		uint8_t glyph_index;
 	};
-	static_assert(sizeof(TextVertex) == 16u, "Invalid size");
+	static_assert(sizeof(Glyph) == 12u, "Invalid size");
 
 private:
 	const vk::Device vk_device_;
@@ -57,6 +59,7 @@ private:
 	GPUDataUploader& gpu_data_uploader_;
 
 	vk::UniqueShaderModule shader_vert_;
+	vk::UniqueShaderModule shader_geom_;
 	vk::UniqueShaderModule shader_frag_;
 
 	vk::UniqueSampler font_image_sampler_;
@@ -72,14 +75,11 @@ private:
 	vk::UniqueBuffer vertex_buffer_;
 	vk::UniqueDeviceMemory vertex_buffer_memory_;
 
-	vk::UniqueBuffer index_buffer_;
-	vk::UniqueDeviceMemory index_buffer_memory_;
-
 	vk::UniqueDescriptorPool descriptor_pool_;
 	vk::UniqueDescriptorSet descriptor_set_;
 
-	std::vector<TextVertex> vertices_data_;
-	uint32_t glyph_size_[2]={};
+	std::vector<Glyph> glyph_data_;
+	uint32_t glyph_size_[2]= {};
 };
 
 } // namespace KK

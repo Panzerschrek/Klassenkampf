@@ -1,17 +1,26 @@
 #version 450
 
-const float inv_letters_in_texture= 1.0 / 96.0; // TODO - make uniform
 
-layout(location= 0) in vec2 coord;
-layout(location= 1) in vec4 color;
-layout(location= 2) in vec2 tex_coord;
+layout(push_constant) uniform uniforms_block
+{
+	vec2 pos_scale;
+	vec2 size_scale;
+};
 
-layout(location= 0) flat out vec4 f_color;
-layout(location= 1) noperspective out vec2 f_tex_coord;
+layout(location= 0) in vec2 pos;
+layout(location= 1) in float size;
+layout(location= 2) in vec4 color;
+layout(location= 3) in float glyph_index;
+
+layout(location= 0) out vec2 g_pos;
+layout(location= 1) out vec2 g_size;
+layout(location= 2) out float g_glyph_index;
+layout(location= 3) out vec4 g_color;
 
 void main()
 {
-	f_color= color;
-	f_tex_coord= tex_coord * vec2(1.0, inv_letters_in_texture);
-	gl_Position= vec4(coord, 0.0, 1.0);
+	g_pos= pos * pos_scale;
+	g_size= size * size_scale;
+	g_glyph_index= glyph_index;
+	g_color= color;
 }

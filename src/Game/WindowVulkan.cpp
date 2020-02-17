@@ -17,6 +17,7 @@ vk::PhysicalDeviceFeatures GetRequiredDeviceFeatures()
 {
 	vk::PhysicalDeviceFeatures features;
 	features.setSamplerAnisotropy(VK_TRUE);
+	features.setGeometryShader(VK_TRUE);
 	return features;
 }
 

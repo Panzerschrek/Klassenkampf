@@ -1,6 +1,6 @@
+#include "TextOut.hpp"
 #include "Assert.hpp"
 #include "Image.hpp"
-#include "TextOut.hpp"
 
 
 namespace KK
@@ -13,9 +13,19 @@ namespace Shaders
 {
 
 #include "shaders/text.vert.sprv.h"
+#include "shaders/text.geom.sprv.h"
 #include "shaders/text.frag.sprv.h"
 
 } // namespace Shaders
+
+struct Uniforms
+{
+	m_Vec2 pos_scale;
+	m_Vec2 size_scale;
+};
+static_assert(sizeof(Uniforms) <= 128u, "Uniforms size is too big, limit is 128 bytes");
+
+const uint32_t g_pixel_coord_scale= 8;
 
 } // namespace
 
@@ -33,6 +43,13 @@ TextOut::TextOut(
 				vk::ShaderModuleCreateFlags(),
 				std::size(Shaders::c_text_vert_file_content),
 				reinterpret_cast<const uint32_t*>(Shaders::c_text_vert_file_content)));
+
+	shader_geom_=
+		vk_device_.createShaderModuleUnique(
+			vk::ShaderModuleCreateInfo(
+				vk::ShaderModuleCreateFlags(),
+				std::size(Shaders::c_text_geom_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_text_geom_file_content)));
 
 	shader_frag_=
 		vk_device_.createShaderModuleUnique(
@@ -80,21 +97,32 @@ TextOut::TextOut(
 				vk::DescriptorSetLayoutCreateFlags(),
 				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
+	const vk::PushConstantRange vk_push_constant_range(
+		vk::ShaderStageFlagBits::eVertex,
+		0u,
+		sizeof(Uniforms));
+
 	pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
 				1u, &*descriptor_set_layout_,
-				0u, nullptr));
+				1u, &vk_push_constant_range));
 
 	// Create pipeline.
 
-	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
+	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[]
 	{
 		{
 			vk::PipelineShaderStageCreateFlags(),
 			vk::ShaderStageFlagBits::eVertex,
 			*shader_vert_,
+			"main"
+		},
+		{
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eGeometry,
+			*shader_geom_,
 			"main"
 		},
 		{
@@ -107,14 +135,15 @@ TextOut::TextOut(
 
 	const vk::VertexInputBindingDescription vk_vertex_input_binding_description(
 		0u,
-		sizeof(TextVertex),
+		sizeof(Glyph),
 		vk::VertexInputRate::eVertex);
 
 	const vk::VertexInputAttributeDescription vk_vertex_input_attribute_description[]
 	{
-		{0u, 0u, vk::Format::eR32G32Sfloat , offsetof(TextVertex, pos      )},
-		{1u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(TextVertex, color    )},
-		{2u, 0u, vk::Format::eR8G8Uscaled  , offsetof(TextVertex, tex_coord)},
+		{0u, 0u, vk::Format::eR16G16Sscaled, offsetof(Glyph, pos        )},
+		{1u, 0u, vk::Format::eR16Sscaled   , offsetof(Glyph, size       )},
+		{2u, 0u, vk::Format::eR8G8B8A8Unorm, offsetof(Glyph, color      )},
+		{3u, 0u, vk::Format::eR8Uscaled    , offsetof(Glyph, glyph_index)},
 	};
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
@@ -124,7 +153,7 @@ TextOut::TextOut(
 
 	const vk::PipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info(
 		vk::PipelineInputAssemblyStateCreateFlags(),
-		vk::PrimitiveTopology::eTriangleList);
+		vk::PrimitiveTopology::ePointList);
 
 	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size_.width), float(viewport_size_.height), 0.0f, 1.0f);
 	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size_);
@@ -163,8 +192,7 @@ TextOut::TextOut(
 			nullptr,
 			vk::GraphicsPipelineCreateInfo(
 				vk::PipelineCreateFlags(),
-				uint32_t(std::size(vk_shader_stage_create_info)),
-				vk_shader_stage_create_info,
+				uint32_t(std::size(vk_shader_stage_create_info)), vk_shader_stage_create_info,
 				&vk_pipiline_vertex_input_state_create_info,
 				&vk_pipeline_input_assembly_state_create_info,
 				nullptr,
@@ -366,15 +394,14 @@ TextOut::TextOut(
 	}
 
 	// Use device local memory and use "vkCmdUpdateBuffer, which have limit of 65536  bytes.
-	max_glyphs_in_buffer_= 65536u / std::max(sizeof(TextVertex) * 4u, sizeof(uint16_t) * 6u);
-
+	max_glyphs_in_buffer_= 65536u / sizeof(Glyph);
 	// Create vertex buffer.
 	{
 		vertex_buffer_=
 			vk_device_.createBufferUnique(
 				vk::BufferCreateInfo(
 					vk::BufferCreateFlags(),
-					4u * max_glyphs_in_buffer_ * sizeof(TextVertex),
+					4u * max_glyphs_in_buffer_ * sizeof(Glyph),
 					vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst));
 
 		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vertex_buffer_);
@@ -389,57 +416,6 @@ TextOut::TextOut(
 
 		vertex_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
 		vk_device_.bindBufferMemory(*vertex_buffer_, *vertex_buffer_memory_, 0u);
-	}
-
-	// Create index buffer.
-	{
-		std::vector<uint16_t> quad_indeces(max_glyphs_in_buffer_ * 6u);
-		for(uint32_t i= 0u, j= 0u; i < max_glyphs_in_buffer_ * 6; i+= 6u, j+=4u)
-		{
-			quad_indeces[i  ]= uint16_t(j  );
-			quad_indeces[i+1]= uint16_t(j+1);
-			quad_indeces[i+2]= uint16_t(j+2);
-			quad_indeces[i+3]= uint16_t(j+2);
-			quad_indeces[i+4]= uint16_t(j+3);
-			quad_indeces[i+5]= uint16_t(j  );
-		}
-
-		index_buffer_=
-			vk_device_.createBufferUnique(
-				vk::BufferCreateInfo(
-					vk::BufferCreateFlags(),
-					quad_indeces.size() * sizeof(uint16_t),
-					vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst));
-
-		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*index_buffer_);
-
-		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
-		{
-			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
-				vk_memory_allocate_info.memoryTypeIndex= i;
-		}
-
-		index_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
-		vk_device_.bindBufferMemory(*index_buffer_, *index_buffer_memory_, 0u);
-
-		const GPUDataUploader::RequestResult staging_buffer=
-			gpu_data_uploader_.RequestMemory(quad_indeces.size() * sizeof(uint16_t));
-
-		std::memcpy(
-			static_cast<char*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
-			quad_indeces.data(),
-			quad_indeces.size() * sizeof(uint16_t));
-
-		vk::BufferCopy copy_region(
-			staging_buffer.buffer_offset,
-			0u,
-			quad_indeces.size() * sizeof(uint16_t));
-		staging_buffer.command_buffer.copyBuffer(
-			staging_buffer.buffer,
-			*index_buffer_,
-			1u, &copy_region);
 	}
 
 	// Create descriptor set pool.
@@ -519,13 +495,12 @@ void TextOut::AddTextPixelCoords(
 	const uint8_t* const color,
 	const std::string_view text)
 {
-	float cur_x= +2.0f * x / float(viewport_size_.width ) - 1.0f;
-	float cur_y= +2.0f * y / float(viewport_size_.height) - 1.0f;
-	const float x0= cur_x;
+	uint32_t cur_x= uint32_t((x - float(viewport_size_.width ) * 0.5f) * float(g_pixel_coord_scale));
+	uint32_t cur_y= uint32_t((y - float(viewport_size_.height) * 0.5f) * float(g_pixel_coord_scale));
+	const uint32_t x0= cur_x;
 
-	const float dx= 2.0f * size * float(glyph_size_[0]) / float(viewport_size_.width * glyph_size_[1]);
-	const float dy= 2.0f * size / float(viewport_size_.height);
-
+	const uint32_t dy= uint32_t(size * float(g_pixel_coord_scale));
+	const uint32_t dx= uint32_t(size * float(g_pixel_coord_scale) * float(glyph_size_[0]) / float(glyph_size_[1]));
 	for(const char c : text)
 	{
 		if(c == '\n')
@@ -535,56 +510,31 @@ void TextOut::AddTextPixelCoords(
 			continue;
 		}
 
-		vertices_data_.resize(vertices_data_.size() + 4u);
-		TextVertex* const v= vertices_data_.data() + vertices_data_.size() - 4u;
+		Glyph glyph;
+		glyph.pos[0]= int16_t(cur_x);
+		glyph.pos[1]= int16_t(cur_y);
+		glyph.size= int16_t(dy);
+		std::memcpy(glyph.color, color, sizeof(glyph.color));
+		glyph.glyph_index= uint8_t(std::max(0, c - 32));
 
-		const uint8_t sym_pos= uint8_t(std::max(0, c-32));
-		v[0].pos[0]= cur_x;
-		v[0].pos[1]= cur_y;
-		v[0].tex_coord[0]= 0;
-		v[0].tex_coord[1]= sym_pos;
-
-		v[1].pos[0]= cur_x;
-		v[1].pos[1]= cur_y + dy;
-		v[1].tex_coord[0]= 0;
-		v[1].tex_coord[1]= uint8_t(sym_pos + 1u);
-
-		v[2].pos[0]= cur_x + dx;
-		v[2].pos[1]= cur_y + dy;
-		v[2].tex_coord[0]= 1;
-		v[2].tex_coord[1]= uint8_t(sym_pos + 1u);
-
-		v[3].pos[0]= cur_x + dx;
-		v[3].pos[1]= cur_y;
-		v[3].tex_coord[0]= 1;
-		v[3].tex_coord[1]= sym_pos;
-
-		std::memcpy(v[0].color, color, 4u);
-		std::memcpy(v[1].color, color, 4u);
-		std::memcpy(v[2].color, color, 4u);
-		std::memcpy(v[3].color, color, 4u);
-
+		glyph_data_.push_back(glyph);
 		cur_x+= dx;
 	}
 }
 
 void TextOut::BeginFrame(const vk::CommandBuffer command_buffer)
 {
-	const size_t vertex_count= std::min(vertices_data_.size(), max_glyphs_in_buffer_ * 4u);
 	command_buffer.updateBuffer(
 		*vertex_buffer_,
 		0u,
-		vertex_count * sizeof(TextVertex),
-		vertices_data_.data());
+		std::min(glyph_data_.size(), max_glyphs_in_buffer_) * sizeof(Glyph),
+		glyph_data_.data());
 }
 
 void TextOut::EndFrame(const vk::CommandBuffer command_buffer)
 {
-	const size_t vertex_count= std::min(vertices_data_.size(), max_glyphs_in_buffer_ * 4u);
-
 	const vk::DeviceSize offsets= 0u;
 	command_buffer.bindVertexBuffers(0u, 1u, &*vertex_buffer_, &offsets);
-	command_buffer.bindIndexBuffer(*index_buffer_, 0u, vk::IndexType::eUint16);
 	command_buffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		*pipeline_layout_,
@@ -593,9 +543,27 @@ void TextOut::EndFrame(const vk::CommandBuffer command_buffer)
 		0u, nullptr);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
-	command_buffer.drawIndexed(uint32_t(vertex_count / 4u * 6u), 1u, 0u, 0u, 0u);
 
-	vertices_data_.clear();
+	Uniforms uniforms;
+	uniforms.pos_scale=
+		m_Vec2(
+			2.0f / (float(viewport_size_.width  * g_pixel_coord_scale)),
+			2.0f / (float(viewport_size_.height * g_pixel_coord_scale)));
+	uniforms.size_scale=
+		m_Vec2(
+			2.0f * float(glyph_size_[0]) / (float(glyph_size_[1]) * float(viewport_size_.width  * g_pixel_coord_scale)),
+			2.0f / (float(viewport_size_.height * g_pixel_coord_scale)));
+
+	command_buffer.pushConstants(
+		*pipeline_layout_,
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(uniforms),
+		&uniforms);
+
+	command_buffer.draw(uint32_t(std::min(max_glyphs_in_buffer_, glyph_data_.size())), 1u, 0u, 0u);
+
+	glyph_data_.clear();
 }
 
 } // namespace KK
