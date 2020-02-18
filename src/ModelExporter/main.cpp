@@ -15,6 +15,7 @@ namespace KK
 struct Light
 {
 	float color[3];
+	float radius;
 };
 
 using Lights= std::unordered_map<std::string, Light>;
@@ -392,9 +393,16 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 	{
 		for(size_t i= 0u; i < 3u; ++i)
 		{
-			bb_min[i]= std::min(bb_min[i], light.pos[i]);
-			bb_max[i]= std::max(bb_max[i], light.pos[i]);
+			bb_min[i]= std::min(bb_min[i], light.pos[i] - light.radius);
+			bb_max[i]= std::max(bb_max[i], light.pos[i] + light.radius);
 		}
+	}
+
+	// Fix zero size extents.
+	for(size_t i= 0u; i < 3u; ++i)
+	{
+		if(bb_max[i] - bb_min[i] < 0.125f)
+			bb_max[i]= bb_min[i] + 0.125f;
 	}
 
 	const float c_max_coord_value= 32766.0f;
@@ -511,6 +519,8 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 	// Write lights
 	get_data_file().lights_offset= uint32_t(file_data.size());
 	get_data_file().light_count= uint32_t(lights.size());
+
+	const float inv_max_scale= std::min(std::max(inv_scale[0], inv_scale[1]), inv_scale[2]);
 	for(const LightTransformed& light : lights)
 	{
 		file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Light));
@@ -524,7 +534,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 		for(size_t i= 0u; i < 3u; ++i)
 			out_light.color[i]= int16_t(light.color[i] * 256.0f);
 
-		out_light.radius= int16_t(std::min(std::max(-c_max_coord_value, light.radius), +c_max_coord_value));
+		out_light.radius= int16_t(std::min(std::max(-c_max_coord_value, light.radius * inv_max_scale), +c_max_coord_value));
 	}
 
 	return file_data;
@@ -668,12 +678,34 @@ Lights ReadLights(const tinyxml2::XMLElement& collada_element)
 			continue;
 
 		Light out_light;
+		out_light.radius= 1.0f;
 		out_light.color[0]= out_light.color[1]= out_light.color[2]= 0.0f;
 
 		std::istringstream ss(color_text);
 		for(size_t i= 0u; i < 3u; ++i)
 			ss >> out_light.color[i];
 
+		// Hack! Use "area_size" property from blender as radius.
+		if(const tinyxml2::XMLElement* const extra= light->FirstChildElement("extra"))
+		{
+			if(const tinyxml2::XMLElement* const technique= extra->FirstChildElement("technique"))
+			{
+				if(const char* const profile= technique->Attribute("profile"))
+				{
+					if(std::strcmp(profile, "blender") == 0)
+					{
+						if(const tinyxml2::XMLElement* const area_size= technique->FirstChildElement("area_size"))
+						{
+							if(const char* const area_size_value= area_size->GetText())
+							{
+								std::istringstream ss(area_size_value);
+								ss >> out_light.radius;
+							}
+						}
+					}
+				}
+			}
+		}
 		lights[id]= std::move(out_light);
 	}
 
@@ -869,7 +901,7 @@ int Main(const int argc, const char* const argv[])
 			out_light.color[0]= in_light.color[0];
 			out_light.color[1]= in_light.color[1];
 			out_light.color[2]= in_light.color[2];
-			out_light.radius= 5.0f;
+			out_light.radius= in_light.radius;
 
 			lights_transformed.push_back(std::move(out_light));
 		}

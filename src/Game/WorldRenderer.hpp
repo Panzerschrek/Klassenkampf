@@ -65,6 +65,7 @@ private:
 		struct Light
 		{
 			m_Vec3 pos;
+			float radius;
 			m_Vec3 color;
 		};
 

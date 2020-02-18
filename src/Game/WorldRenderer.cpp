@@ -565,12 +565,10 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		if(light_count >= LightBuffer::c_max_lights)
 			goto end_fill_lights;
 
-		const float radius= 3.0f;
-
 		const bool added=
 			cluster_volume_builder_.AddSphere(
 				sector_light.pos,
-				radius,
+				sector_light.radius,
 				ClusterVolumeBuilder::ElementId(light_count));
 		if(!added)
 			continue;
@@ -579,7 +577,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.pos[0]= sector_light.pos.x;
 		out_light.pos[1]= sector_light.pos.y;
 		out_light.pos[2]= sector_light.pos.z;
-		out_light.pos[3]= 1.0f / (radius * radius); // Fade to zero at radius.
+		out_light.pos[3]= 1.0f / (sector_light.radius * sector_light.radius); // Fade to zero at radius.
 		out_light.color[0]= sector_light.color.x / 16.0f;
 		out_light.color[1]= sector_light.color.y / 16.0f;
 		out_light.color[2]= sector_light.color.z / 16.0f;
@@ -763,6 +761,7 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 
 				const m_Vec3 pos(float(in_light.pos[0]), float(in_light.pos[1]), float(in_light.pos[2]));
 				out_light.pos= pos * segment_mat;
+				out_light.radius= in_light.radius * (std::max(model.header.scale[0], model.header.scale[1]), model.header.scale[2]);
 				out_light.color= m_Vec3(float(in_light.color[0]), float(in_light.color[1]), float(in_light.color[2])) / 256.0f;
 
 				out_sector.lights.push_back(std::move(out_light));

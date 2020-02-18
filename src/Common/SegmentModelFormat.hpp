@@ -70,9 +70,9 @@ static_assert(sizeof(Material) == 32u, "Invalid size");
 
 struct Light
 {
-	// Pos, radius - in same scale, as vertex data
+	// Pos in same scale, as vertex data
 	int16_t pos[3];
-	int16_t radius;
+	int16_t radius; // Radius - scaled using max(scale[0], scale[1], scale[2])
 	uint16_t color[3]; // In 8.8 format
 };
 static_assert(sizeof(Light) == 14u, "Invalid size");
