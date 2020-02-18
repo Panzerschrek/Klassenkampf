@@ -578,9 +578,9 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.pos[1]= sector_light.pos.y;
 		out_light.pos[2]= sector_light.pos.z;
 		out_light.pos[3]= 1.0f / (sector_light.radius * sector_light.radius); // Fade to zero at radius.
-		out_light.color[0]= sector_light.color.x / 16.0f;
-		out_light.color[1]= sector_light.color.y / 16.0f;
-		out_light.color[2]= sector_light.color.z / 16.0f;
+		out_light.color[0]= sector_light.color.x;
+		out_light.color[1]= sector_light.color.y;
+		out_light.color[2]= sector_light.color.z;
 		out_light.color[3]= 0.0f;
 
 		++light_count;
