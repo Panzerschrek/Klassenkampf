@@ -43,11 +43,11 @@ struct LightBuffer
 	uint32_t cluster_volume_size[4];
 	float viewport_size[2];
 	float w_convert_values[2];
-	Light lights[256];
+	Light lights[c_max_lights];
 };
 
 static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 48u + 256u * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 48u + LightBuffer::c_max_lights * 32u, "Invalid size");
 
 struct WorldVertex
 {
