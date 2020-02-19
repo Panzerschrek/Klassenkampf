@@ -37,8 +37,8 @@ private:
 	GPUDataUploader gpu_data_uploader_;
 	TextOut text_out_;
 	Console console_;
-	WorldRenderer world_renderer_;
 	CameraController camera_controller_;
+	WorldRenderer world_renderer_;
 	CommandsMapPtr commands_map_;
 
 	const Clock::time_point init_time_;

@@ -22,6 +22,7 @@ enum class SegmentType
 	Shaft,
 	CeilingArch4,
 	Column4,
+	Column4Lights,
 };
 
 struct Segment

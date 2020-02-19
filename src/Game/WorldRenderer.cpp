@@ -29,6 +29,26 @@ struct Uniforms
 };
 static_assert(sizeof(Uniforms) <= 128u, "Uniforms size is too big, limit is 128 bytes");
 
+struct LightBuffer
+{
+	struct Light
+	{
+		float pos[4];
+		float color[4];
+	};
+
+	static constexpr size_t c_max_lights= 256u;
+
+	float ambient_color[4];
+	uint32_t cluster_volume_size[4];
+	float viewport_size[2];
+	float w_convert_values[2];
+	Light lights[c_max_lights];
+};
+
+static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 48u + LightBuffer::c_max_lights * 32u, "Invalid size");
+
 struct WorldVertex
 {
 	float pos[3];
@@ -37,39 +57,25 @@ struct WorldVertex
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
-
-const float g_box_vertices[][3]
-{
-	{ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, // -y
-	{ 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, // +y
-	{ 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, // +x
-	{ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, // -x
-	{ 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f, 1.0f }, // +z
-	{ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, // -z
-};
-
-const uint16_t g_box_indices[]
-{
-	 0,  1,  2,   0,  2,  3,
-	 4,  6,  5,   4,  7,  6,
-	 8,  9, 10,   8, 10, 11,
-	12, 14, 13,  12, 15, 14,
-	16, 17, 18,  16, 18, 19,
-	20, 22, 21,  20, 23, 22,
-};
+const uint32_t g_light_buffer_binding= 1u;
+const uint32_t g_cluster_offset_buffer_binding= 2u;
+const uint32_t g_lights_list_buffer_binding= 3u;
 
 } // namespace
 
 WorldRenderer::WorldRenderer(
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
+	const CameraController& camera_controller,
 	const WorldData::World& world)
 	: gpu_data_uploader_(gpu_data_uploader)
+	, camera_controller_(camera_controller)
 	, vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(window_vulkan)
+	, cluster_volume_builder_(16u, 8u, 24u)
 {
 	// Create shaders
 	shader_vert_=
@@ -117,6 +123,27 @@ WorldRenderer::WorldRenderer(
 			vk::ShaderStageFlagBits::eFragment,
 			&*vk_image_sampler_,
 		},
+		{
+			g_light_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			g_cluster_offset_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			g_lights_list_buffer_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
 	};
 
 	vk_decriptor_set_layout_=
@@ -134,10 +161,8 @@ WorldRenderer::WorldRenderer(
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
-				1u,
-				&*vk_decriptor_set_layout_,
-				1u,
-				&vk_push_constant_range));
+				1u, &*vk_decriptor_set_layout_,
+				1u, &vk_push_constant_range));
 
 	// Create pipeline.
 	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
@@ -244,6 +269,72 @@ WorldRenderer::WorldRenderer(
 				tonemapper_.GetRenderPass(),
 				0u));
 
+	{ // Prepare lighting buffer.
+		vk_light_data_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(LightBuffer),
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*vk_light_data_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		vk_light_data_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*vk_light_data_buffer_, *vk_light_data_buffer_memory_, 0u);
+	}
+	{ // Prepare cluster offset buffer.
+		const size_t size= cluster_volume_builder_.GetWidth() * cluster_volume_builder_.GetHeight() * cluster_volume_builder_.GetDepth();
+		cluster_offset_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(uint32_t) * size,
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*cluster_offset_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		cluster_offset_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*cluster_offset_buffer_, *cluster_offset_buffer_memory_, 0u);
+	}
+	{ // Prepare lights list buffer.
+		lights_list_buffer_size_= cluster_volume_builder_.GetWidth() * cluster_volume_builder_.GetHeight() * cluster_volume_builder_.GetDepth() * 32u;
+		lights_list_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(uint8_t) * lights_list_buffer_size_,
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*lights_list_buffer_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties_.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties_.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		lights_list_buffer_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindBufferMemory(*lights_list_buffer_, *lights_list_buffer_memory_, 0u);
+	}
+
 	// Load segment models.
 	struct SegmentModelDescription
 	{
@@ -260,6 +351,7 @@ WorldRenderer::WorldRenderer(
 		{ WorldData::SegmentType::Wall, "wall_segment" },
 		{ WorldData::SegmentType::CeilingArch4, "arc4_segment" },
 		{ WorldData::SegmentType::Column4, "column4_segment" },
+		{ WorldData::SegmentType::Column4Lights, "column4_lights" },
 	};
 
 	SegmentModels segment_models;
@@ -298,15 +390,24 @@ WorldRenderer::WorldRenderer(
 	gpu_data_uploader_.Flush();
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(
-		vk::DescriptorType::eCombinedImageSampler,
-		uint32_t(materials_.size()));
+	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
+	{
+		{
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(materials_.size())
+		},
+		{
+			vk::DescriptorType::eStorageBuffer,
+			uint32_t(materials_.size()) * 3u
+		}
+	};
+
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u * vk_descriptor_pool_size.descriptorCount, // max sets.
-				1u, &vk_descriptor_pool_size));
+				uint32_t(materials_.size()), // max sets.
+				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
 	for(auto& material_pair : materials_)
 	{
@@ -328,20 +429,69 @@ WorldRenderer::WorldRenderer(
 			*material.image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*material.descriptor_set,
-			g_tex_uniform_binding,
+		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
+			*vk_light_data_buffer_,
 			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
+			sizeof(LightBuffer));
+
+		const vk::DescriptorBufferInfo descriptor_offset_buffer_info(
+			*cluster_offset_buffer_,
+			0u,
+			sizeof(uint32_t) * cluster_volume_builder_.GetWidth() * cluster_volume_builder_.GetHeight() * cluster_volume_builder_.GetDepth());
+
+		const vk::DescriptorBufferInfo lights_list_buffer_info(
+			*lights_list_buffer_,
+			0u,
+			sizeof(uint8_t) * lights_list_buffer_size_);
+
+		const vk::WriteDescriptorSet write_descriptor_set[]
+		{
+			{
+				*material.descriptor_set,
+				g_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_light_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_light_buffer_info,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_cluster_offset_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_offset_buffer_info,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_lights_list_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&lights_list_buffer_info,
+				nullptr
+			},
+		};
+
 		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
+			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
 			0u, nullptr);
 	}
-
 }
 
 WorldRenderer::~WorldRenderer()
@@ -350,11 +500,117 @@ WorldRenderer::~WorldRenderer()
 	vk_device_.waitIdle();
 }
 
-void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos)
+void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 {
+	const CameraController::ViewMatrix view_matrix= camera_controller_.CalculateViewMatrix();
+	const m_Vec3 cam_pos= camera_controller_.GetCameraPosition();
+	const WorldModel& model= world_model_;
+
+	// Calculate visible sectors.
+	const Sector* cam_sector= nullptr;
+	for(const Sector& sector : model.sectors)
+	{
+		if(cam_pos.x >= sector.bb_min.x && cam_pos.x <= sector.bb_max.x &&
+			cam_pos.y >= sector.bb_min.y && cam_pos.y <= sector.bb_max.y &&
+			cam_pos.z >= sector.bb_min.z && cam_pos.z <= sector.bb_max.z)
+		{
+			cam_sector= &sector;
+			break;
+		}
+	}
+
+	VisibleSectors visible_sectors;
+	for(const Sector& sector : model.sectors)
+	{
+		if(cam_sector != nullptr)
+		{
+			// Find adjacent sectors.
+			const bool intersects= !(
+				sector.bb_min.x > cam_sector->bb_max.x ||
+				sector.bb_min.y > cam_sector->bb_max.y ||
+				sector.bb_min.z > cam_sector->bb_max.z ||
+				sector.bb_max.x < cam_sector->bb_min.x ||
+				sector.bb_max.y < cam_sector->bb_min.y ||
+				sector.bb_max.z < cam_sector->bb_min.z );
+			if(!intersects)
+				continue;
+		}
+
+		visible_sectors.push_back(size_t(&sector - model.sectors.data()));
+	}
+
+	// Prepare light.
+	LightBuffer light_buffer;
+	light_buffer.ambient_color[0]= 0.1f;
+	light_buffer.ambient_color[1]= 0.1f;
+	light_buffer.ambient_color[2]= 0.1f;
+	light_buffer.ambient_color[3]= 0.0f;
+	light_buffer.cluster_volume_size[0]= cluster_volume_builder_.GetWidth ();
+	light_buffer.cluster_volume_size[1]= cluster_volume_builder_.GetHeight();
+	light_buffer.cluster_volume_size[2]= cluster_volume_builder_.GetDepth ();
+	light_buffer.cluster_volume_size[3]= 0;
+	light_buffer.viewport_size[0]= float(tonemapper_.GetFramebufferSize().width );
+	light_buffer.viewport_size[1]= float(tonemapper_.GetFramebufferSize().height);
+
+	cluster_volume_builder_.ClearClusters();
+	cluster_volume_builder_.SetMatrix(view_matrix.mat, view_matrix.z_near, view_matrix.z_far);
+
+	light_buffer.w_convert_values[0]= cluster_volume_builder_.GetWConvertValues().x;
+	light_buffer.w_convert_values[1]= cluster_volume_builder_.GetWConvertValues().y;
+
+	uint32_t light_count= 0u;
+	for(const size_t sector_index : visible_sectors)
+	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
+	{
+		if(light_count >= LightBuffer::c_max_lights)
+			goto end_fill_lights;
+
+		const bool added=
+			cluster_volume_builder_.AddSphere(
+				sector_light.pos,
+				sector_light.radius,
+				ClusterVolumeBuilder::ElementId(light_count));
+		if(!added)
+			continue;
+
+		LightBuffer::Light& out_light= light_buffer.lights[light_count];
+		out_light.pos[0]= sector_light.pos.x;
+		out_light.pos[1]= sector_light.pos.y;
+		out_light.pos[2]= sector_light.pos.z;
+		out_light.pos[3]= 1.0f / (sector_light.radius * sector_light.radius); // Fade to zero at radius.
+		out_light.color[0]= sector_light.color.x;
+		out_light.color[1]= sector_light.color.y;
+		out_light.color[2]= sector_light.color.z;
+		out_light.color[3]= 0.0f;
+
+		++light_count;
+	}
+	end_fill_lights:
+
+	const auto& clusters= cluster_volume_builder_.GetClusters();
+	std::vector<ClusterVolumeBuilder::ElementId> ligts_list_buffer;
+	std::vector<uint32_t> offsets_buffer(clusters.size());
+	for(size_t i= 0u; i < clusters.size(); ++i)
+	{
+		offsets_buffer[i]= uint32_t(ligts_list_buffer.size());
+		ligts_list_buffer.push_back(ClusterVolumeBuilder::ElementId(clusters[i].elements.size()));
+		ligts_list_buffer.insert(
+			ligts_list_buffer.end(),
+			clusters[i].elements.begin(), clusters[i].elements.end());
+	}
+
+	command_buffer.updateBuffer(
+		*vk_light_data_buffer_,
+		0u,
+		offsetof(LightBuffer, lights) + sizeof(LightBuffer::Light) * light_count, // Update only visible lights.
+		&light_buffer);
+	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
+	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
+
+	// Draw
 	tonemapper_.DoRenderPass(
 		command_buffer,
-		[&]{ DrawWorldModel(command_buffer, world_model_, view_matrix, cam_pos); });
+		[&]{ DrawWorldModel(command_buffer, model, visible_sectors, view_matrix.mat); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
@@ -365,8 +621,8 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 void WorldRenderer::DrawWorldModel(
 	const vk::CommandBuffer command_buffer,
 	const WorldModel& world_model,
-	const m_Mat4& view_matrix,
-	const m_Vec3& cam_pos)
+	const VisibleSectors& visible_setors,
+	const m_Mat4& view_matrix)
 {
 	const Material& test_material= materials_.find(test_material_id_)->second;
 
@@ -387,48 +643,20 @@ void WorldRenderer::DrawWorldModel(
 	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
 	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
 
-	const Sector* cam_sector= nullptr;
-	for(const Sector& sector : world_model.sectors)
+	for(const size_t sector_index : visible_setors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
 	{
-		if(cam_pos.x >= sector.bb_min.x && cam_pos.x <= sector.bb_max.x &&
-			cam_pos.y >= sector.bb_min.y && cam_pos.y <= sector.bb_max.y &&
-			cam_pos.z >= sector.bb_min.z && cam_pos.z <= sector.bb_max.z)
-		{
-			cam_sector= &sector;
-			break;
-		}
-	}
+		const Material& material= materials_.find(triangle_group.material_id)->second;
 
-	for(const Sector& sector : world_model.sectors)
-	{
-		if(cam_sector != nullptr)
-		{
-			// Find adjacent sectors.
-			const bool intersects= !(
-				sector.bb_min.x > cam_sector->bb_max.x ||
-				sector.bb_min.y > cam_sector->bb_max.y ||
-				sector.bb_min.z > cam_sector->bb_max.z ||
-				sector.bb_max.x < cam_sector->bb_min.x ||
-				sector.bb_max.y < cam_sector->bb_min.y ||
-				sector.bb_max.z < cam_sector->bb_min.z );
-			if(!intersects)
-				continue;
-		}
+		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
+			*vk_pipeline_layout_,
+			0u,
+			1u, &desctipor_set,
+			0u, nullptr);
 
-		for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
-		{
-			const Material& material= materials_.find(triangle_group.material_id)->second;
-
-			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-			command_buffer.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*vk_pipeline_layout_,
-				0u,
-				1u, &desctipor_set,
-				0u, nullptr);
-
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-		}
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 	}
 }
 
@@ -487,7 +715,6 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 			translate_mat.Translate(m_Vec3(float(segment.pos[0]), float(segment.pos[1]), float(segment.pos[2])));
 			segment_mat= base_transform_mat * to_center_mat * rotate_mat * from_center_mat * translate_mat;
 
-			//const size_t segment_first_vertex= world_vertices.size() - size_t(out_sector.first_vertex);
 			for(size_t i= 0u; i < size_t(model.header.triangle_group_count); ++i)
 			{
 				const SegmentModelFormat::TriangleGroup& in_triangle_group= model.triangle_groups[i];
@@ -525,6 +752,19 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 					KK_ASSERT(index < 65535u);
 					out_triangle_group.indices.push_back(uint16_t(index));
 				}
+			}
+
+			for(size_t i= 0u; i < model.header.light_count; ++i)
+			{
+				const SegmentModelFormat::Light& in_light= model.lights[i];
+				Sector::Light out_light;
+
+				const m_Vec3 pos(float(in_light.pos[0]), float(in_light.pos[1]), float(in_light.pos[2]));
+				out_light.pos= pos * segment_mat;
+				out_light.radius= in_light.radius * (std::max(model.header.scale[0], model.header.scale[1]), model.header.scale[2]);
+				out_light.color= m_Vec3(float(in_light.color[0]), float(in_light.color[1]), float(in_light.color[2])) / 256.0f;
+
+				out_sector.lights.push_back(std::move(out_light));
 			}
 		} // for sector segments
 
@@ -632,10 +872,19 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 
 	const char* const file_data= static_cast<const char*>(file_mapped->Data());
 	const auto& header= *reinterpret_cast<const SegmentModelFormat::SegmentModelHeader*>(file_data);
+
+	if(header.version != SegmentModelFormat::SegmentModelHeader::c_expected_version ||
+		std::memcmp(header.header, SegmentModelFormat::SegmentModelHeader::c_expected_header, sizeof(header.header)) != 0)
+	{
+		Log::Warning("Loading invalid model \"", file_name, "\"");
+		return std::nullopt;
+	}
+
 	const auto* const in_vertices= reinterpret_cast<const SegmentModelFormat::Vertex*>(file_data + header.vertices_offset);
 	const auto* const in_indices= reinterpret_cast<const SegmentModelFormat::IndexType*>(file_data + header.indices_offset);
 	const auto* const in_triangle_groups= reinterpret_cast<const SegmentModelFormat::TriangleGroup*>(file_data + header.triangle_groups_offset);
 	const auto* const in_materials= reinterpret_cast<const SegmentModelFormat::Material*>(file_data + header.materials_offset);
+	const auto* const in_lights= reinterpret_cast<const SegmentModelFormat::Light*>(file_data + header.lights_offset);
 
 	std::vector<std::string> local_to_global_material_id;
 	local_to_global_material_id.resize(header.material_count);
@@ -653,6 +902,7 @@ std::optional<WorldRenderer::SegmentModel> WorldRenderer::LoadSegmentModel(const
 			in_vertices,
 			in_indices,
 			in_triangle_groups,
+			in_lights,
 			std::move(local_to_global_material_id)
 		};
 }

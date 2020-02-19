@@ -578,15 +578,26 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 	// Columns.
 	for(WorldData::CoordType x= sector.bb_min[0]; x <= sector.bb_max[0]; x+= sector.columns_step)
 	for(WorldData::CoordType y= sector.bb_min[1]; y <= sector.bb_max[1]; y+= sector.columns_step)
-	for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2] - sector.ceiling_height; ++z)
 	{
-		WorldData::Segment segment;
-		segment.type= WorldData::SegmentType::Column4;
-		segment.pos[0]= x;
-		segment.pos[1]= y;
-		segment.pos[2]= z;
-		segment.angle= 0;
-		sector.segments.push_back(std::move(segment));
+		{
+			WorldData::Segment segment;
+			segment.type= WorldData::SegmentType::Column4Lights;
+			segment.pos[0]= x;
+			segment.pos[1]= y;
+			segment.pos[2]= sector.bb_min[2];
+			segment.angle= 0;
+			sector.segments.push_back(std::move(segment));
+		}
+		for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2] - sector.ceiling_height; ++z)
+		{
+			WorldData::Segment segment;
+			segment.type= WorldData::SegmentType::Column4;
+			segment.pos[0]= x;
+			segment.pos[1]= y;
+			segment.pos[2]= z;
+			segment.angle= 0;
+			sector.segments.push_back(std::move(segment));
+		}
 	}
 }
 

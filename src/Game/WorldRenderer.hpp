@@ -2,6 +2,8 @@
 #include "../Common/MemoryMappedFile.hpp"
 #include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
+#include "CameraController.hpp"
+#include "ClusterVolumeBuilder.hpp"
 #include "GPUDataUploader.hpp"
 #include "Tonemapper.hpp"
 #include "WindowVulkan.hpp"
@@ -19,11 +21,12 @@ public:
 	WorldRenderer(
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
+	const CameraController& camera_controller,
 		const WorldData::World& world);
 
 	~WorldRenderer();
 
-	void BeginFrame(vk::CommandBuffer command_buffer, const m_Mat4& view_matrix, const m_Vec3& cam_pos);
+	void BeginFrame(vk::CommandBuffer command_buffer);
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
@@ -43,6 +46,7 @@ private:
 		const SegmentModelFormat::Vertex* vetices;
 		const SegmentModelFormat::IndexType* indices;
 		const SegmentModelFormat::TriangleGroup* triangle_groups;
+		const SegmentModelFormat::Light* lights;
 		std::vector<std::string> local_to_global_material_id;
 	};
 
@@ -58,9 +62,17 @@ private:
 			std::string material_id;
 		};
 
+		struct Light
+		{
+			m_Vec3 pos;
+			float radius;
+			m_Vec3 color;
+		};
+
 		m_Vec3 bb_min;
 		m_Vec3 bb_max;
 		std::vector<TriangleGroup> triangle_groups;
+		std::vector<Light> lights;
 	};
 
 	using WorldSectors= std::vector<Sector>;
@@ -75,12 +87,14 @@ private:
 		WorldSectors sectors;
 	};
 
+	using VisibleSectors= std::vector<size_t>;
+
 private:
 	void DrawWorldModel(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
-		const m_Mat4& view_matrix,
-		const m_Vec3& cam_pos);
+		const VisibleSectors& visible_setors,
+		const m_Mat4& view_matrix);
 
 	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
@@ -89,18 +103,33 @@ private:
 
 private:
 	GPUDataUploader& gpu_data_uploader_;
+	const CameraController& camera_controller_;
 	const vk::Device vk_device_;
 	const vk::Extent2D viewport_size_;
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 	const uint32_t queue_family_index_;
 
 	Tonemapper tonemapper_;
+	ClusterVolumeBuilder cluster_volume_builder_;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;
 	vk::UniqueDescriptorSetLayout vk_decriptor_set_layout_;
 	vk::UniquePipelineLayout vk_pipeline_layout_;
 	vk::UniquePipeline vk_pipeline_;
+
+	// All light data, required by fragment shader - ligh sources with parameters (position, matrix), etc.
+	vk::UniqueBuffer vk_light_data_buffer_;
+	vk::UniqueDeviceMemory vk_light_data_buffer_memory_;
+
+	// 3D table of offsets to lights list for each cluster.
+	vk::UniqueBuffer cluster_offset_buffer_;
+	vk::UniqueDeviceMemory cluster_offset_buffer_memory_;
+
+	// List of light sources for each cluster.
+	size_t lights_list_buffer_size_= 0u; // In elements
+	vk::UniqueBuffer lights_list_buffer_;
+	vk::UniqueDeviceMemory lights_list_buffer_memory_;
 
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
 
