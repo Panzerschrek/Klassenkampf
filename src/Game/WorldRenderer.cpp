@@ -25,7 +25,6 @@ namespace Shaders
 struct Uniforms
 {
 	m_Mat4 view_matrix;
-	m_Mat4 normals_matrix;
 };
 static_assert(sizeof(Uniforms) <= 128u, "Uniforms size is too big, limit is 128 bytes");
 
@@ -633,8 +632,6 @@ void WorldRenderer::DrawWorldModel(
 
 	Uniforms uniforms;
 	uniforms.view_matrix= view_matrix;
-	uniforms.normals_matrix.MakeIdentity();
-
 	command_buffer.pushConstants(
 		*vk_pipeline_layout_,
 		vk::ShaderStageFlagBits::eVertex,
