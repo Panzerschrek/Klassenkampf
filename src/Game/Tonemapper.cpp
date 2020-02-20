@@ -17,12 +17,18 @@ namespace Shaders
 
 } // namespace Shaders
 
+struct Uniforms
+{
+	float deformation_factor[4];
+};
+
 const uint32_t g_tex_uniform_binding= 0u;
 
 } // namespace
 
-Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
-	: vk_device_(window_vulkan.GetVulkanDevice())
+Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
+	: settings_(settings)
+	, vk_device_(window_vulkan.GetVulkanDevice())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, msaa_sample_count_(vk::SampleCountFlagBits::e1)
 {
@@ -291,12 +297,17 @@ Tonemapper::Tonemapper(WindowVulkan& window_vulkan)
 				vk::DescriptorSetLayoutCreateFlags(),
 				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
+	const vk::PushConstantRange push_constant_range(
+		vk::ShaderStageFlagBits::eFragment,
+		0u,
+		sizeof(Uniforms));
+
 	pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
 				1u, &*decriptor_set_layout_,
-				0u, nullptr));
+				1u, &push_constant_range));
 
 	// Create pipeline.
 	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
@@ -544,6 +555,23 @@ void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 		0u,
 		1u, &*descriptor_set_,
 		0u, nullptr);
+
+	const std::string_view deformation_factor_settings_name= "r_lenses_deform_factor";
+	const float deformation_factor= std::min(std::max(4.0f, float(settings_.GetReal(deformation_factor_settings_name, 10.0f))), 256.0f);
+	settings_.SetReal(deformation_factor_settings_name, deformation_factor);
+
+	Uniforms uniforms;
+	uniforms.deformation_factor[0]= deformation_factor;
+	uniforms.deformation_factor[1]= deformation_factor;
+	uniforms.deformation_factor[2]= deformation_factor;
+	uniforms.deformation_factor[3]= 0.0f;
+
+	command_buffer.pushConstants(
+		*pipeline_layout_,
+		vk::ShaderStageFlagBits::eFragment,
+		0,
+		sizeof(uniforms),
+		&uniforms);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
 	command_buffer.draw(6u, 1u, 0u, 0u);
