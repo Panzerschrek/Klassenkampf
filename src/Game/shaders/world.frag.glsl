@@ -66,8 +66,6 @@ void main()
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 
 	const vec4 tex_value= texture(tex, f_tex_coord);
-	if(tex_value.a < 0.5)
-		discard;
 
 	out_color= vec4(l * tex_value.xyz, tex_value.a);
 }

@@ -89,7 +89,20 @@ private:
 
 	using VisibleSectors= std::vector<size_t>;
 
+	struct Pipeline
+	{
+		vk::UniqueShaderModule shader_vert;
+		vk::UniqueShaderModule shader_frag;
+		vk::UniqueSampler image_sampler;
+		vk::UniqueDescriptorSetLayout descriptor_set_layout;
+		vk::UniquePipelineLayout pipeline_layout;
+		vk::UniquePipeline pipeline;
+	};
+
 private:
+	Pipeline CreateDepthPrePassPipeline();
+	Pipeline CreateLightingPassPipeline();
+
 	void DrawWorldModel(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
@@ -112,11 +125,8 @@ private:
 	Tonemapper tonemapper_;
 	ClusterVolumeBuilder cluster_volume_builder_;
 
-	vk::UniqueShaderModule shader_vert_;
-	vk::UniqueShaderModule shader_frag_;
-	vk::UniqueDescriptorSetLayout vk_decriptor_set_layout_;
-	vk::UniquePipelineLayout vk_pipeline_layout_;
-	vk::UniquePipeline vk_pipeline_;
+	Pipeline depth_pre_pass_pipeline_;
+	Pipeline lighting_pass_pipeline_;
 
 	// All light data, required by fragment shader - ligh sources with parameters (position, matrix), etc.
 	vk::UniqueBuffer vk_light_data_buffer_;
@@ -135,8 +145,6 @@ private:
 
 	WorldModel world_model_;
 	WorldModel test_world_model_;
-
-	vk::UniqueSampler vk_image_sampler_;
 
 	std::unordered_map<std::string, Material> materials_;
 	std::string test_material_id_;
