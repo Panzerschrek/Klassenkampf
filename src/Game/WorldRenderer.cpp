@@ -17,8 +17,8 @@ namespace
 namespace Shaders
 {
 
-#include "shaders/triangle.vert.sprv.h"
-#include "shaders/triangle.frag.sprv.h"
+#include "shaders/world.vert.sprv.h"
+#include "shaders/world.frag.sprv.h"
 
 } // namespace Shaders
 
@@ -82,15 +82,15 @@ WorldRenderer::WorldRenderer(
 		vk_device_.createShaderModuleUnique(
 			vk::ShaderModuleCreateInfo(
 				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_triangle_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_triangle_vert_file_content)));
+				std::size(Shaders::c_world_vert_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_world_vert_file_content)));
 
 	shader_frag_=
 		vk_device_.createShaderModuleUnique(
 			vk::ShaderModuleCreateInfo(
 				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_triangle_frag_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_triangle_frag_file_content)));
+				std::size(Shaders::c_world_frag_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_world_frag_file_content)));
 
 	// Create image sampler
 	vk_image_sampler_=
