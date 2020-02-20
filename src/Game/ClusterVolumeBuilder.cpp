@@ -1,5 +1,6 @@
 #include "ClusterVolumeBuilder.hpp"
 #include "Assert.hpp"
+#include <algorithm>
 
 
 namespace KK

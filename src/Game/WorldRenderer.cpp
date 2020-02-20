@@ -761,7 +761,7 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 
 				const m_Vec3 pos(float(in_light.pos[0]), float(in_light.pos[1]), float(in_light.pos[2]));
 				out_light.pos= pos * segment_mat;
-				out_light.radius= in_light.radius * (std::max(model.header.scale[0], model.header.scale[1]), model.header.scale[2]);
+				out_light.radius= in_light.radius * std::max(std::max(model.header.scale[0], model.header.scale[1]), model.header.scale[2]);
 				out_light.color= m_Vec3(float(in_light.color[0]), float(in_light.color[1]), float(in_light.color[2])) / 256.0f;
 
 				out_sector.lights.push_back(std::move(out_light));
