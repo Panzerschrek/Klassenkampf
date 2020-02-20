@@ -599,6 +599,9 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 			clusters[i].elements.begin(), clusters[i].elements.end());
 	}
 
+	// Vulkan requires multiple of 4 sizes.
+	ligts_list_buffer.resize((ligts_list_buffer.size() + 3u) & ~3u);
+
 	command_buffer.updateBuffer(
 		*vk_light_data_buffer_,
 		0u,
@@ -812,6 +815,12 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 			offset+= request_size;
 		}
 	};
+
+	// Vulkan requires sizes greater, than 0.
+	if(world_vertices.empty())
+		world_vertices.emplace_back();
+	if(world_indeces.empty())
+		world_indeces.emplace_back();
 
 	{
 		world_model.vertex_buffer=
