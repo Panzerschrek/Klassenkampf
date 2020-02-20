@@ -557,13 +557,16 @@ void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 		0u, nullptr);
 
 	const std::string_view deformation_factor_settings_name= "r_lenses_deform_factor";
+	const std::string_view color_deformation_factor_settings_name= "r_lenses_color_deform_factor";
 	const float deformation_factor= std::min(std::max(4.0f, float(settings_.GetReal(deformation_factor_settings_name, 10.0f))), 256.0f);
+	const float color_deformation_factor= std::min(std::max(0.0f, float(settings_.GetReal(color_deformation_factor_settings_name, 0.25f))), 1.0f);
 	settings_.SetReal(deformation_factor_settings_name, deformation_factor);
+	settings_.SetReal(color_deformation_factor_settings_name, color_deformation_factor);
 
 	Uniforms uniforms;
-	uniforms.deformation_factor[0]= deformation_factor;
+	uniforms.deformation_factor[0]= deformation_factor * (1.0f - 0.1f * color_deformation_factor);
 	uniforms.deformation_factor[1]= deformation_factor;
-	uniforms.deformation_factor[2]= deformation_factor;
+	uniforms.deformation_factor[2]= deformation_factor * (1.0f + 0.1f * color_deformation_factor);
 	uniforms.deformation_factor[3]= 0.0f;
 
 	command_buffer.pushConstants(
