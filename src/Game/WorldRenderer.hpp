@@ -100,6 +100,7 @@ private:
 	};
 
 private:
+	Pipeline CreateDepthPrePassPipeline();
 	Pipeline CreateLightingPassPipeline();
 
 	void DrawWorldModel(
@@ -124,6 +125,7 @@ private:
 	Tonemapper tonemapper_;
 	ClusterVolumeBuilder cluster_volume_builder_;
 
+	Pipeline depth_pre_pass_pipeline_;
 	Pipeline lighting_pass_pipeline_;
 
 	// All light data, required by fragment shader - ligh sources with parameters (position, matrix), etc.

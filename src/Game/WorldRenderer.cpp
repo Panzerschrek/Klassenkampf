@@ -17,6 +17,7 @@ namespace
 namespace Shaders
 {
 
+#include "shaders/world_depth_only.vert.sprv.h"
 #include "shaders/world.vert.sprv.h"
 #include "shaders/world.frag.sprv.h"
 
@@ -76,6 +77,7 @@ WorldRenderer::WorldRenderer(
 	, tonemapper_(window_vulkan)
 	, cluster_volume_builder_(16u, 8u, 24u)
 {
+	depth_pre_pass_pipeline_= CreateDepthPrePassPipeline();
 	lighting_pass_pipeline_= CreateLightingPassPipeline();
 
 	{ // Prepare lighting buffer.
@@ -430,6 +432,129 @@ void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
 	tonemapper_.EndFrame(command_buffer);
 }
 
+WorldRenderer::Pipeline WorldRenderer::CreateDepthPrePassPipeline()
+{
+	Pipeline pipeline;
+
+	pipeline.shader_vert=
+		vk_device_.createShaderModuleUnique(
+			vk::ShaderModuleCreateInfo(
+				vk::ShaderModuleCreateFlags(),
+				std::size(Shaders::c_world_depth_only_vert_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_world_depth_only_vert_file_content)));
+
+	const vk::PushConstantRange vk_push_constant_range(
+		vk::ShaderStageFlagBits::eVertex,
+		0u,
+		sizeof(Uniforms));
+
+	pipeline.pipeline_layout=
+		vk_device_.createPipelineLayoutUnique(
+			vk::PipelineLayoutCreateInfo(
+				vk::PipelineLayoutCreateFlags(),
+				0u, nullptr,
+				1u, &vk_push_constant_range));
+
+	// Create pipeline.
+	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[]
+	{
+		{
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eVertex,
+			*pipeline.shader_vert,
+			"main"
+		},
+	};
+
+	const vk::VertexInputBindingDescription vk_vertex_input_binding_description(
+		0u,
+		sizeof(WorldVertex),
+		vk::VertexInputRate::eVertex);
+
+	const vk::VertexInputAttributeDescription vk_vertex_input_attribute_description[]
+	{
+		{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
+	};
+
+	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
+		vk::PipelineVertexInputStateCreateFlags(),
+		1u, &vk_vertex_input_binding_description,
+		uint32_t(std::size(vk_vertex_input_attribute_description)), vk_vertex_input_attribute_description);
+
+	const vk::PipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info(
+		vk::PipelineInputAssemblyStateCreateFlags(),
+		vk::PrimitiveTopology::eTriangleList);
+
+	const vk::Extent2D framebuffer_size= tonemapper_.GetFramebufferSize();
+	const vk::Viewport vk_viewport(0.0f, 0.0f, float(framebuffer_size.width), float(framebuffer_size.height), 0.0f, 1.0f);
+	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), framebuffer_size);
+
+	const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
+		vk::PipelineViewportStateCreateFlags(),
+		1u, &vk_viewport,
+		1u, &vk_scissor);
+
+	const vk::PipelineRasterizationStateCreateInfo vk_pipilane_rasterization_state_create_info(
+		vk::PipelineRasterizationStateCreateFlags(),
+		VK_FALSE,
+		VK_FALSE,
+		vk::PolygonMode::eFill,
+		vk::CullModeFlagBits::eBack,
+		vk::FrontFace::eCounterClockwise,
+		VK_FALSE, 0.0f, 0.0f, 0.0f,
+		1.0f);
+
+	const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info(
+		vk::PipelineMultisampleStateCreateFlags(),
+		tonemapper_.GetSampleCount());
+
+	const vk::PipelineDepthStencilStateCreateInfo vk_pipeline_depth_state_create_info(
+		vk::PipelineDepthStencilStateCreateFlags(),
+		VK_TRUE,
+		VK_TRUE,
+		vk::CompareOp::eLess,
+		VK_FALSE,
+		VK_FALSE,
+		vk::StencilOpState(),
+		vk::StencilOpState(),
+		0.0f,
+		1.0f);
+
+	const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
+		VK_FALSE,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::ColorComponentFlags() /* do not write to color buffer */);
+
+	const vk::PipelineColorBlendStateCreateInfo vk_pipeline_color_blend_state_create_info(
+		vk::PipelineColorBlendStateCreateFlags(),
+		VK_FALSE,
+		vk::LogicOp::eCopy,
+		1u, &vk_pipeline_color_blend_attachment_state);
+
+	pipeline.pipeline=
+		vk_device_.createGraphicsPipelineUnique(
+			nullptr,
+			vk::GraphicsPipelineCreateInfo(
+				vk::PipelineCreateFlags(),
+				uint32_t(std::size(vk_shader_stage_create_info)),
+				vk_shader_stage_create_info,
+				&vk_pipiline_vertex_input_state_create_info,
+				&vk_pipeline_input_assembly_state_create_info,
+				nullptr,
+				&vk_pipieline_viewport_state_create_info,
+				&vk_pipilane_rasterization_state_create_info,
+				&vk_pipeline_multisample_state_create_info,
+				&vk_pipeline_depth_state_create_info,
+				&vk_pipeline_color_blend_state_create_info,
+				nullptr,
+				*pipeline.pipeline_layout,
+				tonemapper_.GetRenderPass(),
+				0u));
+
+	return pipeline;
+}
+
 WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 {
 	Pipeline pipeline;
@@ -585,8 +710,8 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 	const vk::PipelineDepthStencilStateCreateInfo vk_pipeline_depth_state_create_info(
 		vk::PipelineDepthStencilStateCreateFlags(),
 		VK_TRUE,
-		VK_TRUE,
-		vk::CompareOp::eLess,
+		VK_FALSE, // Disable depth write.
+		vk::CompareOp::eEqual, // Draw only fragments with equal depth.
 		VK_FALSE,
 		VK_FALSE,
 		vk::StencilOpState(),
@@ -635,37 +760,61 @@ void WorldRenderer::DrawWorldModel(
 	const VisibleSectors& visible_setors,
 	const m_Mat4& view_matrix)
 {
-	const Material& test_material= materials_.find(test_material_id_)->second;
-
-	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
-
-	Uniforms uniforms;
-	uniforms.view_matrix= view_matrix;
-	command_buffer.pushConstants(
-		*lighting_pass_pipeline_.pipeline_layout,
-		vk::ShaderStageFlagBits::eVertex,
-		0,
-		sizeof(uniforms),
-		&uniforms);
-
-	const vk::DeviceSize offsets= 0u;
-	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
-	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
-
-	for(const size_t sector_index : visible_setors)
-	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
+	// Depth pre-pass.
 	{
-		const Material& material= materials_.find(triangle_group.material_id)->second;
+		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *depth_pre_pass_pipeline_.pipeline);
 
-		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-		command_buffer.bindDescriptorSets(
-			vk::PipelineBindPoint::eGraphics,
+		Uniforms uniforms;
+		uniforms.view_matrix= view_matrix;
+		command_buffer.pushConstants(
 			*lighting_pass_pipeline_.pipeline_layout,
-			0u,
-			1u, &desctipor_set,
-			0u, nullptr);
+			vk::ShaderStageFlagBits::eVertex,
+			0,
+			sizeof(uniforms),
+			&uniforms);
 
-		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+		const vk::DeviceSize offsets= 0u;
+		command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+		command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+		for(const size_t sector_index : visible_setors)
+		for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+	}
+	// Lighting pass.
+	{
+		const Material& test_material= materials_.find(test_material_id_)->second;
+
+		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
+
+		Uniforms uniforms;
+		uniforms.view_matrix= view_matrix;
+		command_buffer.pushConstants(
+			*lighting_pass_pipeline_.pipeline_layout,
+			vk::ShaderStageFlagBits::eVertex,
+			0,
+			sizeof(uniforms),
+			&uniforms);
+
+		const vk::DeviceSize offsets= 0u;
+		command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+		command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+		for(const size_t sector_index : visible_setors)
+		for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
+		{
+			const Material& material= materials_.find(triangle_group.material_id)->second;
+
+			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+			command_buffer.bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*lighting_pass_pipeline_.pipeline_layout,
+				0u,
+				1u, &desctipor_set,
+				0u, nullptr);
+
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+		}
 	}
 }
 
