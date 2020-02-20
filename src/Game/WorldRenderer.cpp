@@ -767,7 +767,7 @@ void WorldRenderer::DrawWorldModel(
 		Uniforms uniforms;
 		uniforms.view_matrix= view_matrix;
 		command_buffer.pushConstants(
-			*lighting_pass_pipeline_.pipeline_layout,
+			*depth_pre_pass_pipeline_.pipeline_layout,
 			vk::ShaderStageFlagBits::eVertex,
 			0,
 			sizeof(uniforms),
