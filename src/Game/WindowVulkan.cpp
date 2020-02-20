@@ -13,12 +13,22 @@ namespace KK
 namespace
 {
 
-vk::PhysicalDeviceFeatures GetRequiredDeviceFeatures()
+vk::PhysicalDeviceFeatures2 GetRequiredDeviceFeatures()
 {
+	// For 8bit values in
+	static vk::PhysicalDevice8BitStorageFeaturesKHR eight_bit_storage(
+		VK_TRUE,
+		VK_TRUE,
+		VK_TRUE);
+
 	vk::PhysicalDeviceFeatures features;
 	features.setSamplerAnisotropy(VK_TRUE);
-	features.setGeometryShader(VK_TRUE);
-	return features;
+	features.setGeometryShader(VK_TRUE); // For text glyphs
+
+	vk::PhysicalDeviceFeatures2 features2(features);
+	features2.setPNext(&eight_bit_storage);
+
+	return features2;
 }
 
 std::string VulkanVersionToString(const uint32_t version)
@@ -81,6 +91,11 @@ WindowVulkan::WindowVulkan(
 	if(use_debug_extensions_and_layers)
 	{
 		extensions_list.push_back("VK_EXT_debug_report");
+		++extension_names_count;
+	}
+
+	{
+		extensions_list.push_back("VK_KHR_get_physical_device_properties2");
 		++extension_names_count;
 	}
 
@@ -207,14 +222,15 @@ WindowVulkan::WindowVulkan(
 
 	const char* const device_extension_names[]{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-	const vk::PhysicalDeviceFeatures physical_device_features= GetRequiredDeviceFeatures();
+	const vk::PhysicalDeviceFeatures2 physical_device_features2= GetRequiredDeviceFeatures();
 
-	const vk::DeviceCreateInfo vk_device_create_info(
+	vk::DeviceCreateInfo vk_device_create_info(
 		vk::DeviceCreateFlags(),
 		1u, &vk_device_queue_create_info,
 		0u, nullptr,
 		uint32_t(std::size(device_extension_names)), device_extension_names,
-		&physical_device_features);
+		nullptr);
+	vk_device_create_info.setPNext(&physical_device_features2);
 
 	// Create physical device.
 	// HACK! createDeviceUnique works wrong! Use other method instead.
