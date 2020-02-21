@@ -29,9 +29,7 @@ private:
 	vk::UniqueImage framebuffer_image_;
 	vk::UniqueDeviceMemory framebuffer_image_memory_;
 	vk::UniqueImageView framebuffer_image_view_;
-	vk::UniqueImageView framebuffer_attachment_image_view_;
 	vk::UniqueSampler framebuffer_image_sampler_;
-	uint32_t framebuffer_image_mip_levels_;
 
 	vk::UniqueImage framebuffer_depth_image_;
 	vk::UniqueDeviceMemory framebuffer_depth_image_memory_;
@@ -39,6 +37,12 @@ private:
 
 	vk::UniqueRenderPass framebuffer_render_pass_;
 	vk::UniqueFramebuffer framebuffer_;
+
+	vk::UniqueImage brightness_calculate_image_;
+	vk::UniqueDeviceMemory brightness_calculate_image_memory_;
+	vk::UniqueImageView brightness_calculate_image_view_;
+	vk::Extent2D brightness_calculate_image_size_;
+	uint32_t brightness_calculate_image_mip_levels_;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;
