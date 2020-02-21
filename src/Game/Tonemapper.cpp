@@ -286,7 +286,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			g_tex_uniform_binding,
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
-			vk::ShaderStageFlagBits::eFragment,
+			vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
 			&*framebuffer_image_sampler_,
 		},
 	};
