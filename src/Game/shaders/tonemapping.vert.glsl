@@ -22,5 +22,5 @@ void main()
 	f_tex_coord= pos[gl_VertexIndex];
 
 	float brightness= dot(textureLod(brightness_tex, vec2(0.5, 0.5), 16).rgb, vec3(0.299, 0.587, 0.114));
-	f_exposure= 0.6 * inversesqrt(brightness + 0.001);
+	f_exposure= 0.6 * pow(brightness + 0.001, -0.75);
 }
