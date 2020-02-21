@@ -12,7 +12,7 @@ namespace
 namespace Shaders
 {
 
-#include "shaders/fullscreen_quad.vert.sprv.h"
+#include "shaders/tonemapping.vert.sprv.h"
 #include "shaders/tonemapping.frag.sprv.h"
 
 } // namespace Shaders
@@ -248,8 +248,8 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 		vk_device_.createShaderModuleUnique(
 			vk::ShaderModuleCreateInfo(
 				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_fullscreen_quad_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_fullscreen_quad_vert_file_content)));
+				std::size(Shaders::c_tonemapping_vert_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_tonemapping_vert_file_content)));
 
 	shader_frag_=
 		vk_device_.createShaderModuleUnique(
