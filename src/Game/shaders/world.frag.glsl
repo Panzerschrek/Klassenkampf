@@ -31,7 +31,7 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 	uint8_t light_list[];
 };
 
-layout(binding= 4) uniform samplerCubeArray depth_cubemaps_array;
+layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array;
 
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
@@ -64,9 +64,8 @@ void main()
 		float vec_to_light_square_length= dot(vec_to_light, vec_to_light);
 		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
 		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
-
-		float shadowmap_value= texture(depth_cubemaps_array, vec4(vec_to_light, float(light_index))).x;
-		float shadow_factor= step(length(vec_to_light) * light.data.x, shadowmap_value);
+		float normalized_distance_to_light= length(vec_to_light) * light.data.x;
+		float shadow_factor= texture(depth_cubemaps_array, vec4(vec_to_light, float(light_index)), normalized_distance_to_light);
 
 		l+= light.color.xyz * (cos_factor * fade_factor * shadow_factor);
 	}
