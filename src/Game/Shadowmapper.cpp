@@ -379,6 +379,11 @@ Shadowmapper::~Shadowmapper()
 	vk_device_.waitIdle();
 }
 
+uint32_t Shadowmapper::GetCubemapCount() const
+{
+	return cubemap_count_;
+}
+
 vk::ImageView Shadowmapper::GetDepthCubemapArrayImageView() const
 {
 	return *depth_cubemap_array_image_view_;

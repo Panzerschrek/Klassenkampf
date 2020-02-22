@@ -35,7 +35,8 @@ struct LightBuffer
 	{
 		float pos[4];
 		float color[4];
-		float data[4];
+		float data[2];
+		uint32_t shadowmap_index[2];
 	};
 
 	static constexpr size_t c_max_lights= 256u;
@@ -80,6 +81,7 @@ WorldRenderer::WorldRenderer(
 	, tonemapper_(settings, window_vulkan)
 	, shadowmapper_(window_vulkan, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
 	, cluster_volume_builder_(16u, 8u, 24u)
+	, shadowmap_allocator_(shadowmapper_.GetCubemapCount())
 {
 	depth_pre_pass_pipeline_= CreateDepthPrePassPipeline();
 	lighting_pass_pipeline_= CreateLightingPassPipeline();
@@ -370,6 +372,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	}
 
 	// Prepare light.
+	std::vector<ShadowmapLight> shadowmap_lights;
 	LightBuffer light_buffer;
 	light_buffer.ambient_color[0]= 0.1f;
 	light_buffer.ambient_color[1]= 0.1f;
@@ -414,12 +417,26 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.color[3]= 0.0f;
 		out_light.data[0]= 1.0f / sector_light.radius;
 		out_light.data[1]= 0.0f;
-		out_light.data[2]= 0.0f;
-		out_light.data[3]= 0.0f;
+		out_light.shadowmap_index[0]= 0;
+		out_light.shadowmap_index[1]= 0;
+
+		ShadowmapLight shadowmap_light;
+		shadowmap_light.pos= sector_light.pos;
+		shadowmap_light.radius= sector_light.radius;
+		shadowmap_lights.push_back(shadowmap_light);
 
 		++light_count;
 	}
 	end_fill_lights:
+
+	KK_ASSERT(light_count == shadowmap_lights.size());
+
+	// Allocate shadowmaps.
+	const ShadowmapAllocator::LightsForShadowUpdate lights_for_shadow_update=
+		shadowmap_allocator_.UpdateLights(shadowmap_lights);
+
+	for(uint32_t i= 0u; i < light_count; ++i)
+		light_buffer.lights[i].shadowmap_index[0]= shadowmap_allocator_.GetLightShadowmapLayer(shadowmap_lights[i]);
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
 	std::vector<ClusterVolumeBuilder::ElementId> ligts_list_buffer;
@@ -445,13 +462,17 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
 
 	// Draw shadows
-	for(uint32_t i= 0u; i < light_count; ++i)
+	for(const ShadowmapLight& light : lights_for_shadow_update)
 	{
+		const uint32_t layer= shadowmap_allocator_.GetLightShadowmapLayer(light);
+		if(layer == ShadowmapAllocator::c_invalid_shadowmap_layer_index)
+			continue;
+
 		shadowmapper_.DrawToDepthCubemap(
 			command_buffer,
-			i,
-			m_Vec3(light_buffer.lights[i].pos[0], light_buffer.lights[i].pos[1], light_buffer.lights[i].pos[2]),
-			light_buffer.lights[i].data[0],
+			layer,
+			light.pos,
+			1.0f / light.radius,
 			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, visible_sectors); } );
 	}
 

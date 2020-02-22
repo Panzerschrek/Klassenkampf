@@ -16,6 +16,7 @@ public:
 		vk::Format vertex_pos_format);
 	~Shadowmapper();
 
+	uint32_t GetCubemapCount() const;
 	vk::ImageView GetDepthCubemapArrayImageView() const;
 
 	void DrawToDepthCubemap(

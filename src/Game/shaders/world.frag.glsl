@@ -6,7 +6,8 @@ struct Light
 {
 	vec4 pos; // .z contains fade factor for light radius.
 	vec4 color;
-	vec4 data; // .x contains invert radius
+	vec2 data; // .x contains invert radius
+	ivec2 shadowmap_index;
 };
 
 layout(binding= 0) uniform sampler2D tex;
@@ -65,7 +66,7 @@ void main()
 		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
 		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
 		float normalized_distance_to_light= length(vec_to_light) * light.data.x;
-		float shadow_factor= texture(depth_cubemaps_array, vec4(vec_to_light, float(light_index)), normalized_distance_to_light);
+		float shadow_factor= texture(depth_cubemaps_array, vec4(vec_to_light, float(light.shadowmap_index.x)), normalized_distance_to_light);
 
 		l+= light.color.xyz * (cos_factor * fade_factor * shadow_factor);
 	}
