@@ -116,7 +116,8 @@ private:
 	void DrawWorldModelToDepthCubemap(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
-		const VisibleSectors& visible_sectors);
+		const m_Vec3& light_pos,
+		float light_radius);
 
 	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);

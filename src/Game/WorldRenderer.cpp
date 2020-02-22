@@ -473,7 +473,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 			layer,
 			light.pos,
 			1.0f / light.radius,
-			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, visible_sectors); } );
+			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, light.pos, light.radius); } );
 	}
 
 	// Draw
@@ -903,15 +903,26 @@ void WorldRenderer::DrawWorldModel(
 void WorldRenderer::DrawWorldModelToDepthCubemap(
 	const vk::CommandBuffer command_buffer,
 	const WorldModel& world_model,
-	const VisibleSectors& visible_sectors)
+	const m_Vec3& light_pos,
+	const float light_radius)
 {
 	const vk::DeviceSize offsets= 0u;
 	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
 	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
 
-	for(const size_t sector_index : visible_sectors)
-	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
-		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+	for(const Sector& sector : world_model.sectors)
+	{
+		if( light_pos.x + light_radius < sector.bb_min.x ||
+			light_pos.x - light_radius > sector.bb_max.x ||
+			light_pos.y + light_radius < sector.bb_min.y ||
+			light_pos.y - light_radius > sector.bb_max.y ||
+			light_pos.z + light_radius < sector.bb_min.z ||
+			light_pos.z - light_radius > sector.bb_max.z)
+			continue;
+
+		for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+	}
 }
 
 WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world, const SegmentModels& segment_models)
