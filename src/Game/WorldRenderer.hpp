@@ -3,6 +3,7 @@
 #include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
 #include "CameraController.hpp"
+#include "CommandsProcessor.hpp"
 #include "ClusterVolumeBuilder.hpp"
 #include "GPUDataUploader.hpp"
 #include "Shadowmapper.hpp"
@@ -22,6 +23,7 @@ class WorldRenderer final
 public:
 	WorldRenderer(
 		Settings& settings,
+		CommandsProcessor& command_processor,
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,
@@ -124,6 +126,9 @@ private:
 
 	void LoadMaterial(const std::string& material_name);
 
+	void ComandTestLightAdd(const CommandsArguments& args);
+	void CommandTestLightRemove();
+
 private:
 	GPUDataUploader& gpu_data_uploader_;
 	const CameraController& camera_controller_;
@@ -131,6 +136,8 @@ private:
 	const vk::Extent2D viewport_size_;
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 	const uint32_t queue_family_index_;
+
+	CommandsMapConstPtr commands_map_;
 
 	Tonemapper tonemapper_;
 	Shadowmapper shadowmapper_;
@@ -160,6 +167,8 @@ private:
 
 	std::unordered_map<std::string, Material> materials_;
 	std::string test_material_id_;
+
+	std::optional<Sector::Light> test_light_;
 };
 
 } // namespace KK

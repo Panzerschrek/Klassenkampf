@@ -68,6 +68,7 @@ const uint32_t g_depth_cubemaps_array_binding= 4u;
 
 WorldRenderer::WorldRenderer(
 	Settings& settings,
+	CommandsProcessor& command_processor,
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,
@@ -83,6 +84,15 @@ WorldRenderer::WorldRenderer(
 	, cluster_volume_builder_(16u, 8u, 24u)
 	, shadowmap_allocator_(shadowmapper_.GetCubemapCount())
 {
+
+	commands_map_= std::make_shared<CommandsMap>(
+		CommandsMap(
+		{
+			{ "test_light_add", std::bind(&WorldRenderer::ComandTestLightAdd, this, std::placeholders::_1) },
+			{ "test_light_remove", std::bind(&WorldRenderer::CommandTestLightRemove, this) }
+		}));
+	command_processor.RegisterCommands(commands_map_);
+
 	depth_pre_pass_pipeline_= CreateDepthPrePassPipeline();
 	lighting_pass_pipeline_= CreateLightingPassPipeline();
 
@@ -392,6 +402,40 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.w_convert_values[1]= cluster_volume_builder_.GetWConvertValues().y;
 
 	uint32_t light_count= 0u;
+
+	if(test_light_ != std::nullopt)
+	{
+
+		const bool added=
+			cluster_volume_builder_.AddSphere(
+				test_light_->pos,
+				test_light_->radius,
+				ClusterVolumeBuilder::ElementId(light_count));
+		if(added)
+		{
+			LightBuffer::Light& out_light= light_buffer.lights[light_count];
+			out_light.pos[0]= test_light_->pos.x;
+			out_light.pos[1]= test_light_->pos.y;
+			out_light.pos[2]= test_light_->pos.z;
+			out_light.pos[3]= 1.0f / (test_light_->radius * test_light_->radius); // Fade to zero at radius.
+			out_light.color[0]= test_light_->color.x;
+			out_light.color[1]= test_light_->color.y;
+			out_light.color[2]= test_light_->color.z;
+			out_light.color[3]= 0.0f;
+			out_light.data[0]= 1.0f / test_light_->radius;
+			out_light.data[1]= 0.0f;
+			out_light.shadowmap_index[0]= 0;
+			out_light.shadowmap_index[1]= 0;
+
+			ShadowmapLight shadowmap_light;
+			shadowmap_light.pos= test_light_->pos;
+			shadowmap_light.radius= test_light_->radius;
+			shadowmap_lights.push_back(shadowmap_light);
+
+			++light_count;
+		}
+	}
+
 	for(const size_t sector_index : visible_sectors)
 	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
 	{
@@ -1471,6 +1515,27 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
+}
+
+void WorldRenderer::ComandTestLightAdd(const CommandsArguments& args)
+{
+	if(args.size() < 1u)
+	{
+		Log::Info("Too littler arguments. Usage: test_light_add <radius> <power>");
+		return;
+	}
+
+	test_light_.emplace();
+	test_light_->pos= camera_controller_.GetCameraPosition();
+	test_light_->radius= float(std::atof(args[0].c_str()));
+	test_light_->color= m_Vec3(1.0f, 0.5f, 1.0f);
+	if(args.size() >= 2u)
+		test_light_->color*= float(std::atof(args[1].c_str()));
+}
+
+void WorldRenderer::CommandTestLightRemove()
+{
+	test_light_= std::nullopt;
 }
 
 } // namespace KK
