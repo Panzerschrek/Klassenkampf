@@ -8,7 +8,11 @@ namespace KK
 class Shadowmapper final
 {
 public:
-	explicit Shadowmapper(WindowVulkan& window_vulkan);
+	Shadowmapper(
+		WindowVulkan& window_vulkan,
+		size_t vertex_size,
+		size_t vertex_pos_offset,
+		vk::Format vertex_pos_format);
 	~Shadowmapper();
 
 	struct Framebuffer
@@ -35,6 +39,13 @@ private:
 
 	// Framebuffer for each cubemap
 	std::vector<Framebuffer> framebuffers_;
+
+	vk::UniqueDescriptorSetLayout descriptor_set_layout_;
+	vk::UniquePipelineLayout pipeline_layout_;
+	vk::UniquePipeline pipeline_;
+
+	vk::UniqueBuffer uniforms_buffer_;
+	vk::UniqueDeviceMemory uniforms_buffer_memory_;
 };
 
 } // namespace KK

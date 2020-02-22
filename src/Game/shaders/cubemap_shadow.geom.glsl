@@ -10,8 +10,7 @@ layout(binding= 0, std430) buffer readonly matrices_block
 };
 
 layout(location= 0) in vec3 g_pos[];
-
-layout(location= 1) out vec3 f_pos;
+layout(location= 0) out vec3 f_pos;
 
 void main()
 {

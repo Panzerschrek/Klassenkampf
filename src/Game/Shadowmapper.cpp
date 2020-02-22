@@ -1,5 +1,5 @@
 #include "Shadowmapper.hpp"
-#include "Log.hpp"
+#include "../MathLib/Mat.hpp"
 
 
 namespace KK
@@ -17,9 +17,19 @@ namespace Shaders
 
 } // namespace
 
+struct Uniforms
+{
+	m_Mat4 view_matrices[6];
+	m_Vec3 light_pos;
+};
+
 } // namespace
 
-Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
+Shadowmapper::Shadowmapper(
+	WindowVulkan& window_vulkan,
+	const size_t vertex_size,
+	const size_t vertex_pos_offset,
+	const vk::Format vertex_pos_format)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, cubemap_size_(256u)
 	, cubemap_count_(64u)
@@ -169,6 +179,157 @@ Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
 				vk::ShaderModuleCreateFlags(),
 				std::size(Shaders::c_cubemap_shadow_frag_file_content),
 				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_frag_file_content)));
+
+	// Create pipeline
+	{
+		const vk::DescriptorSetLayoutBinding descriptor_set_layout_bindings[]
+		{
+			{
+				0u,
+				vk::DescriptorType::eStorageBuffer,
+				1u,
+				vk::ShaderStageFlagBits::eGeometry,
+				nullptr,
+			},
+		};
+
+		descriptor_set_layout_=
+			vk_device_.createDescriptorSetLayoutUnique(
+				vk::DescriptorSetLayoutCreateInfo(
+					vk::DescriptorSetLayoutCreateFlags(),
+					uint32_t(std::size(descriptor_set_layout_bindings)), descriptor_set_layout_bindings));
+
+		pipeline_layout_=
+			vk_device_.createPipelineLayoutUnique(
+				vk::PipelineLayoutCreateInfo(
+					vk::PipelineLayoutCreateFlags(),
+					1u, &*descriptor_set_layout_,
+					0u, nullptr));
+
+		const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[]
+		{
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eVertex,
+				*shader_vert_,
+				"main"
+			},
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eGeometry,
+				*shader_geom_,
+				"main"
+			},
+			{
+				vk::PipelineShaderStageCreateFlags(),
+				vk::ShaderStageFlagBits::eFragment,
+				*shader_frag_,
+				"main"
+			},
+		};
+
+		const vk::VertexInputBindingDescription vertex_input_binding_description(
+			0u, uint32_t(vertex_size), vk::VertexInputRate::eVertex);
+
+		const vk::VertexInputAttributeDescription vertex_input_attribute_description[]
+		{
+			{0u, 0u, vertex_pos_format, uint32_t(vertex_pos_offset)},
+		};
+
+		const vk::PipelineVertexInputStateCreateInfo pipiline_vertex_input_state_create_info(
+			vk::PipelineVertexInputStateCreateFlags(),
+			1u, &vertex_input_binding_description,
+			uint32_t(std::size(vertex_input_attribute_description)), vertex_input_attribute_description);
+
+		const vk::PipelineInputAssemblyStateCreateInfo pipeline_input_assembly_state_create_info(
+			vk::PipelineInputAssemblyStateCreateFlags(),
+			vk::PrimitiveTopology::eTriangleList);
+
+		const vk::Viewport viewport(0.0f, 0.0f, float(cubemap_size_), float(cubemap_size_), 0.0f, 1.0f);
+		const vk::Rect2D scissor(vk::Offset2D(0, 0), vk::Extent2D(cubemap_size_, cubemap_size_));
+
+		const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
+			vk::PipelineViewportStateCreateFlags(),
+			1u, &viewport,
+			1u, &scissor);
+
+		const vk::PipelineRasterizationStateCreateInfo pipilane_rasterization_state_create_info(
+			vk::PipelineRasterizationStateCreateFlags(),
+			VK_FALSE,
+			VK_FALSE,
+			vk::PolygonMode::eFill,
+			vk::CullModeFlagBits::eBack,
+			vk::FrontFace::eCounterClockwise,
+			VK_FALSE, 0.0f, 0.0f, 0.0f,
+			1.0f);
+
+		const vk::PipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info(
+			vk::PipelineMultisampleStateCreateFlags(),
+			vk::SampleCountFlagBits::e1);
+
+		const vk::PipelineDepthStencilStateCreateInfo pipeline_depth_state_create_info(
+			vk::PipelineDepthStencilStateCreateFlags(),
+			VK_TRUE,
+			VK_TRUE,
+			vk::CompareOp::eLess,
+			VK_FALSE,
+			VK_FALSE,
+			vk::StencilOpState(),
+			vk::StencilOpState(),
+			0.0f,
+			1.0f);
+
+		const vk::PipelineColorBlendAttachmentState pipeline_color_blend_attachment_state;
+
+		const vk::PipelineColorBlendStateCreateInfo pipeline_color_blend_state_create_info(
+			vk::PipelineColorBlendStateCreateFlags(),
+			VK_FALSE,
+			vk::LogicOp::eCopy,
+			1u, &pipeline_color_blend_attachment_state);
+
+		pipeline_=
+			vk_device_.createGraphicsPipelineUnique(
+				nullptr,
+				vk::GraphicsPipelineCreateInfo(
+					vk::PipelineCreateFlags(),
+					uint32_t(std::size(vk_shader_stage_create_info)),
+					vk_shader_stage_create_info,
+					&pipiline_vertex_input_state_create_info,
+					&pipeline_input_assembly_state_create_info,
+					nullptr,
+					&pipieline_viewport_state_create_info,
+					&pipilane_rasterization_state_create_info,
+					&pipeline_multisample_state_create_info,
+					&pipeline_depth_state_create_info,
+					&pipeline_color_blend_state_create_info,
+					nullptr,
+					*pipeline_layout_,
+					*render_pass_,
+					0u));
+	}
+
+	// Create uniforms buffer.
+	{
+		uniforms_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(Uniforms),
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*uniforms_buffer_);
+
+		vk::MemoryAllocateInfo memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		uniforms_buffer_memory_= vk_device_.allocateMemoryUnique(memory_allocate_info);
+		vk_device_.bindBufferMemory(*uniforms_buffer_, *uniforms_buffer_memory_, 0u);
+	}
 }
 
 Shadowmapper::~Shadowmapper()
