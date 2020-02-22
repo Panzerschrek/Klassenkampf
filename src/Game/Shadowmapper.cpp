@@ -420,9 +420,11 @@ void Shadowmapper::DrawToDepthCubemap(
 	for(size_t i= 0u; i < 6u; ++i)
 		uniforms.view_matrices[i]= shift_mat * uniforms.view_matrices[i] * perspective_mat;
 
+	const uint32_t buffer_offset= uint32_t(cubemap_index * sizeof(Uniforms));
+
 	command_buffer.updateBuffer(
 		*uniforms_buffer_,
-		cubemap_index * sizeof(Uniforms),
+		buffer_offset,
 		sizeof(Uniforms),
 		&uniforms);
 
@@ -438,13 +440,12 @@ void Shadowmapper::DrawToDepthCubemap(
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
 
-	const uint32_t dynamic_offset= uint32_t(cubemap_index * sizeof(Uniforms));
 	command_buffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		*pipeline_layout_,
 		0u,
 		1u, &*descriptor_set_,
-		1u, &dynamic_offset);
+		1u, &buffer_offset);
 
 	draw_function();
 
