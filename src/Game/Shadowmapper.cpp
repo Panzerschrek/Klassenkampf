@@ -77,6 +77,62 @@ Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
 					vk::ComponentMapping(),
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, cubemap_count_ * 6u)));
 	}
+
+	{ // Create render pass.
+		const vk::AttachmentDescription attachment_description(
+			vk::AttachmentDescriptionFlags(),
+			depth_format,
+			vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eClear,
+			vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eClear,
+			vk::AttachmentStoreOp::eStore,
+			vk::ImageLayout::eUndefined,
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::AttachmentReference attachment_reference(0u, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+		const vk::SubpassDescription subpass_description(
+			vk::SubpassDescriptionFlags(),
+			vk::PipelineBindPoint::eGraphics,
+			0u, nullptr,
+			0u, nullptr,
+			nullptr,
+			&attachment_reference);
+
+		render_pass_=
+			vk_device_.createRenderPassUnique(
+				vk::RenderPassCreateInfo(
+					vk::RenderPassCreateFlags(),
+					1u, &attachment_description,
+					1u, &subpass_description));
+	}
+
+	// Create framebuffer for each cubemap.
+	for(uint32_t i= 0u; i < cubemap_count_; ++i)
+	{
+		Framebuffer framebuffer;
+
+		framebuffer.image_view=
+			vk_device_.createImageViewUnique(
+				vk::ImageViewCreateInfo(
+					vk::ImageViewCreateFlags(),
+					*depth_cubemap_array_image_,
+					vk::ImageViewType::eCube,
+					depth_format,
+					vk::ComponentMapping(),
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, i * 6u, 6u)));
+
+		framebuffer.framebuffer=
+			vk_device_.createFramebufferUnique(
+				vk::FramebufferCreateInfo(
+					vk::FramebufferCreateFlags(),
+					*render_pass_,
+					1u, &*framebuffer.image_view,
+					cubemap_size_, cubemap_size_, 6u));
+
+		framebuffers_.push_back(std::move(framebuffer));
+	}
 }
 
 Shadowmapper::~Shadowmapper()
