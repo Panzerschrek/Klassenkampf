@@ -23,7 +23,7 @@ struct Uniforms
 {
 	m_Mat4 view_matrices[6];
 	m_Vec3 light_pos;
-	float padding0;
+	float inv_light_radius;
 };
 
 } // namespace
@@ -388,12 +388,14 @@ void Shadowmapper::DrawToDepthCubemap(
 	const vk::CommandBuffer command_buffer,
 	const size_t cubemap_index,
 	const m_Vec3& light_pos,
+	const float inv_light_radius,
 	const std::function<void()>& draw_function)
 {
 	KK_ASSERT(cubemap_index < cubemap_count_);
 
 	Uniforms uniforms;
 	uniforms.light_pos= light_pos;
+	uniforms.inv_light_radius= inv_light_radius;
 
 	m_Mat4 perspective_mat, shift_mat;
 	perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.125f, 128.0f);

@@ -35,6 +35,7 @@ struct LightBuffer
 	{
 		float pos[4];
 		float color[4];
+		float data[4];
 	};
 
 	static constexpr size_t c_max_lights= 256u;
@@ -46,8 +47,8 @@ struct LightBuffer
 	Light lights[c_max_lights];
 };
 
-static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 48u + LightBuffer::c_max_lights * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer::Light) == 48u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 48u + LightBuffer::c_max_lights * 48u, "Invalid size");
 
 struct WorldVertex
 {
@@ -411,6 +412,10 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.color[1]= sector_light.color.y;
 		out_light.color[2]= sector_light.color.z;
 		out_light.color[3]= 0.0f;
+		out_light.data[0]= 1.0f / sector_light.radius;
+		out_light.data[1]= 0.0f;
+		out_light.data[2]= 0.0f;
+		out_light.data[3]= 0.0f;
 
 		++light_count;
 	}
@@ -446,6 +451,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 			command_buffer,
 			i,
 			m_Vec3(light_buffer.lights[i].pos[0], light_buffer.lights[i].pos[1], light_buffer.lights[i].pos[2]),
+			light_buffer.lights[i].data[0],
 			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, visible_sectors); } );
 	}
 

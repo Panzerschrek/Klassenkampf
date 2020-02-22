@@ -22,6 +22,7 @@ public:
 		vk::CommandBuffer command_buffer,
 		size_t cubemap_index,
 		const m_Vec3& light_pos,
+		float inv_light_radius,
 		const std::function<void()>& draw_function);
 
 private:
