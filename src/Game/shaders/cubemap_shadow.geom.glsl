@@ -10,21 +10,23 @@ layout(binding= 0, std430) buffer readonly matrices_block
 };
 
 layout(location= 0) in vec3 g_pos[];
+
 layout(location= 0) out vec3 f_pos;
 
 void main()
 {
-	gl_Layer= gl_InvocationID;
+	int i= gl_InvocationID;
+	gl_Layer= i;
 
-	gl_Position= view_matrices[gl_InvocationID] * vec4(g_pos[0], 1.0);
+	gl_Position= view_matrices[i] * vec4(g_pos[0], 1.0);
 	f_pos= g_pos[0] - light_pos;
 	EmitVertex();
 
-	gl_Position= view_matrices[gl_InvocationID] * vec4(g_pos[1], 1.0);
+	gl_Position= view_matrices[i] * vec4(g_pos[1], 1.0);
 	f_pos= g_pos[1] - light_pos;
 	EmitVertex();
 
-	gl_Position= view_matrices[gl_InvocationID] * vec4(g_pos[2], 1.0);
+	gl_Position= view_matrices[i] * vec4(g_pos[2], 1.0);
 	f_pos= g_pos[2] - light_pos;
 	EmitVertex();
 

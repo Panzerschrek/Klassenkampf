@@ -23,6 +23,7 @@ struct Uniforms
 {
 	m_Mat4 view_matrices[6];
 	m_Vec3 light_pos;
+	float padding0;
 };
 
 } // namespace
@@ -188,7 +189,7 @@ Shadowmapper::Shadowmapper(
 		{
 			{
 				0u,
-				vk::DescriptorType::eStorageBuffer,
+				vk::DescriptorType::eStorageBufferDynamic,
 				1u,
 				vk::ShaderStageFlagBits::eGeometry,
 				nullptr,
@@ -316,7 +317,7 @@ Shadowmapper::Shadowmapper(
 			vk_device_.createBufferUnique(
 				vk::BufferCreateInfo(
 					vk::BufferCreateFlags(),
-					sizeof(Uniforms),
+					sizeof(Uniforms) * cubemap_count_,
 					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
 
 		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*uniforms_buffer_);
@@ -334,7 +335,7 @@ Shadowmapper::Shadowmapper(
 	}
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eStorageBuffer, 1u);
+	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eStorageBufferDynamic, 1u);
 	descriptor_set_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
@@ -362,7 +363,7 @@ Shadowmapper::Shadowmapper(
 			0u,
 			0u,
 			1u,
-			vk::DescriptorType::eStorageBuffer,
+			vk::DescriptorType::eStorageBufferDynamic,
 			nullptr,
 			&descriptor_buffer_info,
 			nullptr);
@@ -395,7 +396,7 @@ void Shadowmapper::DrawToDepthCubemap(
 	uniforms.light_pos= light_pos;
 
 	m_Mat4 perspective_mat, shift_mat;
-	perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.0625f, 256.0f);
+	perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.125f, 128.0f);
 	shift_mat.Translate(-light_pos);
 
 	m_Mat4 rotate_z_mat;
@@ -414,8 +415,8 @@ void Shadowmapper::DrawToDepthCubemap(
 
 	command_buffer.updateBuffer(
 		*uniforms_buffer_,
-		0u,
-		sizeof(uniforms),
+		cubemap_index * sizeof(Uniforms),
+		sizeof(Uniforms),
 		&uniforms);
 
 	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
@@ -429,6 +430,14 @@ void Shadowmapper::DrawToDepthCubemap(
 		vk::SubpassContents::eInline);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+
+	const uint32_t dynamic_offset= uint32_t(cubemap_index * sizeof(Uniforms));
+	command_buffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*pipeline_layout_,
+		0u,
+		1u, &*descriptor_set_,
+		1u, &dynamic_offset);
 
 	draw_function();
 

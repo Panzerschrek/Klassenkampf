@@ -442,11 +442,10 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	// Draw shadows
 	for(uint32_t i= 0u; i < light_count; ++i)
 	{
-		const m_Vec3 pos(light_buffer.lights[i].pos[0], light_buffer.lights[i].pos[1], light_buffer.lights[i].pos[2]);
 		shadowmapper_.DrawToDepthCubemap(
 			command_buffer,
 			i,
-			pos,
+			m_Vec3(light_buffer.lights[i].pos[0], light_buffer.lights[i].pos[1], light_buffer.lights[i].pos[2]),
 			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, visible_sectors); } );
 	}
 
@@ -624,6 +623,26 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	pipeline.depth_cubemap_image_sampler=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 	{
@@ -660,7 +679,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.image_sampler,
+			&*pipeline.depth_cubemap_image_sampler,
 		},
 	};
 

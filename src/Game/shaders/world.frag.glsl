@@ -56,17 +56,18 @@ void main()
 	int current_light_count= light_list[offset];
 	for(int i= 0; i < current_light_count; ++i)
 	{
-		Light light= lights[ int(light_list[offset + 1 + i]) ];
+		int light_index= int(light_list[offset + 1 + i]);
+		Light light= lights[light_index];
 		vec3 vec_to_light= light.pos.xyz - f_pos;
 		vec3 vec_to_light_normalized= normalize(vec_to_light);
 		float vec_to_light_square_length= dot(vec_to_light, vec_to_light);
 		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
 		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
 
-		float shadowmap_value= texture(depth_cubemaps_array, vec4(vec_to_light_normalized, float(offset + 1 + i))).x;
-		float shadow_factor= step(shadowmap_value, length(vec_to_light) / 64.0);
+		float shadowmap_value= texture(depth_cubemaps_array, vec4(vec_to_light, float(light_index))).x;
+		float shadow_factor= step(length(vec_to_light) / 64.0, shadowmap_value);
 
-		l+= light.color.xyz * (cos_factor * fade_factor * shadowmap_value);
+		l+= light.color.xyz * (cos_factor * fade_factor * shadow_factor);
 	}
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 
