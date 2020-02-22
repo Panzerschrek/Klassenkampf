@@ -60,6 +60,7 @@ const uint32_t g_tex_uniform_binding= 0u;
 const uint32_t g_light_buffer_binding= 1u;
 const uint32_t g_cluster_offset_buffer_binding= 2u;
 const uint32_t g_lights_list_buffer_binding= 3u;
+const uint32_t g_depth_cubemaps_array_binding= 4u;
 
 } // namespace
 
@@ -257,6 +258,11 @@ WorldRenderer::WorldRenderer(
 			0u,
 			sizeof(uint8_t) * lights_list_buffer_size_);
 
+		const vk::DescriptorImageInfo descriptor_depth_cubemaps_array_image_info(
+			vk::Sampler(),
+			shadowmapper_.GetDepthCubemapArrayImageView(),
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
 			{
@@ -297,6 +303,16 @@ WorldRenderer::WorldRenderer(
 				vk::DescriptorType::eStorageBuffer,
 				nullptr,
 				&lights_list_buffer_info,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_depth_cubemaps_array_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_depth_cubemaps_array_image_info,
+				nullptr,
 				nullptr
 			},
 		};
@@ -627,6 +643,13 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
 			nullptr,
+		},
+		{
+			g_depth_cubemaps_array_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*pipeline.image_sampler,
 		},
 	};
 

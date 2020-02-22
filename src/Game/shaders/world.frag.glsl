@@ -30,6 +30,8 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 	uint8_t light_list[];
 };
 
+layout(binding= 4) uniform samplerCubeArray depth_cubemaps_array;
+
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
 layout(location= 2) in vec3 f_pos; // World space position.

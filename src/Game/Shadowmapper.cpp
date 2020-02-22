@@ -376,4 +376,9 @@ Shadowmapper::~Shadowmapper()
 	vk_device_.waitIdle();
 }
 
+vk::ImageView Shadowmapper::GetDepthCubemapArrayImageView() const
+{
+	return *depth_cubemap_array_image_view_;
+}
+
 } // namespace KK

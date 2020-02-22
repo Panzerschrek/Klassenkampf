@@ -15,6 +15,9 @@ public:
 		vk::Format vertex_pos_format);
 	~Shadowmapper();
 
+	vk::ImageView GetDepthCubemapArrayImageView() const;
+
+private:
 	struct Framebuffer
 	{
 		vk::UniqueFramebuffer framebuffer;
