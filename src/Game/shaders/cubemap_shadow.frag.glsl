@@ -4,5 +4,5 @@ layout(location= 0) in vec3 f_pos; // World space position, relative to light so
 
 void main()
 {
-	gl_FragDepth= length(f_pos) / 64.0f;
+	gl_FragDepth= (length(f_pos) + 0.125) / 64.0f;
 }

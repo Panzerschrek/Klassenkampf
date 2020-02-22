@@ -1,5 +1,7 @@
 #include "Shadowmapper.hpp"
 #include "../MathLib/Mat.hpp"
+#include "../MathLib/MathConstants.hpp"
+#include "Assert.hpp"
 
 
 namespace KK
@@ -32,7 +34,7 @@ Shadowmapper::Shadowmapper(
 	const vk::Format vertex_pos_format)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, cubemap_size_(256u)
-	, cubemap_count_(64u)
+	, cubemap_count_(256u)
 {
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
 
@@ -379,6 +381,58 @@ Shadowmapper::~Shadowmapper()
 vk::ImageView Shadowmapper::GetDepthCubemapArrayImageView() const
 {
 	return *depth_cubemap_array_image_view_;
+}
+
+void Shadowmapper::DrawToDepthCubemap(
+	const vk::CommandBuffer command_buffer,
+	const size_t cubemap_index,
+	const m_Vec3& light_pos,
+	const std::function<void()>& draw_function)
+{
+	KK_ASSERT(cubemap_index < cubemap_count_);
+
+	Uniforms uniforms;
+	uniforms.light_pos= light_pos;
+
+	m_Mat4 perspective_mat, shift_mat;
+	perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.0625f, 256.0f);
+	shift_mat.Translate(-light_pos);
+
+	m_Mat4 rotate_z_mat;
+	rotate_z_mat.RotateZ(MathConstants::pi);
+	uniforms.view_matrices[0].RotateY(+MathConstants::half_pi);
+	uniforms.view_matrices[1].RotateY(-MathConstants::half_pi);
+	uniforms.view_matrices[2].RotateX(-MathConstants::half_pi);
+	uniforms.view_matrices[2]*= rotate_z_mat;
+	uniforms.view_matrices[3].RotateX(+MathConstants::half_pi);
+	uniforms.view_matrices[3]*= rotate_z_mat;
+	uniforms.view_matrices[4].RotateY(-MathConstants::pi);
+	uniforms.view_matrices[5].MakeIdentity();
+
+	for(size_t i= 0u; i < 6u; ++i)
+		uniforms.view_matrices[i]= shift_mat * uniforms.view_matrices[i] * perspective_mat;
+
+	command_buffer.updateBuffer(
+		*uniforms_buffer_,
+		0u,
+		sizeof(uniforms),
+		&uniforms);
+
+	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
+
+	command_buffer.beginRenderPass(
+		vk::RenderPassBeginInfo(
+			*render_pass_,
+			*framebuffers_[cubemap_index].framebuffer,
+			vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(cubemap_size_, cubemap_size_)),
+			1u, &clear_value),
+		vk::SubpassContents::eInline);
+
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+
+	draw_function();
+
+	command_buffer.endRenderPass();
 }
 
 } // namespace KK

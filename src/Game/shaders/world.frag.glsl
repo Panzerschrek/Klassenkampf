@@ -63,7 +63,10 @@ void main()
 		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
 		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
 
-		l+= light.color.xyz * (cos_factor * fade_factor);
+		float shadowmap_value= texture(depth_cubemaps_array, vec4(vec_to_light_normalized, float(offset + 1 + i))).x;
+		float shadow_factor= step(shadowmap_value, length(vec_to_light) / 64.0);
+
+		l+= light.color.xyz * (cos_factor * fade_factor * shadowmap_value);
 	}
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 

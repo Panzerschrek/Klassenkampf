@@ -439,6 +439,17 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
 	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
 
+	// Draw shadows
+	for(uint32_t i= 0u; i < light_count; ++i)
+	{
+		const m_Vec3 pos(light_buffer.lights[i].pos[0], light_buffer.lights[i].pos[1], light_buffer.lights[i].pos[2]);
+		shadowmapper_.DrawToDepthCubemap(
+			command_buffer,
+			i,
+			pos,
+			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, visible_sectors); } );
+	}
+
 	// Draw
 	tonemapper_.DoRenderPass(
 		command_buffer,
@@ -841,6 +852,20 @@ void WorldRenderer::DrawWorldModel(
 			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 		}
 	}
+}
+
+void WorldRenderer::DrawWorldModelToDepthCubemap(
+	const vk::CommandBuffer command_buffer,
+	const WorldModel& world_model,
+	const VisibleSectors& visible_sectors)
+{
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const size_t sector_index : visible_sectors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 }
 
 WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world, const SegmentModels& segment_models)

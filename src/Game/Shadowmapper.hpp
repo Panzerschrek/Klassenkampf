@@ -1,4 +1,5 @@
 #pragma once
+#include "../MathLib/Vec.hpp"
 #include "WindowVulkan.hpp"
 
 
@@ -16,6 +17,12 @@ public:
 	~Shadowmapper();
 
 	vk::ImageView GetDepthCubemapArrayImageView() const;
+
+	void DrawToDepthCubemap(
+		vk::CommandBuffer command_buffer,
+		size_t cubemap_index,
+		const m_Vec3& light_pos,
+		const std::function<void()>& draw_function);
 
 private:
 	struct Framebuffer
