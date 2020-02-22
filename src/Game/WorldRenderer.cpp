@@ -76,6 +76,7 @@ WorldRenderer::WorldRenderer(
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(settings, window_vulkan)
+	, shadowmapper_(window_vulkan)
 	, cluster_volume_builder_(16u, 8u, 24u)
 {
 	depth_pre_pass_pipeline_= CreateDepthPrePassPipeline();

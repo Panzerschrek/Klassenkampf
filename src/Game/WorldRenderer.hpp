@@ -5,6 +5,7 @@
 #include "CameraController.hpp"
 #include "ClusterVolumeBuilder.hpp"
 #include "GPUDataUploader.hpp"
+#include "Shadowmapper.hpp"
 #include "Tonemapper.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
@@ -124,6 +125,7 @@ private:
 	const uint32_t queue_family_index_;
 
 	Tonemapper tonemapper_;
+	Shadowmapper shadowmapper_;
 	ClusterVolumeBuilder cluster_volume_builder_;
 
 	Pipeline depth_pre_pass_pipeline_;
