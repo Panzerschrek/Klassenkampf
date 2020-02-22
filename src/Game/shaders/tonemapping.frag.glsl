@@ -8,6 +8,7 @@ layout(push_constant) uniform uniforms_block
 };
 
 layout(location= 0) in vec2 f_tex_coord; // In range [-1; 1]
+layout(location= 1) in flat float f_exposure;
 
 layout(location = 0) out vec4 out_color;
 
@@ -37,9 +38,7 @@ void main()
 			texture(tex, tex_coord_b).b
 			);
 
-	float brightness= dot(textureLod(tex, vec2(0.5, 0.5), 16).rgb, vec3(0.299, 0.587, 0.114));
-	float exposure= 0.6 * inversesqrt(brightness + 0.001);
-	color= tonemapping_function(color, exposure);
+	color= tonemapping_function(color, f_exposure);
 
 	out_color= vec4(color, 1.0);
 }
