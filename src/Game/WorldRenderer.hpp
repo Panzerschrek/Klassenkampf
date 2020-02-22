@@ -19,6 +19,7 @@ class WorldRenderer final
 {
 public:
 	WorldRenderer(
+		Settings& settings,
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,

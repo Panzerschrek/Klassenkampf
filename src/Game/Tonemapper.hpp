@@ -1,4 +1,5 @@
 #pragma once
+#include "Settings.hpp"
 #include "WindowVulkan.hpp"
 
 
@@ -8,7 +9,7 @@ namespace KK
 class Tonemapper final
 {
 public:
-	explicit Tonemapper(WindowVulkan& window_vulkan);
+	Tonemapper(Settings& settings, WindowVulkan& window_vulkan);
 	~Tonemapper();
 
 	vk::Extent2D GetFramebufferSize() const;
@@ -19,6 +20,7 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
+	Settings& settings_;
 	const vk::Device vk_device_;
 	const uint32_t queue_family_index_;
 	const vk::SampleCountFlagBits msaa_sample_count_;

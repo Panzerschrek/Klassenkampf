@@ -2,6 +2,11 @@
 
 layout(binding= 0) uniform sampler2D tex;
 
+layout(push_constant) uniform uniforms_block
+{
+	vec4 deform_factor;
+};
+
 layout(location= 0) in vec2 f_tex_coord; // In range [-1; 1]
 
 layout(location = 0) out vec4 out_color;
@@ -20,11 +25,10 @@ vec3 tonemapping_function(vec3 x, float exposure)
 
 void main()
 {
-	const vec3 k= vec3(9.0, 8.5, 8.0);
 	float scale_base= dot(f_tex_coord, f_tex_coord);
-	vec2 tex_coord_r= f_tex_coord * ((scale_base + k.r) * (0.5 / (2.0 + k.r))) + vec2(0.5, 0.5);
-	vec2 tex_coord_g= f_tex_coord * ((scale_base + k.g) * (0.5 / (2.0 + k.g))) + vec2(0.5, 0.5);
-	vec2 tex_coord_b= f_tex_coord * ((scale_base + k.b) * (0.5 / (2.0 + k.b))) + vec2(0.5, 0.5);
+	vec2 tex_coord_r= f_tex_coord * ((scale_base + deform_factor.r) * (0.5 / (2.0 + deform_factor.r))) + vec2(0.5, 0.5);
+	vec2 tex_coord_g= f_tex_coord * ((scale_base + deform_factor.g) * (0.5 / (2.0 + deform_factor.g))) + vec2(0.5, 0.5);
+	vec2 tex_coord_b= f_tex_coord * ((scale_base + deform_factor.b) * (0.5 / (2.0 + deform_factor.b))) + vec2(0.5, 0.5);
 
 	vec3 color=
 		vec3(

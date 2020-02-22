@@ -64,6 +64,7 @@ const uint32_t g_lights_list_buffer_binding= 3u;
 } // namespace
 
 WorldRenderer::WorldRenderer(
+	Settings& settings,
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,
@@ -74,7 +75,7 @@ WorldRenderer::WorldRenderer(
 	, viewport_size_(window_vulkan.GetViewportSize())
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
-	, tonemapper_(window_vulkan)
+	, tonemapper_(settings, window_vulkan)
 	, cluster_volume_builder_(16u, 8u, 24u)
 {
 	depth_pre_pass_pipeline_= CreateDepthPrePassPipeline();
