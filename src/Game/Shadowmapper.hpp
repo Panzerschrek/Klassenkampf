@@ -44,6 +44,9 @@ private:
 	vk::UniquePipelineLayout pipeline_layout_;
 	vk::UniquePipeline pipeline_;
 
+	vk::UniqueDescriptorPool descriptor_set_pool_;
+	vk::UniqueDescriptorSet descriptor_set_;
+
 	vk::UniqueBuffer uniforms_buffer_;
 	vk::UniqueDeviceMemory uniforms_buffer_memory_;
 };

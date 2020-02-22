@@ -330,6 +330,44 @@ Shadowmapper::Shadowmapper(
 		uniforms_buffer_memory_= vk_device_.allocateMemoryUnique(memory_allocate_info);
 		vk_device_.bindBufferMemory(*uniforms_buffer_, *uniforms_buffer_memory_, 0u);
 	}
+
+	// Create descriptor set pool.
+	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eStorageBuffer, 1u);
+	descriptor_set_pool_=
+		vk_device_.createDescriptorPoolUnique(
+			vk::DescriptorPoolCreateInfo(
+				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+				1u, // max sets.
+				1u, &descriptor_pool_size));
+
+	// Create descriptor set.
+	descriptor_set_=
+		std::move(
+		vk_device_.allocateDescriptorSetsUnique(
+			vk::DescriptorSetAllocateInfo(
+				*descriptor_set_pool_,
+				1u, &*descriptor_set_layout_)).front());
+
+	// Write descriptor set.
+	{
+		const vk::DescriptorBufferInfo descriptor_buffer_info(
+			*uniforms_buffer_,
+			0u,
+			sizeof(Uniforms));
+
+		const vk::WriteDescriptorSet write_descriptor_set(
+			*descriptor_set_,
+			0u,
+			0u,
+			1u,
+			vk::DescriptorType::eStorageBuffer,
+			nullptr,
+			&descriptor_buffer_info,
+			nullptr);
+		vk_device_.updateDescriptorSets(
+			1u, &write_descriptor_set,
+			0u, nullptr);
+	}
 }
 
 Shadowmapper::~Shadowmapper()
