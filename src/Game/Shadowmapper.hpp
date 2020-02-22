@@ -29,6 +29,10 @@ private:
 
 	vk::UniqueRenderPass render_pass_;
 
+	vk::UniqueShaderModule shader_vert_;
+	vk::UniqueShaderModule shader_geom_;
+	vk::UniqueShaderModule shader_frag_;
+
 	// Framebuffer for each cubemap
 	std::vector<Framebuffer> framebuffers_;
 };

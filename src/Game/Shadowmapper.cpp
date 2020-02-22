@@ -5,6 +5,20 @@
 namespace KK
 {
 
+namespace
+{
+
+namespace Shaders
+{
+
+#include "shaders/cubemap_shadow.vert.sprv.h"
+#include "shaders/cubemap_shadow.geom.sprv.h"
+#include "shaders/cubemap_shadow.frag.sprv.h"
+
+} // namespace
+
+} // namespace
+
 Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
 	: vk_device_(window_vulkan.GetVulkanDevice())
 	, cubemap_size_(256u)
@@ -133,6 +147,28 @@ Shadowmapper::Shadowmapper(WindowVulkan& window_vulkan)
 
 		framebuffers_.push_back(std::move(framebuffer));
 	}
+
+	// Create shaders
+	shader_vert_=
+		vk_device_.createShaderModuleUnique(
+			vk::ShaderModuleCreateInfo(
+				vk::ShaderModuleCreateFlags(),
+				std::size(Shaders::c_cubemap_shadow_vert_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_vert_file_content)));
+
+	shader_geom_=
+		vk_device_.createShaderModuleUnique(
+			vk::ShaderModuleCreateInfo(
+				vk::ShaderModuleCreateFlags(),
+				std::size(Shaders::c_cubemap_shadow_geom_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_geom_file_content)));
+
+	shader_frag_=
+		vk_device_.createShaderModuleUnique(
+			vk::ShaderModuleCreateInfo(
+				vk::ShaderModuleCreateFlags(),
+				std::size(Shaders::c_cubemap_shadow_frag_file_content),
+				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_frag_file_content)));
 }
 
 Shadowmapper::~Shadowmapper()
