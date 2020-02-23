@@ -72,18 +72,10 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights2(
 	// Calculate detail level.
 	for(LightExtra& light : lights_extra)
 	{
+		// TODO - formulas here are totaly wrong, do real math to calculate detalization.
 		const float dist= (light.light.pos - cam_pos).GetLength();
-		/*
-		if(dist <= light.light.radius)
-			light.detail_level= 0.0f;
-		else
-		{
-			const float dist_k= 1.0f / 2.0f;
-			light.detail_level= std::max(0.0f, std::log2((dist - light.light.radius) * dist_k));
-		}
-		*/
-		const float dist_k= 1.0f / 2.0f;
-		light.detail_level= std::log2(std::max(1.0f, dist * dist_k));
+		const float dist_k= 3.0f;
+		light.detail_level= std::log2(std::max(dist_k * dist / light.light.radius, 1.0f));
 	}
 
 	// Sort by detail level.
