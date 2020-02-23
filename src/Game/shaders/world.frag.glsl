@@ -32,7 +32,7 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 	uint8_t light_list[];
 };
 
-layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array;
+layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
@@ -66,7 +66,17 @@ void main()
 		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
 		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
 		float normalized_distance_to_light= length(vec_to_light) * light.data.x;
-		float shadow_factor= texture(depth_cubemaps_array, vec4(vec_to_light, float(light.shadowmap_index.x)), normalized_distance_to_light);
+
+		vec4 shadowmap_coord= vec4(vec_to_light, float(light.shadowmap_index.y));
+		float shadow_factor= 1.0;
+		if(light.shadowmap_index.x == 0)
+			shadow_factor= texture(depth_cubemaps_array[0], shadowmap_coord, normalized_distance_to_light);
+		else if(light.shadowmap_index.x == 1)
+			shadow_factor= texture(depth_cubemaps_array[1], shadowmap_coord, normalized_distance_to_light);
+		else if(light.shadowmap_index.x == 2)
+			shadow_factor= texture(depth_cubemaps_array[2], shadowmap_coord, normalized_distance_to_light);
+		else if(light.shadowmap_index.x == 3)
+			shadow_factor= texture(depth_cubemaps_array[3], shadowmap_coord, normalized_distance_to_light);
 
 		l+= light.color.xyz * (cos_factor * fade_factor * shadow_factor);
 	}

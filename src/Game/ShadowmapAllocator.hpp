@@ -1,5 +1,6 @@
 #pragma once
 #include "../MathLib/Vec.hpp"
+#include "ShadowmapSize.hpp"
 #include <unordered_map>
 #include <vector>
 
@@ -23,19 +24,19 @@ struct ShadowmapLightHasher
 class ShadowmapAllocator
 {
 public:
-	explicit ShadowmapAllocator(uint32_t shadowmap_layer_count);
+	explicit ShadowmapAllocator(ShadowmapSize shadowmap_size);
 
-	static constexpr uint32_t c_invalid_shadowmap_layer_index= ~0u;
+	static constexpr ShadowmapLayerIndex c_invalid_shadowmap_layer_index= ShadowmapLayerIndex(~0u, ~0u);
 
 	using LightsForShadowUpdate= std::vector<ShadowmapLight>;
-	LightsForShadowUpdate UpdateLights(const std::vector<ShadowmapLight>& lights);
+	LightsForShadowUpdate UpdateLights2(const std::vector<ShadowmapLight>& lights, const m_Vec3& cam_pos);
 
-	uint32_t GetLightShadowmapLayer(const ShadowmapLight& light) const;
+	ShadowmapLayerIndex GetLightShadowmapLayer(const ShadowmapLight& light) const;
 
 private:
 	struct LightData
 	{
-		uint32_t shadowmap_layer= c_invalid_shadowmap_layer_index;
+		ShadowmapLayerIndex shadowmap_layer= c_invalid_shadowmap_layer_index;
 		uint32_t last_used_frame_number= 0u;
 	};
 
@@ -47,10 +48,15 @@ private:
 	using LightsSet= std::unordered_map<ShadowmapLight, LightData, ShadowmapLightHasher>;
 
 private:
-	const uint32_t shadowmap_layer_count_;
+
+	ShadowmapLayerIndex AllocateLayer(uint32_t detail_level);
+	void FreeLayer(ShadowmapLayerIndex layer);
+
+private:
+	const ShadowmapSize shadowmap_size_;
 	uint32_t frame_number_= 0u;
 	LightsSet lights_set_;
-	std::vector<uint32_t> free_layers_;
+	std::vector< std::vector<uint32_t> > free_layers_;
 };
 
 } // namespace KK

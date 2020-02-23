@@ -396,24 +396,38 @@ Shadowmapper::~Shadowmapper()
 	vk_device_.waitIdle();
 }
 
-uint32_t Shadowmapper::GetCubemapCount() const
+ShadowmapSize Shadowmapper::GetSize() const
 {
-	return detail_levels_.back().cubemap_count;
+	ShadowmapSize result;
+	for(const DetailLevel& detail_level : detail_levels_)
+	{
+		ShadowmapLevelSize size;
+		size.size= detail_level.cubemap_size;
+		size.count= detail_level.cubemap_count;
+		result.push_back(std::move(size));
+	}
+	return result;
 }
 
-vk::ImageView Shadowmapper::GetDepthCubemapArrayImageView() const
+std::vector<vk::ImageView> Shadowmapper::GetDepthCubemapArrayImagesView() const
 {
-	return *detail_levels_.back().depth_cubemap_array_image_view;
+	std::vector<vk::ImageView> result;
+	for(const DetailLevel& detail_level : detail_levels_)
+		result.push_back(*detail_level.depth_cubemap_array_image_view);
+
+	return result;
 }
 
 void Shadowmapper::DrawToDepthCubemap(
 	const vk::CommandBuffer command_buffer,
-	const size_t cubemap_index,
+	const ShadowmapLayerIndex layer_index,
 	const m_Vec3& light_pos,
 	const float inv_light_radius,
 	const std::function<void()>& draw_function)
 {
-	DetailLevel& detail_level= detail_levels_.back();
+	KK_ASSERT(layer_index.first < detail_levels_.size());
+	DetailLevel& detail_level= detail_levels_[layer_index.first];
+	const uint32_t cubemap_index= layer_index.second;
 	KK_ASSERT(cubemap_index < detail_level.cubemap_count);
 
 	Uniforms uniforms;

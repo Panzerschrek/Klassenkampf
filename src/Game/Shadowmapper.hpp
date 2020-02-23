@@ -1,5 +1,6 @@
 #pragma once
 #include "../MathLib/Vec.hpp"
+#include "ShadowmapSize.hpp"
 #include "WindowVulkan.hpp"
 
 
@@ -16,12 +17,12 @@ public:
 		vk::Format vertex_pos_format);
 	~Shadowmapper();
 
-	uint32_t GetCubemapCount() const;
-	vk::ImageView GetDepthCubemapArrayImageView() const;
+	ShadowmapSize GetSize() const;
+	std::vector<vk::ImageView> GetDepthCubemapArrayImagesView() const;
 
 	void DrawToDepthCubemap(
 		vk::CommandBuffer command_buffer,
-		size_t cubemap_index,
+		ShadowmapLayerIndex layer_index,
 		const m_Vec3& light_pos,
 		float inv_light_radius,
 		const std::function<void()>& draw_function);

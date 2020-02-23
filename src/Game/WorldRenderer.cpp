@@ -82,7 +82,7 @@ WorldRenderer::WorldRenderer(
 	, tonemapper_(settings, window_vulkan)
 	, shadowmapper_(window_vulkan, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
 	, cluster_volume_builder_(16u, 8u, 24u)
-	, shadowmap_allocator_(shadowmapper_.GetCubemapCount())
+	, shadowmap_allocator_(shadowmapper_.GetSize())
 {
 
 	commands_map_= std::make_shared<CommandsMap>(
@@ -221,7 +221,7 @@ WorldRenderer::WorldRenderer(
 	{
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size())
+			uint32_t(materials_.size() * (1u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
 		},
 		{
 			vk::DescriptorType::eStorageBuffer,
@@ -271,10 +271,16 @@ WorldRenderer::WorldRenderer(
 			0u,
 			sizeof(uint8_t) * lights_list_buffer_size_);
 
-		const vk::DescriptorImageInfo descriptor_depth_cubemaps_array_image_info(
-			vk::Sampler(),
-			shadowmapper_.GetDepthCubemapArrayImageView(),
-			vk::ImageLayout::eShaderReadOnlyOptimal);
+		const std::vector<vk::ImageView> depth_cubemap_array_images_view= shadowmapper_.GetDepthCubemapArrayImagesView();
+		std::vector<vk::DescriptorImageInfo> descriptor_depth_cubemaps_array_image_infos;
+		for(const vk::ImageView& image_view : depth_cubemap_array_images_view)
+		{
+			descriptor_depth_cubemaps_array_image_infos.push_back(
+				vk::DescriptorImageInfo(
+					vk::Sampler(),
+					image_view,
+					vk::ImageLayout::eShaderReadOnlyOptimal));
+		}
 
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
@@ -322,9 +328,9 @@ WorldRenderer::WorldRenderer(
 				*material.descriptor_set,
 				g_depth_cubemaps_array_binding,
 				0u,
-				1u,
+				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
 				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_depth_cubemaps_array_image_info,
+				descriptor_depth_cubemaps_array_image_infos.data(),
 				nullptr,
 				nullptr
 			},
@@ -477,10 +483,14 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 
 	// Allocate shadowmaps.
 	const ShadowmapAllocator::LightsForShadowUpdate lights_for_shadow_update=
-		shadowmap_allocator_.UpdateLights(shadowmap_lights);
+		shadowmap_allocator_.UpdateLights2(shadowmap_lights, cam_pos);
 
 	for(uint32_t i= 0u; i < light_count; ++i)
-		light_buffer.lights[i].shadowmap_index[0]= shadowmap_allocator_.GetLightShadowmapLayer(shadowmap_lights[i]);
+	{
+		const auto layer_index= shadowmap_allocator_.GetLightShadowmapLayer(shadowmap_lights[i]);
+		light_buffer.lights[i].shadowmap_index[0]= layer_index.first;
+		light_buffer.lights[i].shadowmap_index[1]= layer_index.second;
+	}
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
 	std::vector<ClusterVolumeBuilder::ElementId> ligts_list_buffer;
@@ -508,7 +518,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	// Draw shadows
 	for(const ShadowmapLight& light : lights_for_shadow_update)
 	{
-		const uint32_t layer= shadowmap_allocator_.GetLightShadowmapLayer(light);
+		const ShadowmapLayerIndex layer= shadowmap_allocator_.GetLightShadowmapLayer(light);
 		if(layer == ShadowmapAllocator::c_invalid_shadowmap_layer_index)
 			continue;
 
@@ -714,6 +724,9 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	std::vector<vk::Sampler> depth_cubemap_image_samplers;
+	depth_cubemap_image_samplers.resize(shadowmapper_.GetDepthCubemapArrayImagesView().size(), *pipeline.depth_cubemap_image_sampler);
+
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 	{
@@ -748,9 +761,9 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		{
 			g_depth_cubemaps_array_binding,
 			vk::DescriptorType::eCombinedImageSampler,
-			1u,
+			uint32_t(depth_cubemap_image_samplers.size()),
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.depth_cubemap_image_sampler,
+			depth_cubemap_image_samplers.data(),
 		},
 	};
 
