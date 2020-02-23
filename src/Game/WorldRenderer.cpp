@@ -271,16 +271,13 @@ WorldRenderer::WorldRenderer(
 			0u,
 			sizeof(uint8_t) * lights_list_buffer_size_);
 
-		const std::vector<vk::ImageView> depth_cubemap_array_images_view= shadowmapper_.GetDepthCubemapArrayImagesView();
 		std::vector<vk::DescriptorImageInfo> descriptor_depth_cubemaps_array_image_infos;
-		for(const vk::ImageView& image_view : depth_cubemap_array_images_view)
-		{
+		for(const vk::ImageView& image_view : shadowmapper_.GetDepthCubemapArrayImagesView())
 			descriptor_depth_cubemaps_array_image_infos.push_back(
 				vk::DescriptorImageInfo(
 					vk::Sampler(),
 					image_view,
 					vk::ImageLayout::eShaderReadOnlyOptimal));
-		}
 
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{

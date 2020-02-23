@@ -7,7 +7,7 @@ struct Light
 	vec4 pos; // .z contains fade factor for light radius.
 	vec4 color;
 	vec2 data; // .x contains invert radius
-	ivec2 shadowmap_index;
+	ivec2 shadowmap_index; // .x - number of cubemap array, .y - layer number
 };
 
 layout(binding= 0) uniform sampler2D tex;
@@ -78,7 +78,7 @@ void main()
 		else if(light.shadowmap_index.x == 3)
 			shadow_factor= texture(depth_cubemaps_array[3], shadowmap_coord, normalized_distance_to_light);
 
-		l+= light.color.xyz * (cos_factor * fade_factor * shadow_factor);
+		l+= light.color.rgb * (cos_factor * fade_factor * shadow_factor);
 	}
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 

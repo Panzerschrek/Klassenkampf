@@ -54,7 +54,7 @@ private:
 
 private:
 	const ShadowmapSize shadowmap_size_;
-	uint32_t frame_number_= 0u;
+	uint32_t frame_number_= 1u;
 	LightsSet lights_set_;
 	std::vector< std::vector<uint32_t> > free_layers_;
 };

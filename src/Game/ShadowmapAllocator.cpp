@@ -1,5 +1,7 @@
 #include "ShadowmapAllocator.hpp"
+#include "Assert.hpp"
 #include <algorithm>
+#include <cstring>
 
 
 namespace KK
@@ -19,16 +21,16 @@ struct LightExtra
 
 bool operator==(const ShadowmapLight& l, const ShadowmapLight& r)
 {
-	return l.pos == r.pos && l.radius == r.radius;
+	// Use memcmp, because floating point compare is incorrect for hashing.
+	return std::memcmp(&l, &r, sizeof(ShadowmapLight)) == 0;
 }
 
 size_t ShadowmapLightHasher::operator()(const ShadowmapLight& light) const
 {
-	return
-		reinterpret_cast<const uint32_t&>(light.pos.x) ^
-		reinterpret_cast<const uint32_t&>(light.pos.y) ^
-		reinterpret_cast<const uint32_t&>(light.pos.z) ^
-		reinterpret_cast<const uint32_t&>(light.radius);
+	// HACK! Calculate hash for floats as hash for ints.
+	static_assert(sizeof(ShadowmapLight) == sizeof(uint32_t) * 4u, "Invalid size");
+	const auto ints= reinterpret_cast<const uint32_t*>(&light);
+	return ints[0] ^ ints[1] ^ ints[2] ^ ints[3];
 }
 
 ShadowmapAllocator::ShadowmapAllocator(ShadowmapSize shadowmap_size)
@@ -57,10 +59,9 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights2(
 {
 	++frame_number_;
 
+	// Copy lights to new container.
 	std::vector<LightExtra> lights_extra;
 	lights_extra.reserve(lights.size());
-
-	// Copy lights to new container.
 	for(const ShadowmapLight& in_light : lights)
 	{
 		LightExtra out_light;
@@ -72,6 +73,7 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights2(
 	for(LightExtra& light : lights_extra)
 	{
 		const float dist= (light.light.pos - cam_pos).GetLength();
+		/*
 		if(dist <= light.light.radius)
 			light.detail_level= 0.0f;
 		else
@@ -79,6 +81,9 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights2(
 			const float dist_k= 1.0f / 2.0f;
 			light.detail_level= std::max(0.0f, std::log2((dist - light.light.radius) * dist_k));
 		}
+		*/
+		const float dist_k= 1.0f / 2.0f;
+		light.detail_level= std::log2(std::max(1.0f, dist * dist_k));
 	}
 
 	// Sort by detail level.
@@ -104,42 +109,55 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights2(
 			++detail_level_int;
 
 		if(detail_level_int > last_detail_level)
+		{
+			KK_ASSERT(false); // TODO - handle this situation
 			continue; // No space left.
+		}
 
 		light.detail_level_int= detail_level_int;
 		--detail_levels_left[detail_level_int];
 	}
 
-	LightsForShadowUpdate lights_for_update;
-
-	// Mark as used lights in cache.
+	// Mark as used lights in cache, free layers of lights, that changed their detail level.
 	for(const LightExtra& light : lights_extra)
 	{
 		const auto it= lights_set_.find(light.light);
-		if(it != lights_set_.end())
-			it->second.last_used_frame_number= frame_number_;
+		if(it == lights_set_.end())
+			continue;
+
+		LightData& light_data= it->second;
+		light_data.last_used_frame_number= frame_number_;
+		if(light_data.shadowmap_layer.first != light.detail_level_int &&
+			light_data.shadowmap_layer != c_invalid_shadowmap_layer_index)
+		{
+			FreeLayer(light_data.shadowmap_layer);
+			light_data.shadowmap_layer= c_invalid_shadowmap_layer_index;
+		}
 	}
 
-	// Assign shadowmap indices, count reculculated lights.
+	// Assign shadowmap indices, count recalculated lights.
+	LightsForShadowUpdate lights_for_update;
 	for(const LightExtra& light : lights_extra)
 	{
 		const auto it= lights_set_.find(light.light);
 		if(it == lights_set_.end())
 		{
-			lights_for_update.push_back(light.light);
 			LightData& light_data= lights_set_[light.light];
-			light_data.shadowmap_layer= AllocateLayer(light.detail_level_int);
 			light_data.last_used_frame_number= frame_number_;
+			light_data.shadowmap_layer= AllocateLayer(light.detail_level_int);
+			if(light_data.shadowmap_layer != c_invalid_shadowmap_layer_index)
+				lights_for_update.push_back(light.light);
 		}
 		else
 		{
 			LightData& light_data= it->second;
-			if(light_data.shadowmap_layer != c_invalid_shadowmap_layer_index &&
-				light_data.shadowmap_layer.first != light.detail_level_int)
+			KK_ASSERT(light_data.last_used_frame_number == frame_number_);
+			if(light_data.shadowmap_layer.first != light.detail_level_int)
 			{
-				FreeLayer(light_data.shadowmap_layer);
+				KK_ASSERT(light_data.shadowmap_layer == c_invalid_shadowmap_layer_index);
 				light_data.shadowmap_layer= AllocateLayer(light.detail_level_int);
-				lights_for_update.push_back(light.light);
+				if(light_data.shadowmap_layer != c_invalid_shadowmap_layer_index)
+					lights_for_update.push_back(light.light);
 			}
 		}
 	}
@@ -160,23 +178,24 @@ ShadowmapLayerIndex ShadowmapAllocator::AllocateLayer(const uint32_t detail_leve
 
 	// Search unused light with matched detail level and minimum frame number.
 	uint32_t min_frame= frame_number_;
-	LightData* src_light= nullptr;
-	for(auto & light_pair : lights_set_)
+	LightsSet::value_type* src_light= nullptr;
+	for(auto& light_pair : lights_set_)
 	{
 		LightData& light_data= light_pair.second;
 
-		if(light_data.shadowmap_layer.first == detail_level &&
+		if( light_data.shadowmap_layer != c_invalid_shadowmap_layer_index &&
+			light_data.shadowmap_layer.first == detail_level &&
 			light_data.last_used_frame_number < min_frame)
 		{
 			min_frame= light_data.last_used_frame_number;
-			src_light= &light_data;
+			src_light= &light_pair;
 		}
 	}
 
 	if(src_light != nullptr)
 	{
-		const ShadowmapLayerIndex result= src_light->shadowmap_layer;
-		src_light->shadowmap_layer= c_invalid_shadowmap_layer_index;
+		const ShadowmapLayerIndex result= src_light->second.shadowmap_layer;
+		lights_set_.erase(src_light->first);
 		return result;
 	}
 

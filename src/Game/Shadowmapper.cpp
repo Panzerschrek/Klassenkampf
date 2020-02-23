@@ -460,6 +460,15 @@ void Shadowmapper::DrawToDepthCubemap(
 		sizeof(Uniforms),
 		&uniforms);
 
+	const vk::MemoryBarrier memory_barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
+	command_buffer.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eAllGraphics,
+		vk::DependencyFlags(),
+		1u, &memory_barrier,
+		0u, nullptr,
+		0u, nullptr);
+
 	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
 
 	command_buffer.beginRenderPass(
