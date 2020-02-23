@@ -34,9 +34,12 @@ Shadowmapper::Shadowmapper(
 	const size_t vertex_pos_offset,
 	const vk::Format vertex_pos_format)
 	: vk_device_(window_vulkan.GetVulkanDevice())
-	, cubemap_size_(256u)
-	, cubemap_count_(256u)
 {
+	const uint32_t base_cubemap_size= 1024u; // Most detailed cubemap size
+	const uint32_t base_cubemap_count= 4u; // Cubemap count for most detailed level
+	const uint32_t cubemap_count_increase_factor= 4u; // Each level has N times more cubemaps, than previous
+	const uint32_t detail_level_count= 4u;
+
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
 
 	// Select depth buffer format.
@@ -62,47 +65,6 @@ Shadowmapper::Shadowmapper(
 			depth_format= depth_format_candidate;
 			break;
 		}
-	}
-
-	{ // Create depth cubemap array image.
-		depth_cubemap_array_image_=
-			vk_device_.createImageUnique(
-				vk::ImageCreateInfo(
-					vk::ImageCreateFlagBits::eCubeCompatible,
-					vk::ImageType::e2D,
-					depth_format,
-					vk::Extent3D(cubemap_size_, cubemap_size_, 1u),
-					1u,
-					cubemap_count_ * 6u,
-					vk::SampleCountFlagBits::e1,
-					vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
-					vk::SharingMode::eExclusive,
-					0u, nullptr,
-					vk::ImageLayout::eUndefined));
-
-		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*depth_cubemap_array_image_);
-
-		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
-		{
-			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
-				vk_memory_allocate_info.memoryTypeIndex= i;
-		}
-
-		depth_cubemap_array_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
-		vk_device_.bindImageMemory(*depth_cubemap_array_image_, *depth_cubemap_array_image_memory_, 0u);
-
-		depth_cubemap_array_image_view_=
-			vk_device_.createImageViewUnique(
-				vk::ImageViewCreateInfo(
-					vk::ImageViewCreateFlags(),
-					*depth_cubemap_array_image_,
-					vk::ImageViewType::eCubeArray,
-					depth_format,
-					vk::ComponentMapping(),
-					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, cubemap_count_ * 6u)));
 	}
 
 	{ // Create render pass.
@@ -133,32 +95,6 @@ Shadowmapper::Shadowmapper(
 					vk::RenderPassCreateFlags(),
 					1u, &attachment_description,
 					1u, &subpass_description));
-	}
-
-	// Create framebuffer for each cubemap.
-	for(uint32_t i= 0u; i < cubemap_count_; ++i)
-	{
-		Framebuffer framebuffer;
-
-		framebuffer.image_view=
-			vk_device_.createImageViewUnique(
-				vk::ImageViewCreateInfo(
-					vk::ImageViewCreateFlags(),
-					*depth_cubemap_array_image_,
-					vk::ImageViewType::eCube,
-					depth_format,
-					vk::ComponentMapping(),
-					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, i * 6u, 6u)));
-
-		framebuffer.framebuffer=
-			vk_device_.createFramebufferUnique(
-				vk::FramebufferCreateInfo(
-					vk::FramebufferCreateFlags(),
-					*render_pass_,
-					1u, &*framebuffer.image_view,
-					cubemap_size_, cubemap_size_, 6u));
-
-		framebuffers_.push_back(std::move(framebuffer));
 	}
 
 	// Create shaders
@@ -248,8 +184,8 @@ Shadowmapper::Shadowmapper(
 			vk::PipelineInputAssemblyStateCreateFlags(),
 			vk::PrimitiveTopology::eTriangleList);
 
-		const vk::Viewport viewport(0.0f, 0.0f, float(cubemap_size_), float(cubemap_size_), 0.0f, 1.0f);
-		const vk::Rect2D scissor(vk::Offset2D(0, 0), vk::Extent2D(cubemap_size_, cubemap_size_));
+		const vk::Viewport viewport(0.0f, 0.0f, float(base_cubemap_size), float(base_cubemap_size), 0.0f, 1.0f);
+		const vk::Rect2D scissor(vk::Offset2D(0, 0), vk::Extent2D(base_cubemap_size, base_cubemap_size));
 
 		const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
 			vk::PipelineViewportStateCreateFlags(),
@@ -282,6 +218,12 @@ Shadowmapper::Shadowmapper(
 			0.0f,
 			1.0f);
 
+		// Use dynamic viewport, because we use one render pass for several cubemaps with different sizes.
+		const vk::DynamicState dynamic_state= vk::DynamicState::eViewport;
+		const vk::PipelineDynamicStateCreateInfo pipeline_dynamic_state(
+			vk::PipelineDynamicStateCreateFlags(),
+			1u, &dynamic_state);
+
 		const vk::PipelineColorBlendAttachmentState pipeline_color_blend_attachment_state;
 
 		const vk::PipelineColorBlendStateCreateInfo pipeline_color_blend_state_create_info(
@@ -305,33 +247,10 @@ Shadowmapper::Shadowmapper(
 					&pipeline_multisample_state_create_info,
 					&pipeline_depth_state_create_info,
 					&pipeline_color_blend_state_create_info,
-					nullptr,
+					&pipeline_dynamic_state,
 					*pipeline_layout_,
 					*render_pass_,
 					0u));
-	}
-
-	// Create uniforms buffer.
-	{
-		uniforms_buffer_=
-			vk_device_.createBufferUnique(
-				vk::BufferCreateInfo(
-					vk::BufferCreateFlags(),
-					sizeof(Uniforms) * cubemap_count_,
-					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
-
-		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*uniforms_buffer_);
-
-		vk::MemoryAllocateInfo memory_allocate_info(buffer_memory_requirements.size);
-		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
-		{
-			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
-				memory_allocate_info.memoryTypeIndex= i;
-		}
-
-		uniforms_buffer_memory_= vk_device_.allocateMemoryUnique(memory_allocate_info);
-		vk_device_.bindBufferMemory(*uniforms_buffer_, *uniforms_buffer_memory_, 0u);
 	}
 
 	// Create descriptor set pool.
@@ -340,26 +259,122 @@ Shadowmapper::Shadowmapper(
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u, // max sets.
+				detail_level_count, // max sets.
 				1u, &descriptor_pool_size));
 
-	// Create descriptor set.
-	descriptor_set_=
-		std::move(
-		vk_device_.allocateDescriptorSetsUnique(
-			vk::DescriptorSetAllocateInfo(
-				*descriptor_set_pool_,
-				1u, &*descriptor_set_layout_)).front());
-
-	// Write descriptor set.
+	// Create cubemaps arrays.
+	for(uint32_t d= 0u; d < detail_level_count; ++d)
 	{
+		DetailLevel detail_level;
+		detail_level.cubemap_size= base_cubemap_size >> d;
+		detail_level.cubemap_count= base_cubemap_count * uint32_t(std::pow(float(cubemap_count_increase_factor), float(d)));
+
+		{ // Create depth cubemap array image.
+			detail_level.depth_cubemap_array_image=
+				vk_device_.createImageUnique(
+					vk::ImageCreateInfo(
+						vk::ImageCreateFlagBits::eCubeCompatible,
+						vk::ImageType::e2D,
+						depth_format,
+						vk::Extent3D(detail_level.cubemap_size, detail_level.cubemap_size, 1u),
+						1u,
+						detail_level.cubemap_count * 6u,
+						vk::SampleCountFlagBits::e1,
+						vk::ImageTiling::eOptimal,
+						vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+						vk::SharingMode::eExclusive,
+						0u, nullptr,
+						vk::ImageLayout::eUndefined));
+
+			const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*detail_level.depth_cubemap_array_image);
+
+			vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
+			for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+			{
+				if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+					(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+					vk_memory_allocate_info.memoryTypeIndex= i;
+			}
+
+			detail_level.depth_cubemap_array_image_memory= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+			vk_device_.bindImageMemory(*detail_level.depth_cubemap_array_image, *detail_level.depth_cubemap_array_image_memory, 0u);
+
+			detail_level.depth_cubemap_array_image_view=
+				vk_device_.createImageViewUnique(
+					vk::ImageViewCreateInfo(
+						vk::ImageViewCreateFlags(),
+						*detail_level.depth_cubemap_array_image,
+						vk::ImageViewType::eCubeArray,
+						depth_format,
+						vk::ComponentMapping(),
+						vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, detail_level.cubemap_count * 6u)));
+		}
+
+		// Create framebuffer for each cubemap.
+		for(uint32_t i= 0u; i < detail_level.cubemap_count; ++i)
+		{
+			Framebuffer framebuffer;
+
+			framebuffer.image_view=
+				vk_device_.createImageViewUnique(
+					vk::ImageViewCreateInfo(
+						vk::ImageViewCreateFlags(),
+						*detail_level.depth_cubemap_array_image,
+						vk::ImageViewType::eCube,
+						depth_format,
+						vk::ComponentMapping(),
+						vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, i * 6u, 6u)));
+
+			framebuffer.framebuffer=
+				vk_device_.createFramebufferUnique(
+					vk::FramebufferCreateInfo(
+						vk::FramebufferCreateFlags(),
+						*render_pass_,
+						1u, &*framebuffer.image_view,
+						detail_level.cubemap_size, detail_level.cubemap_size, 6u));
+
+			detail_level.framebuffers.push_back(std::move(framebuffer));
+		}
+
+		// Create uniforms buffer.
+		{
+			detail_level.uniforms_buffer=
+				vk_device_.createBufferUnique(
+					vk::BufferCreateInfo(
+						vk::BufferCreateFlags(),
+						sizeof(Uniforms) * detail_level.cubemap_count,
+						vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+			const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*detail_level.uniforms_buffer);
+
+			vk::MemoryAllocateInfo memory_allocate_info(buffer_memory_requirements.size);
+			for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+			{
+				if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+					(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+					memory_allocate_info.memoryTypeIndex= i;
+			}
+
+			detail_level.uniforms_buffer_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
+			vk_device_.bindBufferMemory(*detail_level.uniforms_buffer, *detail_level.uniforms_buffer_memory, 0u);
+		}
+
+		// Create descriptor set.
+		detail_level.descriptor_set=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*descriptor_set_pool_,
+					1u, &*descriptor_set_layout_)).front());
+
+		// Write descriptor set.
 		const vk::DescriptorBufferInfo descriptor_buffer_info(
-			*uniforms_buffer_,
+			*detail_level.uniforms_buffer,
 			0u,
 			sizeof(Uniforms));
 
 		const vk::WriteDescriptorSet write_descriptor_set(
-			*descriptor_set_,
+			*detail_level.descriptor_set,
 			0u,
 			0u,
 			1u,
@@ -370,7 +385,9 @@ Shadowmapper::Shadowmapper(
 		vk_device_.updateDescriptorSets(
 			1u, &write_descriptor_set,
 			0u, nullptr);
-	}
+
+		detail_levels_.push_back(std::move(detail_level));
+	} // for detail levels.
 }
 
 Shadowmapper::~Shadowmapper()
@@ -381,12 +398,12 @@ Shadowmapper::~Shadowmapper()
 
 uint32_t Shadowmapper::GetCubemapCount() const
 {
-	return cubemap_count_;
+	return detail_levels_.back().cubemap_count;
 }
 
 vk::ImageView Shadowmapper::GetDepthCubemapArrayImageView() const
 {
-	return *depth_cubemap_array_image_view_;
+	return *detail_levels_.back().depth_cubemap_array_image_view;
 }
 
 void Shadowmapper::DrawToDepthCubemap(
@@ -396,7 +413,8 @@ void Shadowmapper::DrawToDepthCubemap(
 	const float inv_light_radius,
 	const std::function<void()>& draw_function)
 {
-	KK_ASSERT(cubemap_index < cubemap_count_);
+	DetailLevel& detail_level= detail_levels_.back();
+	KK_ASSERT(cubemap_index < detail_level.cubemap_count);
 
 	Uniforms uniforms;
 	uniforms.light_pos= light_pos;
@@ -423,7 +441,7 @@ void Shadowmapper::DrawToDepthCubemap(
 	const uint32_t buffer_offset= uint32_t(cubemap_index * sizeof(Uniforms));
 
 	command_buffer.updateBuffer(
-		*uniforms_buffer_,
+		*detail_level.uniforms_buffer,
 		buffer_offset,
 		sizeof(Uniforms),
 		&uniforms);
@@ -433,18 +451,21 @@ void Shadowmapper::DrawToDepthCubemap(
 	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
 			*render_pass_,
-			*framebuffers_[cubemap_index].framebuffer,
-			vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(cubemap_size_, cubemap_size_)),
+			*detail_level.framebuffers[cubemap_index].framebuffer,
+			vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(detail_level.cubemap_size, detail_level.cubemap_size)),
 			1u, &clear_value),
 		vk::SubpassContents::eInline);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+	command_buffer.setViewport(
+		0u,
+		{vk::Viewport(0.0f, 0.0f, float(detail_level.cubemap_size), float(detail_level.cubemap_size), 0.0f, 1.0f)});
 
 	command_buffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		*pipeline_layout_,
 		0u,
-		1u, &*descriptor_set_,
+		1u, &*detail_level.descriptor_set,
 		1u, &buffer_offset);
 
 	draw_function();
