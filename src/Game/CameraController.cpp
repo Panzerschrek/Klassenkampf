@@ -70,7 +70,10 @@ void CameraController::Update(const float time_delta_s, const InputState& input_
 
 CameraController::ViewMatrix CameraController::CalculateViewMatrix() const
 {
-	const float fov= MathConstants::half_pi;
+	const float fov_deg= std::max(1.0f, std::min(float(settings_.GetReal("cl_fov", 90.0)), 135.0f));
+	settings_.SetReal("cl_fov", fov_deg);
+
+	const float fov= fov_deg * MathConstants::deg2rad;
 
 	// Must be power of 2.
 	const float z_near= 0.125f;
