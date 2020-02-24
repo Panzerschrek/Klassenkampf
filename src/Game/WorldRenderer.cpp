@@ -35,6 +35,8 @@ struct LightBuffer
 	{
 		float pos[4];
 		float color[4];
+		float data[2];
+		uint32_t shadowmap_index[2];
 	};
 
 	static constexpr size_t c_max_lights= 256u;
@@ -46,8 +48,8 @@ struct LightBuffer
 	Light lights[c_max_lights];
 };
 
-static_assert(sizeof(LightBuffer::Light) == 32u, "Invalid size");
-static_assert(sizeof(LightBuffer) == 48u + LightBuffer::c_max_lights * 32u, "Invalid size");
+static_assert(sizeof(LightBuffer::Light) == 48u, "Invalid size");
+static_assert(sizeof(LightBuffer) == 48u + LightBuffer::c_max_lights * 48u, "Invalid size");
 
 struct WorldVertex
 {
@@ -60,11 +62,13 @@ const uint32_t g_tex_uniform_binding= 0u;
 const uint32_t g_light_buffer_binding= 1u;
 const uint32_t g_cluster_offset_buffer_binding= 2u;
 const uint32_t g_lights_list_buffer_binding= 3u;
+const uint32_t g_depth_cubemaps_array_binding= 4u;
 
 } // namespace
 
 WorldRenderer::WorldRenderer(
 	Settings& settings,
+	CommandsProcessor& command_processor,
 	WindowVulkan& window_vulkan,
 	GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,
@@ -76,8 +80,19 @@ WorldRenderer::WorldRenderer(
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(settings, window_vulkan)
+	, shadowmapper_(window_vulkan, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
 	, cluster_volume_builder_(16u, 8u, 24u)
+	, shadowmap_allocator_(shadowmapper_.GetSize())
 {
+
+	commands_map_= std::make_shared<CommandsMap>(
+		CommandsMap(
+		{
+			{ "test_light_add", std::bind(&WorldRenderer::ComandTestLightAdd, this, std::placeholders::_1) },
+			{ "test_light_remove", std::bind(&WorldRenderer::CommandTestLightRemove, this) }
+		}));
+	command_processor.RegisterCommands(commands_map_);
+
 	depth_pre_pass_pipeline_= CreateDepthPrePassPipeline();
 	lighting_pass_pipeline_= CreateLightingPassPipeline();
 
@@ -206,7 +221,7 @@ WorldRenderer::WorldRenderer(
 	{
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size())
+			uint32_t(materials_.size() * (1u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
 		},
 		{
 			vk::DescriptorType::eStorageBuffer,
@@ -256,6 +271,14 @@ WorldRenderer::WorldRenderer(
 			0u,
 			sizeof(uint8_t) * lights_list_buffer_size_);
 
+		std::vector<vk::DescriptorImageInfo> descriptor_depth_cubemaps_array_image_infos;
+		for(const vk::ImageView& image_view : shadowmapper_.GetDepthCubemapArrayImagesView())
+			descriptor_depth_cubemaps_array_image_infos.push_back(
+				vk::DescriptorImageInfo(
+					vk::Sampler(),
+					image_view,
+					vk::ImageLayout::eShaderReadOnlyOptimal));
+
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
 			{
@@ -296,6 +319,16 @@ WorldRenderer::WorldRenderer(
 				vk::DescriptorType::eStorageBuffer,
 				nullptr,
 				&lights_list_buffer_info,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_depth_cubemaps_array_binding,
+				0u,
+				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
+				vk::DescriptorType::eCombinedImageSampler,
+				descriptor_depth_cubemaps_array_image_infos.data(),
+				nullptr,
 				nullptr
 			},
 		};
@@ -371,6 +404,40 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.w_convert_values[1]= cluster_volume_builder_.GetWConvertValues().y;
 
 	uint32_t light_count= 0u;
+	std::vector<ShadowmapLight> shadowmap_lights;
+
+	if(test_light_ != std::nullopt)
+	{
+		const bool added=
+			cluster_volume_builder_.AddSphere(
+				test_light_->pos,
+				test_light_->radius,
+				ClusterVolumeBuilder::ElementId(light_count));
+		if(added)
+		{
+			LightBuffer::Light& out_light= light_buffer.lights[light_count];
+			out_light.pos[0]= test_light_->pos.x;
+			out_light.pos[1]= test_light_->pos.y;
+			out_light.pos[2]= test_light_->pos.z;
+			out_light.pos[3]= 1.0f / (test_light_->radius * test_light_->radius); // Fade to zero at radius.
+			out_light.color[0]= test_light_->color.x;
+			out_light.color[1]= test_light_->color.y;
+			out_light.color[2]= test_light_->color.z;
+			out_light.color[3]= 0.0f;
+			out_light.data[0]= 1.0f / test_light_->radius;
+			out_light.data[1]= 0.0f;
+			out_light.shadowmap_index[0]= 0;
+			out_light.shadowmap_index[1]= 0;
+
+			ShadowmapLight shadowmap_light;
+			shadowmap_light.pos= test_light_->pos;
+			shadowmap_light.radius= test_light_->radius;
+			shadowmap_lights.push_back(shadowmap_light);
+
+			++light_count;
+		}
+	}
+
 	for(const size_t sector_index : visible_sectors)
 	for(const Sector::Light& sector_light : model.sectors[sector_index].lights)
 	{
@@ -394,10 +461,31 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		out_light.color[1]= sector_light.color.y;
 		out_light.color[2]= sector_light.color.z;
 		out_light.color[3]= 0.0f;
+		out_light.data[0]= 1.0f / sector_light.radius;
+		out_light.data[1]= 0.0f;
+		out_light.shadowmap_index[0]= 0;
+		out_light.shadowmap_index[1]= 0;
+
+		ShadowmapLight shadowmap_light;
+		shadowmap_light.pos= sector_light.pos;
+		shadowmap_light.radius= sector_light.radius;
+		shadowmap_lights.push_back(shadowmap_light);
 
 		++light_count;
 	}
 	end_fill_lights:
+
+	KK_ASSERT(light_count == shadowmap_lights.size());
+
+	// Allocate shadowmaps.
+	const ShadowmapAllocator::LightsForShadowUpdate lights_for_shadow_update=
+		shadowmap_allocator_.UpdateLights(shadowmap_lights, cam_pos);
+	for(uint32_t i= 0u; i < light_count; ++i)
+	{
+		const auto slot= shadowmap_allocator_.GetLightShadowmapSlot(shadowmap_lights[i]);
+		light_buffer.lights[i].shadowmap_index[0]= slot.first;
+		light_buffer.lights[i].shadowmap_index[1]= slot.second;
+	}
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
 	std::vector<ClusterVolumeBuilder::ElementId> ligts_list_buffer;
@@ -421,6 +509,21 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		&light_buffer);
 	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
 	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
+
+	// Draw shadows
+	for(const ShadowmapLight& light : lights_for_shadow_update)
+	{
+		const ShadowmapSlot slot= shadowmap_allocator_.GetLightShadowmapSlot(light);
+		if(slot == ShadowmapAllocator::c_invalid_shadowmap_slot)
+			continue;
+
+		shadowmapper_.DrawToDepthCubemap(
+			command_buffer,
+			slot,
+			light.pos,
+			light.radius,
+			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, light.pos, light.radius); } );
+	}
 
 	// Draw
 	tonemapper_.DoRenderPass(
@@ -596,6 +699,30 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	pipeline.depth_cubemap_image_sampler=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_TRUE,
+				vk::CompareOp::eLessOrEqual,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
+	const std::vector<vk::Sampler> depth_cubemap_image_samplers(
+		shadowmapper_.GetDepthCubemapArrayImagesView().size(),
+		*pipeline.depth_cubemap_image_sampler);
+
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 	{
@@ -626,6 +753,13 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
 			nullptr,
+		},
+		{
+			g_depth_cubemaps_array_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(depth_cubemap_image_samplers.size()),
+			vk::ShaderStageFlagBits::eFragment,
+			depth_cubemap_image_samplers.data(),
 		},
 	};
 
@@ -816,6 +950,31 @@ void WorldRenderer::DrawWorldModel(
 
 			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 		}
+	}
+}
+
+void WorldRenderer::DrawWorldModelToDepthCubemap(
+	const vk::CommandBuffer command_buffer,
+	const WorldModel& world_model,
+	const m_Vec3& light_pos,
+	const float light_radius)
+{
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const Sector& sector : world_model.sectors)
+	{
+		if( light_pos.x + light_radius < sector.bb_min.x ||
+			light_pos.x - light_radius > sector.bb_max.x ||
+			light_pos.y + light_radius < sector.bb_min.y ||
+			light_pos.y - light_radius > sector.bb_max.y ||
+			light_pos.z + light_radius < sector.bb_min.z ||
+			light_pos.z - light_radius > sector.bb_max.z)
+			continue;
+
+		for(const Sector::TriangleGroup& triangle_group : sector.triangle_groups)
+			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 	}
 }
 
@@ -1365,6 +1524,27 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
+}
+
+void WorldRenderer::ComandTestLightAdd(const CommandsArguments& args)
+{
+	if(args.size() < 1u)
+	{
+		Log::Info("Too few arguments. Usage: test_light_add <radius> <power>");
+		return;
+	}
+
+	test_light_.emplace();
+	test_light_->pos= camera_controller_.GetCameraPosition();
+	test_light_->radius= float(std::atof(args[0].c_str()));
+	test_light_->color= m_Vec3(1.0f, 0.5f, 1.0f);
+	if(args.size() >= 2u)
+		test_light_->color*= float(std::atof(args[1].c_str()));
+}
+
+void WorldRenderer::CommandTestLightRemove()
+{
+	test_light_= std::nullopt;
 }
 
 } // namespace KK

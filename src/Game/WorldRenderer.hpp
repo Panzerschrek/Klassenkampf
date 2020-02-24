@@ -3,8 +3,11 @@
 #include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
 #include "CameraController.hpp"
+#include "CommandsProcessor.hpp"
 #include "ClusterVolumeBuilder.hpp"
 #include "GPUDataUploader.hpp"
+#include "Shadowmapper.hpp"
+#include "ShadowmapAllocator.hpp"
 #include "Tonemapper.hpp"
 #include "WindowVulkan.hpp"
 #include "WorldGenerator.hpp"
@@ -20,6 +23,7 @@ class WorldRenderer final
 public:
 	WorldRenderer(
 		Settings& settings,
+		CommandsProcessor& command_processor,
 		WindowVulkan& window_vulkan,
 		GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,
@@ -95,6 +99,7 @@ private:
 		vk::UniqueShaderModule shader_vert;
 		vk::UniqueShaderModule shader_frag;
 		vk::UniqueSampler image_sampler;
+		vk::UniqueSampler depth_cubemap_image_sampler;
 		vk::UniqueDescriptorSetLayout descriptor_set_layout;
 		vk::UniquePipelineLayout pipeline_layout;
 		vk::UniquePipeline pipeline;
@@ -107,13 +112,22 @@ private:
 	void DrawWorldModel(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
-		const VisibleSectors& visible_setors,
+		const VisibleSectors& visible_sectors,
 		const m_Mat4& view_matrix);
+
+	void DrawWorldModelToDepthCubemap(
+		vk::CommandBuffer command_buffer,
+		const WorldModel& world_model,
+		const m_Vec3& light_pos,
+		float light_radius);
 
 	WorldModel LoadWorld(const WorldData::World& world, const SegmentModels& segment_models);
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
 
 	void LoadMaterial(const std::string& material_name);
+
+	void ComandTestLightAdd(const CommandsArguments& args);
+	void CommandTestLightRemove();
 
 private:
 	GPUDataUploader& gpu_data_uploader_;
@@ -123,8 +137,12 @@ private:
 	const vk::PhysicalDeviceMemoryProperties memory_properties_;
 	const uint32_t queue_family_index_;
 
+	CommandsMapConstPtr commands_map_;
+
 	Tonemapper tonemapper_;
+	Shadowmapper shadowmapper_;
 	ClusterVolumeBuilder cluster_volume_builder_;
+	ShadowmapAllocator shadowmap_allocator_;
 
 	Pipeline depth_pre_pass_pipeline_;
 	Pipeline lighting_pass_pipeline_;
@@ -149,6 +167,8 @@ private:
 
 	std::unordered_map<std::string, Material> materials_;
 	std::string test_material_id_;
+
+	std::optional<Sector::Light> test_light_;
 };
 
 } // namespace KK

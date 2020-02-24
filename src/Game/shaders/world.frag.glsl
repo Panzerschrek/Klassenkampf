@@ -6,6 +6,8 @@ struct Light
 {
 	vec4 pos; // .z contains fade factor for light radius.
 	vec4 color;
+	vec2 data; // .x contains invert radius
+	ivec2 shadowmap_index; // .x - number of cubemap array, .y - layer number
 };
 
 layout(binding= 0) uniform sampler2D tex;
@@ -29,6 +31,8 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 {
 	uint8_t light_list[];
 };
+
+layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
@@ -54,14 +58,27 @@ void main()
 	int current_light_count= light_list[offset];
 	for(int i= 0; i < current_light_count; ++i)
 	{
-		Light light= lights[ int(light_list[offset + 1 + i]) ];
+		int light_index= int(light_list[offset + 1 + i]);
+		Light light= lights[light_index];
 		vec3 vec_to_light= light.pos.xyz - f_pos;
 		vec3 vec_to_light_normalized= normalize(vec_to_light);
 		float vec_to_light_square_length= dot(vec_to_light, vec_to_light);
 		float cos_factor= max(dot(normal_normalized, vec_to_light_normalized), 0.0);
 		float fade_factor= max(1.0 / vec_to_light_square_length - light.pos.w, 0.0);
+		float normalized_distance_to_light= length(vec_to_light) * light.data.x;
 
-		l+= light.color.xyz * (cos_factor * fade_factor);
+		vec4 shadowmap_coord= vec4(vec_to_light, float(light.shadowmap_index.y));
+		float shadow_factor= 1.0;
+		if(light.shadowmap_index.x == 0)
+			shadow_factor= texture(depth_cubemaps_array[0], shadowmap_coord, normalized_distance_to_light);
+		else if(light.shadowmap_index.x == 1)
+			shadow_factor= texture(depth_cubemaps_array[1], shadowmap_coord, normalized_distance_to_light);
+		else if(light.shadowmap_index.x == 2)
+			shadow_factor= texture(depth_cubemaps_array[2], shadowmap_coord, normalized_distance_to_light);
+		else if(light.shadowmap_index.x == 3)
+			shadow_factor= texture(depth_cubemaps_array[3], shadowmap_coord, normalized_distance_to_light);
+
+		l+= light.color.rgb * (cos_factor * fade_factor * shadow_factor);
 	}
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 
