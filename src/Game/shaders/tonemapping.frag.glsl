@@ -1,10 +1,11 @@
 #version 450
 
+
 layout(binding= 0) uniform sampler2D tex;
 
 layout(push_constant) uniform uniforms_block
 {
-	vec4 deform_factor;
+	layout(offset = 16) vec4 deform_factor;
 };
 
 layout(location= 0) in vec2 f_tex_coord; // In range [-1; 1]

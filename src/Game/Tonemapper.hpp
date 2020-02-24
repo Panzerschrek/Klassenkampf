@@ -1,5 +1,6 @@
 #pragma once
 #include "Settings.hpp"
+#include "TicksCounter.hpp"
 #include "WindowVulkan.hpp"
 
 
@@ -24,6 +25,7 @@ private:
 	const vk::Device vk_device_;
 	const uint32_t queue_family_index_;
 	const vk::SampleCountFlagBits msaa_sample_count_;
+	TicksCounter ticks_counter_;
 
 	vk::Extent2D framebuffer_size_;
 	vk::UniqueImage framebuffer_image_;
@@ -43,6 +45,10 @@ private:
 	vk::UniqueImageView brightness_calculate_image_view_;
 	vk::Extent2D brightness_calculate_image_size_;
 	uint32_t brightness_calculate_image_mip_levels_;
+
+	vk::UniqueBuffer exposure_accumulate_buffer_;
+	vk::UniqueDeviceMemory exposure_accumulate_memory_;
+	bool exposure_buffer_prepared_= false;
 
 	vk::UniqueShaderModule shader_vert_;
 	vk::UniqueShaderModule shader_frag_;

@@ -12,11 +12,26 @@ namespace
 
 struct Uniforms
 {
-	float deformation_factor[4];
+	struct
+	{
+		float mix_factor;
+		float padding[3];
+	} vertex;
+
+	struct
+	{
+		float deformation_factor[4];
+	} fragment;
+};
+
+struct ExposureAccumulateBuffer
+{
+	float exposure[6];
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
 const uint32_t g_brightness_tex_uniform_binding= 1u;
+const uint32_t g_exposure_accumulate_tex_uniform_binding= 2u;
 
 } // namespace
 
@@ -25,6 +40,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 	, vk_device_(window_vulkan.GetVulkanDevice())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, msaa_sample_count_(vk::SampleCountFlagBits::e1)
+	, ticks_counter_(std::chrono::milliseconds(250))
 {
 	const vk::Extent2D viewport_size= window_vulkan.GetViewportSize();
 	const vk::PhysicalDeviceMemoryProperties& memory_properties= window_vulkan.GetMemoryProperties();
@@ -277,6 +293,29 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, brightness_calculate_image_mip_levels_, 0u, 1u)));
 	}
 
+	// Create uniforms buffer.
+	{
+		exposure_accumulate_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(ExposureAccumulateBuffer),
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*exposure_accumulate_buffer_);
+
+		vk::MemoryAllocateInfo memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		exposure_accumulate_memory_= vk_device_.allocateMemoryUnique(memory_allocate_info);
+		vk_device_.bindBufferMemory(*exposure_accumulate_buffer_, *exposure_accumulate_memory_, 0u);
+	}
+
 	// Create shaders
 	shader_vert_= CreateShader(vk_device_, ShaderNames::tonemapping_vert);
 	shader_frag_= CreateShader(vk_device_, ShaderNames::tonemapping_frag);
@@ -319,6 +358,13 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			vk::ShaderStageFlagBits::eVertex,
 			&*framebuffer_image_sampler_,
 		},
+		{
+			g_exposure_accumulate_tex_uniform_binding,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eVertex,
+			&*framebuffer_image_sampler_,
+		},
 	};
 
 	decriptor_set_layout_=
@@ -327,17 +373,26 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				vk::DescriptorSetLayoutCreateFlags(),
 				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
 
-	const vk::PushConstantRange push_constant_range(
-		vk::ShaderStageFlagBits::eFragment,
-		0u,
-		sizeof(Uniforms));
+	const vk::PushConstantRange push_constant_ranges[]
+	{
+		{
+			vk::ShaderStageFlagBits::eVertex,
+			offsetof(Uniforms, vertex),
+			sizeof(Uniforms::vertex)
+		},
+		{
+			vk::ShaderStageFlagBits::eFragment,
+			offsetof(Uniforms, fragment),
+			sizeof(Uniforms::fragment)
+		},
+	};
 
 	pipeline_layout_=
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
 				1u, &*decriptor_set_layout_,
-				1u, &push_constant_range));
+				uint32_t(std::size(push_constant_ranges)), push_constant_ranges));
 
 	// Create pipeline.
 	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
@@ -418,13 +473,17 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				0u));
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize vk_descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 2u);
+	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
+	{
+		{ vk::DescriptorType::eCombinedImageSampler, 2u },
+		{ vk::DescriptorType::eStorageBuffer, 1u }
+	};
 	descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
 				1u, // max sets.
-				1u, &vk_descriptor_pool_size));
+				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
 	// Create descriptor set.
 	descriptor_set_=
@@ -450,6 +509,11 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			},
 		};
 
+		const vk::DescriptorBufferInfo descriptor_exposure_accumulate_buffer_info(
+			*exposure_accumulate_buffer_,
+			0u,
+			sizeof(ExposureAccumulateBuffer));
+
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
 			{
@@ -470,6 +534,16 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				vk::DescriptorType::eCombinedImageSampler,
 				&descriptor_image_info[1],
 				nullptr,
+				nullptr
+			},
+			{
+				*descriptor_set_,
+				g_exposure_accumulate_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_exposure_accumulate_buffer_info,
 				nullptr
 			},
 		};
@@ -502,6 +576,30 @@ vk::SampleCountFlagBits Tonemapper::GetSampleCount() const
 
 void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std::function<void()>& draw_function)
 {
+	if(!exposure_buffer_prepared_)
+	{
+		exposure_buffer_prepared_= true;
+
+		ExposureAccumulateBuffer exposure_accumulate_buffer;
+		for(float& exposure : exposure_accumulate_buffer.exposure)
+			exposure= 1.0f;
+
+		command_buffer.updateBuffer(
+			*exposure_accumulate_buffer_,
+			0u,
+			sizeof(ExposureAccumulateBuffer),
+			&exposure_accumulate_buffer);
+
+		const vk::MemoryBarrier memory_barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eAllGraphics,
+			vk::DependencyFlags(),
+			1u, &memory_barrier,
+			0u, nullptr,
+			0u, nullptr);
+	}
+
 	const vk::ClearValue clear_value[]
 	{
 		{ vk::ClearColorValue(std::array<float,4>{0.2f, 0.1f, 0.1f, 0.5f}) },
@@ -650,6 +748,8 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 
 void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 {
+	ticks_counter_.Tick();
+
 	command_buffer.bindDescriptorSets(
 		vk::PipelineBindPoint::eGraphics,
 		*pipeline_layout_,
@@ -665,17 +765,28 @@ void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 	settings_.SetReal(color_deformation_factor_settings_name, color_deformation_factor);
 
 	Uniforms uniforms;
-	uniforms.deformation_factor[0]= deformation_factor * (1.0f - 0.1f * color_deformation_factor);
-	uniforms.deformation_factor[1]= deformation_factor;
-	uniforms.deformation_factor[2]= deformation_factor * (1.0f + 0.1f * color_deformation_factor);
-	uniforms.deformation_factor[3]= 0.0f;
+	uniforms.fragment.deformation_factor[0]= deformation_factor * (1.0f - 0.1f * color_deformation_factor);
+	uniforms.fragment.deformation_factor[1]= deformation_factor;
+	uniforms.fragment.deformation_factor[2]= deformation_factor * (1.0f + 0.1f * color_deformation_factor);
+	uniforms.fragment.deformation_factor[3]= 0.0f;
+
+	const float c_exposure_change_speed= 8.0f;
+	uniforms.vertex.mix_factor= 1.0f - std::pow(c_exposure_change_speed, -1.0f / ticks_counter_.GetTicksFrequency());
+	uniforms.vertex.mix_factor= std::max(0.0001f, std::min(uniforms.vertex.mix_factor, 0.9999f));
+
+	command_buffer.pushConstants(
+		*pipeline_layout_,
+		vk::ShaderStageFlagBits::eVertex,
+		offsetof(Uniforms, vertex),
+		sizeof(uniforms.vertex),
+		&uniforms.vertex);
 
 	command_buffer.pushConstants(
 		*pipeline_layout_,
 		vk::ShaderStageFlagBits::eFragment,
-		0,
-		sizeof(uniforms),
-		&uniforms);
+		offsetof(Uniforms, fragment),
+		sizeof(uniforms.fragment),
+		&uniforms.fragment);
 
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
 	command_buffer.draw(6u, 1u, 0u, 0u);
