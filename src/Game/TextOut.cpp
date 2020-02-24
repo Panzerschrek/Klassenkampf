@@ -1,6 +1,7 @@
 #include "TextOut.hpp"
 #include "Assert.hpp"
 #include "Image.hpp"
+#include "ShaderList.hpp"
 
 
 namespace KK
@@ -8,15 +9,6 @@ namespace KK
 
 namespace
 {
-
-namespace Shaders
-{
-
-#include "shaders/text.vert.sprv.h"
-#include "shaders/text.geom.sprv.h"
-#include "shaders/text.frag.sprv.h"
-
-} // namespace Shaders
 
 struct Uniforms
 {
@@ -37,26 +29,9 @@ TextOut::TextOut(
 	, gpu_data_uploader_(gpu_data_uploader)
 {
 	// Create shaders
-	shader_vert_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_text_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_text_vert_file_content)));
-
-	shader_geom_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_text_geom_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_text_geom_file_content)));
-
-	shader_frag_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_text_frag_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_text_frag_file_content)));
+	shader_vert_= CreateShader(vk_device_, ShaderNames::text_vert);
+	shader_geom_= CreateShader(vk_device_, ShaderNames::text_geom);
+	shader_frag_= CreateShader(vk_device_, ShaderNames::text_frag);
 
 	// Create image sampler
 	font_image_sampler_=

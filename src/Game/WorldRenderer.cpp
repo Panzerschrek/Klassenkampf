@@ -4,6 +4,7 @@
 #include "DDSImage.hpp"
 #include "Image.hpp"
 #include "Log.hpp"
+#include "ShaderList.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -13,15 +14,6 @@ namespace KK
 
 namespace
 {
-
-namespace Shaders
-{
-
-#include "shaders/world_depth_only.vert.sprv.h"
-#include "shaders/world.vert.sprv.h"
-#include "shaders/world.frag.sprv.h"
-
-} // namespace Shaders
 
 struct Uniforms
 {
@@ -540,12 +532,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateDepthPrePassPipeline()
 {
 	Pipeline pipeline;
 
-	pipeline.shader_vert=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_world_depth_only_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_world_depth_only_vert_file_content)));
+	pipeline.shader_vert= CreateShader(vk_device_, ShaderNames::world_depth_only_vert);
 
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
@@ -664,19 +651,8 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 	Pipeline pipeline;
 
 	// Create shaders
-	pipeline.shader_vert=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_world_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_world_vert_file_content)));
-
-	pipeline.shader_frag=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_world_frag_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_world_frag_file_content)));
+	pipeline.shader_vert= CreateShader(vk_device_, ShaderNames::world_vert);
+	pipeline.shader_frag= CreateShader(vk_device_, ShaderNames::world_frag);
 
 	// Create image sampler
 	pipeline.image_sampler=

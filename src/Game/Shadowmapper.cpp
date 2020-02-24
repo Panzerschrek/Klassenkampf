@@ -2,6 +2,7 @@
 #include "../MathLib/Mat.hpp"
 #include "../MathLib/MathConstants.hpp"
 #include "Assert.hpp"
+#include "ShaderList.hpp"
 
 
 namespace KK
@@ -9,15 +10,6 @@ namespace KK
 
 namespace
 {
-
-namespace Shaders
-{
-
-#include "shaders/cubemap_shadow.vert.sprv.h"
-#include "shaders/cubemap_shadow.geom.sprv.h"
-#include "shaders/cubemap_shadow.frag.sprv.h"
-
-} // namespace
 
 struct MatricesBuffer
 {
@@ -102,26 +94,9 @@ Shadowmapper::Shadowmapper(
 	}
 
 	// Create shaders
-	shader_vert_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_cubemap_shadow_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_vert_file_content)));
-
-	shader_geom_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_cubemap_shadow_geom_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_geom_file_content)));
-
-	shader_frag_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_cubemap_shadow_frag_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_cubemap_shadow_frag_file_content)));
+	shader_vert_= CreateShader(vk_device_, ShaderNames::cubemap_shadow_vert);
+	shader_geom_= CreateShader(vk_device_, ShaderNames::cubemap_shadow_geom);
+	shader_frag_= CreateShader(vk_device_, ShaderNames::cubemap_shadow_frag);
 
 	// Create pipeline
 	{

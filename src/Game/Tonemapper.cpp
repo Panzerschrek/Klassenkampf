@@ -1,5 +1,6 @@
 #include "Tonemapper.hpp"
 #include "Log.hpp"
+#include "ShaderList.hpp"
 
 
 namespace KK
@@ -8,14 +9,6 @@ namespace KK
 
 namespace
 {
-
-namespace Shaders
-{
-
-#include "shaders/tonemapping.vert.sprv.h"
-#include "shaders/tonemapping.frag.sprv.h"
-
-} // namespace Shaders
 
 struct Uniforms
 {
@@ -285,19 +278,8 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 	}
 
 	// Create shaders
-	shader_vert_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_tonemapping_vert_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_tonemapping_vert_file_content)));
-
-	shader_frag_=
-		vk_device_.createShaderModuleUnique(
-			vk::ShaderModuleCreateInfo(
-				vk::ShaderModuleCreateFlags(),
-				std::size(Shaders::c_tonemapping_frag_file_content),
-				reinterpret_cast<const uint32_t*>(Shaders::c_tonemapping_frag_file_content)));
+	shader_vert_= CreateShader(vk_device_, ShaderNames::tonemapping_vert);
+	shader_frag_= CreateShader(vk_device_, ShaderNames::tonemapping_frag);
 
 	// Create image sampler
 	framebuffer_image_sampler_=

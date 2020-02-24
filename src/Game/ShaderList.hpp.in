@@ -1,0 +1,15 @@
+#pragma once
+#include <vulkan/vulkan.hpp>
+
+
+namespace KK
+{
+
+enum class ShaderNames
+{
+${SHADER_VARIABLES_LIST}
+};
+
+vk::UniqueShaderModule CreateShader(vk::Device vk_device, ShaderNames shader_name);
+
+} // namespace KK
