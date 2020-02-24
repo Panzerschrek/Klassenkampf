@@ -87,8 +87,9 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights(
 
 		if(detail_level_int > last_detail_level)
 		{
-			KK_ASSERT(false); // TODO - handle this situation
-			continue; // No space left.
+			// No slots left.
+			light.detail_level_int= c_invalid_shadowmap_slot.first;
+			continue;
 		}
 
 		light.detail_level_int= detail_level_int;
@@ -144,6 +145,9 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights(
 
 ShadowmapSlot ShadowmapAllocator::AllocateSlot(const uint32_t detail_level)
 {
+	if(detail_level == c_invalid_shadowmap_slot.first)
+		return c_invalid_shadowmap_slot;
+
 	if(!free_slots_[detail_level].empty())
 	{
 		ShadowmapSlot result;
