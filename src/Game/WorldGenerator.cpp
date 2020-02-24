@@ -579,6 +579,8 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 	for(WorldData::CoordType x= sector.bb_min[0]; x <= sector.bb_max[0]; x+= sector.columns_step)
 	for(WorldData::CoordType y= sector.bb_min[1]; y <= sector.bb_max[1]; y+= sector.columns_step)
 	{
+		if( x > sector.bb_min[0] && x < sector.bb_max[0] &&
+			y > sector.bb_min[1] && y < sector.bb_max[1])
 		{
 			WorldData::Segment segment;
 			segment.type= WorldData::SegmentType::Column4Lights;
