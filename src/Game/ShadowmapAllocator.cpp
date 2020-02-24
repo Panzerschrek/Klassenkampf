@@ -7,18 +7,6 @@
 namespace KK
 {
 
-namespace
-{
-
-struct LightExtra
-{
-	ShadowmapLight light;
-	float detail_level= 0.0f;
-	uint32_t detail_level_int= ~0u;
-};
-
-} // namespace
-
 bool operator==(const ShadowmapLight& l, const ShadowmapLight& r)
 {
 	// Use memcmp, because floating point compare is incorrect for hashing.
@@ -59,29 +47,26 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights(
 {
 	++frame_number_;
 
-	// Copy lights to new container.
-	std::vector<LightExtra> lights_extra;
-	lights_extra.reserve(lights.size());
+	// Copy lights to new container, calculate detail level.
+	lights_extra_.clear();
+	lights_extra_.reserve(lights.size());
 	for(const ShadowmapLight& in_light : lights)
 	{
 		LightExtra out_light;
 		out_light.light= in_light;
-		lights_extra.push_back(std::move(out_light));
-	}
 
-	// Calculate detail level.
-	for(LightExtra& light : lights_extra)
-	{
 		// TODO - formulas here are totaly wrong, do real math to calculate detalization.
-		const float dist= (light.light.pos - cam_pos).GetLength();
+		const float dist= (in_light.pos - cam_pos).GetLength();
 		const float dist_k= 3.0f;
-		light.detail_level= std::log2(std::max(dist_k * dist / light.light.radius, 1.0f));
+		out_light.detail_level= std::log2(std::max(dist_k * dist / in_light.radius, 1.0f));
+
+		lights_extra_.push_back(std::move(out_light));
 	}
 
 	// Sort by detail level.
 	std::sort(
-		lights_extra.begin(),
-		lights_extra.end(),
+		lights_extra_.begin(),
+		lights_extra_.end(),
 		[](const LightExtra& l, const LightExtra& r)
 		{
 			return l.detail_level < r.detail_level;
@@ -94,7 +79,7 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights(
 	const uint32_t last_detail_level= uint32_t(detail_levels_left.size() - 1u);
 
 	// Assign detail levels.
-	for(LightExtra& light : lights_extra)
+	for(LightExtra& light : lights_extra_)
 	{
 		uint32_t detail_level_int= std::min(uint32_t(light.detail_level), last_detail_level);
 		while(detail_level_int <= last_detail_level && detail_levels_left[detail_level_int] == 0u)
@@ -111,7 +96,7 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights(
 	}
 
 	// Mark as used lights in cache, free layers of lights, that changed their detail level.
-	for(const LightExtra& light : lights_extra)
+	for(const LightExtra& light : lights_extra_)
 	{
 		const auto it= lights_set_.find(light.light);
 		if(it == lights_set_.end())
@@ -129,7 +114,7 @@ ShadowmapAllocator::LightsForShadowUpdate ShadowmapAllocator::UpdateLights(
 
 	// Assign shadowmap indices, count recalculated lights.
 	LightsForShadowUpdate lights_for_update;
-	for(const LightExtra& light : lights_extra)
+	for(const LightExtra& light : lights_extra_)
 	{
 		const auto it= lights_set_.find(light.light);
 		if(it == lights_set_.end())
@@ -186,6 +171,7 @@ ShadowmapSlot ShadowmapAllocator::AllocateSlot(const uint32_t detail_level)
 
 	if(src_light != nullptr)
 	{
+		// Remove lights from cache, only if there is no slots for new lights.
 		const ShadowmapSlot result= src_light->second.shadowmap_slot;
 		lights_set_.erase(src_light->first);
 		return result;

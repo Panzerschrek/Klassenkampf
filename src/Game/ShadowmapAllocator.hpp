@@ -34,6 +34,13 @@ public:
 	ShadowmapSlot GetLightShadowmapSlot(const ShadowmapLight& light) const;
 
 private:
+	struct LightExtra
+	{
+		ShadowmapLight light;
+		float detail_level= 0.0f;
+		uint32_t detail_level_int= ~0u;
+	};
+
 	struct LightData
 	{
 		ShadowmapSlot shadowmap_slot= c_invalid_shadowmap_slot;
@@ -57,6 +64,9 @@ private:
 	uint32_t frame_number_= 1u;
 	LightsSet lights_set_;
 	std::vector< std::vector<uint32_t> > free_slots_;
+
+	// Cache lights container.
+	std::vector<LightExtra> lights_extra_;
 };
 
 } // namespace KK
