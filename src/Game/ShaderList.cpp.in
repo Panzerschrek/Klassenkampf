@@ -13,7 +13,7 @@ namespace
 ${SHADER_INCLUDES_LIST}
 
 
-using ShaderSourceRef= std::pair<const uint8_t*, size_t>;
+using ShaderSourceRef= std::pair<const uint32_t*, size_t>;
 ShaderSourceRef GetShaderSource(const ShaderNames shader_name)
 {
 	switch(shader_name)
