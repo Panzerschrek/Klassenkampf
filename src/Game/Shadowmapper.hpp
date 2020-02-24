@@ -24,7 +24,7 @@ public:
 		vk::CommandBuffer command_buffer,
 		ShadowmapSlot slot,
 		const m_Vec3& light_pos,
-		float inv_light_radius,
+		float light_radius,
 		const std::function<void()>& draw_function);
 
 private:

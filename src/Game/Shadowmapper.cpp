@@ -180,9 +180,7 @@ Shadowmapper::Shadowmapper(
 			0u, uint32_t(vertex_size), vk::VertexInputRate::eVertex);
 
 		const vk::VertexInputAttributeDescription vertex_input_attribute_description[]
-		{
-			{0u, 0u, vertex_pos_format, uint32_t(vertex_pos_offset)},
-		};
+		{ {0u, 0u, vertex_pos_format, uint32_t(vertex_pos_offset)}, };
 
 		const vk::PipelineVertexInputStateCreateInfo pipiline_vertex_input_state_create_info(
 			vk::PipelineVertexInputStateCreateFlags(),
@@ -195,7 +193,6 @@ Shadowmapper::Shadowmapper(
 
 		const vk::Viewport viewport(0.0f, 0.0f, float(base_cubemap_size), float(base_cubemap_size), 0.0f, 1.0f);
 		const vk::Rect2D scissor(vk::Offset2D(0, 0), vk::Extent2D(base_cubemap_size, base_cubemap_size));
-
 		const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
 			vk::PipelineViewportStateCreateFlags(),
 			1u, &viewport,
@@ -431,7 +428,7 @@ void Shadowmapper::DrawToDepthCubemap(
 	const vk::CommandBuffer command_buffer,
 	const ShadowmapSlot slot,
 	const m_Vec3& light_pos,
-	const float inv_light_radius,
+	const float light_radius,
 	const std::function<void()>& draw_function)
 {
 	if(!matrices_buffer_filled_)
@@ -478,7 +475,6 @@ void Shadowmapper::DrawToDepthCubemap(
 	KK_ASSERT(cubemap_index < detail_level.cubemap_count);
 
 	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
-
 	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
 			*render_pass_,
@@ -501,7 +497,7 @@ void Shadowmapper::DrawToDepthCubemap(
 
 	Uniforms uniforms;
 	uniforms.light_pos= light_pos;
-	uniforms.inv_light_radius= inv_light_radius;
+	uniforms.inv_light_radius= 1.0f / light_radius;
 	command_buffer.pushConstants(
 		*pipeline_layout_,
 		vk::ShaderStageFlagBits::eGeometry,

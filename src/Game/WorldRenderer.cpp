@@ -385,7 +385,6 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	}
 
 	// Prepare light.
-	std::vector<ShadowmapLight> shadowmap_lights;
 	LightBuffer light_buffer;
 	light_buffer.ambient_color[0]= 0.1f;
 	light_buffer.ambient_color[1]= 0.1f;
@@ -405,10 +404,10 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	light_buffer.w_convert_values[1]= cluster_volume_builder_.GetWConvertValues().y;
 
 	uint32_t light_count= 0u;
+	std::vector<ShadowmapLight> shadowmap_lights;
 
 	if(test_light_ != std::nullopt)
 	{
-
 		const bool added=
 			cluster_volume_builder_.AddSphere(
 				test_light_->pos,
@@ -481,7 +480,6 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	// Allocate shadowmaps.
 	const ShadowmapAllocator::LightsForShadowUpdate lights_for_shadow_update=
 		shadowmap_allocator_.UpdateLights(shadowmap_lights, cam_pos);
-
 	for(uint32_t i= 0u; i < light_count; ++i)
 	{
 		const auto slot= shadowmap_allocator_.GetLightShadowmapSlot(shadowmap_lights[i]);
@@ -523,7 +521,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 			command_buffer,
 			slot,
 			light.pos,
-			1.0f / light.radius,
+			light.radius,
 			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, light.pos, light.radius); } );
 	}
 
@@ -721,8 +719,9 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
-	std::vector<vk::Sampler> depth_cubemap_image_samplers;
-	depth_cubemap_image_samplers.resize(shadowmapper_.GetDepthCubemapArrayImagesView().size(), *pipeline.depth_cubemap_image_sampler);
+	const std::vector<vk::Sampler> depth_cubemap_image_samplers(
+		shadowmapper_.GetDepthCubemapArrayImagesView().size(),
+		*pipeline.depth_cubemap_image_sampler);
 
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
@@ -1531,7 +1530,7 @@ void WorldRenderer::ComandTestLightAdd(const CommandsArguments& args)
 {
 	if(args.size() < 1u)
 	{
-		Log::Info("Too littler arguments. Usage: test_light_add <radius> <power>");
+		Log::Info("Too few arguments. Usage: test_light_add <radius> <power>");
 		return;
 	}
 

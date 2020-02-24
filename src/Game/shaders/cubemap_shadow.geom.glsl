@@ -5,7 +5,7 @@ layout(triangle_strip, max_vertices = 3) out;
 
 layout(binding= 0, std430) buffer readonly matrices_block
 {
-	mat4 view_matrices[6];
+	mat4 cubemap_matrices[6];
 };
 
 layout(push_constant) uniform uniforms_block
@@ -19,13 +19,12 @@ layout(location= 0) out vec3 f_pos;
 
 void main()
 {
-	int i= gl_InvocationID;
-	gl_Layer= i;
+	gl_Layer= gl_InvocationID;
 
 	for( int j= 0; j < 3; ++j)
 	{
 		vec3 pos_relative= g_pos[j] - light_pos.xyz;
-		gl_Position= view_matrices[i] * vec4(pos_relative, 1.0);
+		gl_Position= cubemap_matrices[gl_InvocationID] * vec4(pos_relative, 1.0);
 		f_pos= pos_relative * light_pos.w;
 		EmitVertex();
 	}
