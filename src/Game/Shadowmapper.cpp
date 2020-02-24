@@ -420,14 +420,14 @@ std::vector<vk::ImageView> Shadowmapper::GetDepthCubemapArrayImagesView() const
 
 void Shadowmapper::DrawToDepthCubemap(
 	const vk::CommandBuffer command_buffer,
-	const ShadowmapLayerIndex layer_index,
+	const ShadowmapSlot slot,
 	const m_Vec3& light_pos,
 	const float inv_light_radius,
 	const std::function<void()>& draw_function)
 {
-	KK_ASSERT(layer_index.first < detail_levels_.size());
-	DetailLevel& detail_level= detail_levels_[layer_index.first];
-	const uint32_t cubemap_index= layer_index.second;
+	KK_ASSERT(slot.first < detail_levels_.size());
+	DetailLevel& detail_level= detail_levels_[slot.first];
+	const uint32_t cubemap_index= slot.second;
 	KK_ASSERT(cubemap_index < detail_level.cubemap_count);
 
 	Uniforms uniforms;

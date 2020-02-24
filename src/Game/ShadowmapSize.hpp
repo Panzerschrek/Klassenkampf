@@ -16,6 +16,6 @@ struct ShadowmapLevelSize
 using ShadowmapSize= std::vector<ShadowmapLevelSize>;
 
 // First - number of cubemap array, second - number of layer in array.
-using ShadowmapLayerIndex= std::pair<uint32_t, uint32_t>;
+using ShadowmapSlot= std::pair<uint32_t, uint32_t>;
 
 } // namespace KK

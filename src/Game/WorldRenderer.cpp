@@ -480,13 +480,13 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 
 	// Allocate shadowmaps.
 	const ShadowmapAllocator::LightsForShadowUpdate lights_for_shadow_update=
-		shadowmap_allocator_.UpdateLights2(shadowmap_lights, cam_pos);
+		shadowmap_allocator_.UpdateLights(shadowmap_lights, cam_pos);
 
 	for(uint32_t i= 0u; i < light_count; ++i)
 	{
-		const auto layer_index= shadowmap_allocator_.GetLightShadowmapLayer(shadowmap_lights[i]);
-		light_buffer.lights[i].shadowmap_index[0]= layer_index.first;
-		light_buffer.lights[i].shadowmap_index[1]= layer_index.second;
+		const auto slot= shadowmap_allocator_.GetLightShadowmapSlot(shadowmap_lights[i]);
+		light_buffer.lights[i].shadowmap_index[0]= slot.first;
+		light_buffer.lights[i].shadowmap_index[1]= slot.second;
 	}
 
 	const auto& clusters= cluster_volume_builder_.GetClusters();
@@ -515,13 +515,13 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	// Draw shadows
 	for(const ShadowmapLight& light : lights_for_shadow_update)
 	{
-		const ShadowmapLayerIndex layer= shadowmap_allocator_.GetLightShadowmapLayer(light);
-		if(layer == ShadowmapAllocator::c_invalid_shadowmap_layer_index)
+		const ShadowmapSlot slot= shadowmap_allocator_.GetLightShadowmapSlot(light);
+		if(slot == ShadowmapAllocator::c_invalid_shadowmap_slot)
 			continue;
 
 		shadowmapper_.DrawToDepthCubemap(
 			command_buffer,
-			layer,
+			slot,
 			light.pos,
 			1.0f / light.radius,
 			[&]{ DrawWorldModelToDepthCubemap(command_buffer, model, light.pos, light.radius); } );
