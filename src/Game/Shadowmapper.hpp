@@ -42,10 +42,6 @@ private:
 		vk::UniqueDeviceMemory depth_cubemap_array_image_memory;
 		vk::UniqueImageView depth_cubemap_array_image_view;
 		std::vector<Framebuffer> framebuffers;
-
-		vk::UniqueBuffer uniforms_buffer;
-		vk::UniqueDeviceMemory uniforms_buffer_memory;
-		vk::UniqueDescriptorSet descriptor_set;
 	};
 
 private:
@@ -62,6 +58,11 @@ private:
 	vk::UniquePipeline pipeline_;
 
 	vk::UniqueDescriptorPool descriptor_set_pool_;
+
+	vk::UniqueBuffer uniforms_buffer_;
+	vk::UniqueDeviceMemory uniforms_buffer_memory_;
+	vk::UniqueDescriptorSet descriptor_set_;
+	bool matrices_buffer_filled_= false;
 
 	std::vector<DetailLevel> detail_levels_;
 };

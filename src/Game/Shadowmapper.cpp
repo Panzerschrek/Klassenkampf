@@ -19,9 +19,13 @@ namespace Shaders
 
 } // namespace
 
-struct Uniforms
+struct MatricesBuffer
 {
 	m_Mat4 view_matrices[6];
+};
+
+struct Uniforms
+{
 	m_Vec3 light_pos;
 	float inv_light_radius;
 };
@@ -125,7 +129,7 @@ Shadowmapper::Shadowmapper(
 		{
 			{
 				0u,
-				vk::DescriptorType::eStorageBufferDynamic,
+				vk::DescriptorType::eStorageBuffer,
 				1u,
 				vk::ShaderStageFlagBits::eGeometry,
 				nullptr,
@@ -138,12 +142,17 @@ Shadowmapper::Shadowmapper(
 					vk::DescriptorSetLayoutCreateFlags(),
 					uint32_t(std::size(descriptor_set_layout_bindings)), descriptor_set_layout_bindings));
 
+		const vk::PushConstantRange push_constant_range(
+			vk::ShaderStageFlagBits::eGeometry,
+			0u,
+			sizeof(Uniforms));
+
 		pipeline_layout_=
 			vk_device_.createPipelineLayoutUnique(
 				vk::PipelineLayoutCreateInfo(
 					vk::PipelineLayoutCreateFlags(),
 					1u, &*descriptor_set_layout_,
-					0u, nullptr));
+					1u, &push_constant_range));
 
 		const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[]
 		{
@@ -254,13 +263,63 @@ Shadowmapper::Shadowmapper(
 	}
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eStorageBufferDynamic, 1u);
+	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eStorageBuffer, 1u);
 	descriptor_set_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				detail_level_count, // max sets.
+				1u, // max sets.
 				1u, &descriptor_pool_size));
+
+	// Create uniforms buffer.
+	{
+		uniforms_buffer_=
+			vk_device_.createBufferUnique(
+				vk::BufferCreateInfo(
+					vk::BufferCreateFlags(),
+					sizeof(MatricesBuffer),
+					vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
+
+		const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*uniforms_buffer_);
+
+		vk::MemoryAllocateInfo memory_allocate_info(buffer_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		uniforms_buffer_memory_= vk_device_.allocateMemoryUnique(memory_allocate_info);
+		vk_device_.bindBufferMemory(*uniforms_buffer_, *uniforms_buffer_memory_, 0u);
+	}
+
+	// Create descriptor set.
+	descriptor_set_=
+		std::move(
+		vk_device_.allocateDescriptorSetsUnique(
+			vk::DescriptorSetAllocateInfo(
+				*descriptor_set_pool_,
+				1u, &*descriptor_set_layout_)).front());
+
+	// Write descriptor set.
+	const vk::DescriptorBufferInfo descriptor_buffer_info(
+		*uniforms_buffer_,
+		0u,
+		sizeof(MatricesBuffer));
+
+	const vk::WriteDescriptorSet write_descriptor_set(
+		*descriptor_set_,
+		0u,
+		0u,
+		1u,
+		vk::DescriptorType::eStorageBuffer,
+		nullptr,
+		&descriptor_buffer_info,
+		nullptr);
+	vk_device_.updateDescriptorSets(
+		1u, &write_descriptor_set,
+		0u, nullptr);
 
 	// Create cubemaps arrays.
 	for(uint32_t d= 0u; d < detail_level_count; ++d)
@@ -336,56 +395,6 @@ Shadowmapper::Shadowmapper(
 			detail_level.framebuffers.push_back(std::move(framebuffer));
 		}
 
-		// Create uniforms buffer.
-		{
-			detail_level.uniforms_buffer=
-				vk_device_.createBufferUnique(
-					vk::BufferCreateInfo(
-						vk::BufferCreateFlags(),
-						sizeof(Uniforms) * detail_level.cubemap_count,
-						vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst));
-
-			const vk::MemoryRequirements buffer_memory_requirements= vk_device_.getBufferMemoryRequirements(*detail_level.uniforms_buffer);
-
-			vk::MemoryAllocateInfo memory_allocate_info(buffer_memory_requirements.size);
-			for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
-			{
-				if((buffer_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
-					(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
-					memory_allocate_info.memoryTypeIndex= i;
-			}
-
-			detail_level.uniforms_buffer_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
-			vk_device_.bindBufferMemory(*detail_level.uniforms_buffer, *detail_level.uniforms_buffer_memory, 0u);
-		}
-
-		// Create descriptor set.
-		detail_level.descriptor_set=
-			std::move(
-			vk_device_.allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(
-					*descriptor_set_pool_,
-					1u, &*descriptor_set_layout_)).front());
-
-		// Write descriptor set.
-		const vk::DescriptorBufferInfo descriptor_buffer_info(
-			*detail_level.uniforms_buffer,
-			0u,
-			sizeof(Uniforms));
-
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*detail_level.descriptor_set,
-			0u,
-			0u,
-			1u,
-			vk::DescriptorType::eStorageBufferDynamic,
-			nullptr,
-			&descriptor_buffer_info,
-			nullptr);
-		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
-			0u, nullptr);
-
 		detail_levels_.push_back(std::move(detail_level));
 	} // for detail levels.
 }
@@ -425,49 +434,48 @@ void Shadowmapper::DrawToDepthCubemap(
 	const float inv_light_radius,
 	const std::function<void()>& draw_function)
 {
+	if(!matrices_buffer_filled_)
+	{
+		// Use same set of matrices for projection to cubemap faces.
+		matrices_buffer_filled_= true;
+
+		MatricesBuffer matrices;
+
+		m_Mat4 perspective_mat, rotate_z_mat;
+		perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.125f, 128.0f);
+		rotate_z_mat.RotateZ(MathConstants::pi);
+		matrices.view_matrices[0].RotateY(+MathConstants::half_pi);
+		matrices.view_matrices[1].RotateY(-MathConstants::half_pi);
+		matrices.view_matrices[2].RotateX(-MathConstants::half_pi);
+		matrices.view_matrices[2]*= rotate_z_mat;
+		matrices.view_matrices[3].RotateX(+MathConstants::half_pi);
+		matrices.view_matrices[3]*= rotate_z_mat;
+		matrices.view_matrices[4].RotateY(-MathConstants::pi);
+		matrices.view_matrices[5].MakeIdentity();
+
+		for(size_t i= 0u; i < 6u; ++i)
+			matrices.view_matrices[i]= matrices.view_matrices[i] * perspective_mat;
+
+		command_buffer.updateBuffer(
+			*uniforms_buffer_,
+			0u,
+			sizeof(MatricesBuffer),
+			&matrices);
+
+		const vk::MemoryBarrier memory_barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
+		command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eAllGraphics,
+			vk::DependencyFlags(),
+			1u, &memory_barrier,
+			0u, nullptr,
+			0u, nullptr);
+	}
+
 	KK_ASSERT(slot.first < detail_levels_.size());
 	DetailLevel& detail_level= detail_levels_[slot.first];
 	const uint32_t cubemap_index= slot.second;
 	KK_ASSERT(cubemap_index < detail_level.cubemap_count);
-
-	Uniforms uniforms;
-	uniforms.light_pos= light_pos;
-	uniforms.inv_light_radius= inv_light_radius;
-
-	m_Mat4 perspective_mat, shift_mat;
-	perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.125f, 128.0f);
-	shift_mat.Translate(-light_pos);
-
-	m_Mat4 rotate_z_mat;
-	rotate_z_mat.RotateZ(MathConstants::pi);
-	uniforms.view_matrices[0].RotateY(+MathConstants::half_pi);
-	uniforms.view_matrices[1].RotateY(-MathConstants::half_pi);
-	uniforms.view_matrices[2].RotateX(-MathConstants::half_pi);
-	uniforms.view_matrices[2]*= rotate_z_mat;
-	uniforms.view_matrices[3].RotateX(+MathConstants::half_pi);
-	uniforms.view_matrices[3]*= rotate_z_mat;
-	uniforms.view_matrices[4].RotateY(-MathConstants::pi);
-	uniforms.view_matrices[5].MakeIdentity();
-
-	for(size_t i= 0u; i < 6u; ++i)
-		uniforms.view_matrices[i]= shift_mat * uniforms.view_matrices[i] * perspective_mat;
-
-	const uint32_t buffer_offset= uint32_t(cubemap_index * sizeof(Uniforms));
-
-	command_buffer.updateBuffer(
-		*detail_level.uniforms_buffer,
-		buffer_offset,
-		sizeof(Uniforms),
-		&uniforms);
-
-	const vk::MemoryBarrier memory_barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
-	command_buffer.pipelineBarrier(
-		vk::PipelineStageFlagBits::eTransfer,
-		vk::PipelineStageFlagBits::eAllGraphics,
-		vk::DependencyFlags(),
-		1u, &memory_barrier,
-		0u, nullptr,
-		0u, nullptr);
 
 	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
 
@@ -488,8 +496,18 @@ void Shadowmapper::DrawToDepthCubemap(
 		vk::PipelineBindPoint::eGraphics,
 		*pipeline_layout_,
 		0u,
-		1u, &*detail_level.descriptor_set,
-		1u, &buffer_offset);
+		1u, &*descriptor_set_,
+		0u, nullptr);
+
+	Uniforms uniforms;
+	uniforms.light_pos= light_pos;
+	uniforms.inv_light_radius= inv_light_radius;
+	command_buffer.pushConstants(
+		*pipeline_layout_,
+		vk::ShaderStageFlagBits::eGeometry,
+		0,
+		sizeof(uniforms),
+		&uniforms);
 
 	draw_function();
 
