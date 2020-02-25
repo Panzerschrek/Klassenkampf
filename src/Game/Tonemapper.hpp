@@ -29,6 +29,19 @@ private:
 		vk::UniqueFramebuffer framebuffer;
 	};
 
+	struct Pipeline
+	{
+		vk::UniqueShaderModule shader_vert;
+		vk::UniqueShaderModule shader_frag;
+		vk::UniqueSampler sampler;
+		vk::UniqueDescriptorSetLayout decriptor_set_layout;
+		vk::UniquePipelineLayout pipeline_layout;
+		vk::UniquePipeline pipeline;
+	};
+
+private:
+	Pipeline CreateMainPipeline(WindowVulkan& window_vulkan);
+
 private:
 	Settings& settings_;
 	const vk::Device vk_device_;
@@ -40,7 +53,6 @@ private:
 	vk::UniqueImage framebuffer_image_;
 	vk::UniqueDeviceMemory framebuffer_image_memory_;
 	vk::UniqueImageView framebuffer_image_view_;
-	vk::UniqueSampler framebuffer_image_sampler_;
 
 	vk::UniqueImage framebuffer_depth_image_;
 	vk::UniqueDeviceMemory framebuffer_depth_image_memory_;
@@ -59,11 +71,7 @@ private:
 	vk::UniqueDeviceMemory exposure_accumulate_memory_;
 	bool exposure_buffer_prepared_= false;
 
-	vk::UniqueShaderModule shader_vert_;
-	vk::UniqueShaderModule shader_frag_;
-	vk::UniqueDescriptorSetLayout decriptor_set_layout_;
-	vk::UniquePipelineLayout pipeline_layout_;
-	vk::UniquePipeline pipeline_;
+	Pipeline main_pipeline_;
 
 	vk::UniqueRenderPass blur_render_pass_;
 	BlurBuffer blur_buffers_[2];
