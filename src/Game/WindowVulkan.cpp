@@ -15,9 +15,14 @@ namespace
 
 vk::PhysicalDeviceFeatures GetRequiredDeviceFeatures()
 {
+	// http://vulkan.gpuinfo.org/listfeatures.php
+
 	vk::PhysicalDeviceFeatures features;
-	features.setSamplerAnisotropy(VK_TRUE);
-	features.setGeometryShader(VK_TRUE);
+	features.setSamplerAnisotropy(VK_TRUE); // For anisothropy, 99.2%
+	features.setGeometryShader(VK_TRUE); // For cubemap shadows, text glyphs, 99.2%
+	features.setImageCubeArray(VK_TRUE); // For shadows, 99.5%
+	features.setVertexPipelineStoresAndAtomics(VK_TRUE); // For tonemapping, 99.7%
+
 	return features;
 }
 
