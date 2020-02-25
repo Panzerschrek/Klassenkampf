@@ -62,7 +62,7 @@ WindowVulkan::WindowVulkan(
 	#ifdef DEBUG
 	const bool use_debug_extensions_and_layers= true;
 	#else
-	const bool use_debug_extensions_and_layers= true;
+	const bool use_debug_extensions_and_layers= false;
 	#endif
 
 	const bool vsync= settings.GetOrSetInt("r_vsync", 1) != 0;
