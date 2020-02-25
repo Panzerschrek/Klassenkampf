@@ -805,7 +805,7 @@ Tonemapper::Pipeline Tonemapper::CreateMainPipeline(WindowVulkan& window_vulkan)
 				uint32_t(std::size(push_constant_ranges)), push_constant_ranges));
 
 	// Create pipeline.
-	const vk::PipelineShaderStageCreateInfo vk_shader_stage_create_info[2]
+	const vk::PipelineShaderStageCreateInfo shader_stage_create_info[2]
 	{
 		{
 			vk::PipelineShaderStageCreateFlags(),
@@ -833,12 +833,12 @@ Tonemapper::Pipeline Tonemapper::CreateMainPipeline(WindowVulkan& window_vulkan)
 	const vk::Viewport vk_viewport(0.0f, 0.0f, float(viewport_size.width), float(viewport_size.height), 0.0f, 1.0f);
 	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), viewport_size);
 
-	const vk::PipelineViewportStateCreateInfo vk_pipieline_viewport_state_create_info(
+	const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
 		vk::PipelineViewportStateCreateFlags(),
 		1u, &vk_viewport,
 		1u, &vk_scissor);
 
-	const vk::PipelineRasterizationStateCreateInfo vk_pipilane_rasterization_state_create_info(
+	const vk::PipelineRasterizationStateCreateInfo pipilane_rasterization_state_create_info(
 		vk::PipelineRasterizationStateCreateFlags(),
 		VK_FALSE,
 		VK_FALSE,
@@ -848,9 +848,9 @@ Tonemapper::Pipeline Tonemapper::CreateMainPipeline(WindowVulkan& window_vulkan)
 		VK_FALSE, 0.0f, 0.0f, 0.0f,
 		1.0f);
 
-	const vk::PipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info;
+	const vk::PipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info;
 
-	const vk::PipelineColorBlendAttachmentState vk_pipeline_color_blend_attachment_state(
+	const vk::PipelineColorBlendAttachmentState pipeline_color_blend_attachment_state(
 		VK_FALSE,
 		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
@@ -860,21 +860,20 @@ Tonemapper::Pipeline Tonemapper::CreateMainPipeline(WindowVulkan& window_vulkan)
 		vk::PipelineColorBlendStateCreateFlags(),
 		VK_FALSE,
 		vk::LogicOp::eCopy,
-		1u, &vk_pipeline_color_blend_attachment_state);
+		1u, &pipeline_color_blend_attachment_state);
 
 	pipeline.pipeline=
 		vk_device_.createGraphicsPipelineUnique(
 			nullptr,
 			vk::GraphicsPipelineCreateInfo(
 				vk::PipelineCreateFlags(),
-				uint32_t(std::size(vk_shader_stage_create_info)),
-				vk_shader_stage_create_info,
+				uint32_t(std::size(shader_stage_create_info)), shader_stage_create_info,
 				&pipiline_vertex_input_state_create_info,
 				&pipeline_input_assembly_state_create_info,
 				nullptr,
-				&vk_pipieline_viewport_state_create_info,
-				&vk_pipilane_rasterization_state_create_info,
-				&vk_pipeline_multisample_state_create_info,
+				&pipieline_viewport_state_create_info,
+				&pipilane_rasterization_state_create_info,
+				&pipeline_multisample_state_create_info,
 				nullptr,
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
