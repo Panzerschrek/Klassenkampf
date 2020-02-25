@@ -63,10 +63,12 @@ private:
 	vk::UniqueRenderPass framebuffer_render_pass_;
 	vk::UniqueFramebuffer framebuffer_;
 
+	// Size for brightness calculate image, blur images.
+	vk::Extent2D aux_image_size_;
+
 	vk::UniqueImage brightness_calculate_image_;
 	vk::UniqueDeviceMemory brightness_calculate_image_memory_;
 	vk::UniqueImageView brightness_calculate_image_view_;
-	vk::Extent2D brightness_calculate_image_size_;
 	uint32_t brightness_calculate_image_mip_levels_;
 
 	vk::UniqueBuffer exposure_accumulate_buffer_;
