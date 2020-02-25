@@ -1,5 +1,6 @@
 #pragma once
 #include "../MathLib/Vec.hpp"
+#include "GPUDataUploader.hpp"
 #include "ShadowmapSize.hpp"
 #include "WindowVulkan.hpp"
 
@@ -12,6 +13,7 @@ class Shadowmapper final
 public:
 	Shadowmapper(
 		WindowVulkan& window_vulkan,
+		GPUDataUploader& gpu_data_uploader,
 		size_t vertex_size,
 		size_t vertex_pos_offset,
 		vk::Format vertex_pos_format);
@@ -62,7 +64,6 @@ private:
 	vk::UniqueBuffer uniforms_buffer_;
 	vk::UniqueDeviceMemory uniforms_buffer_memory_;
 	vk::UniqueDescriptorSet descriptor_set_;
-	bool matrices_buffer_filled_= false;
 
 	std::vector<DetailLevel> detail_levels_;
 };

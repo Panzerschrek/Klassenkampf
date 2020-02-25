@@ -26,6 +26,7 @@ struct Uniforms
 
 Shadowmapper::Shadowmapper(
 	WindowVulkan& window_vulkan,
+	GPUDataUploader& gpu_data_uploader,
 	const size_t vertex_size,
 	const size_t vertex_pos_offset,
 	const vk::Format vertex_pos_format)
@@ -369,6 +370,66 @@ Shadowmapper::Shadowmapper(
 
 		detail_levels_.push_back(std::move(detail_level));
 	} // for detail levels.
+
+	// Fill matrices buffer.
+	const auto staging_buffer= gpu_data_uploader.RequestMemory(0u);
+	{
+		MatricesBuffer matrices;
+
+		m_Mat4 perspective_mat, rotate_z_mat;
+		perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.125f, 128.0f);
+		rotate_z_mat.RotateZ(MathConstants::pi);
+		matrices.view_matrices[0].RotateY(+MathConstants::half_pi);
+		matrices.view_matrices[1].RotateY(-MathConstants::half_pi);
+		matrices.view_matrices[2].RotateX(-MathConstants::half_pi);
+		matrices.view_matrices[2]*= rotate_z_mat;
+		matrices.view_matrices[3].RotateX(+MathConstants::half_pi);
+		matrices.view_matrices[3]*= rotate_z_mat;
+		matrices.view_matrices[4].RotateY(-MathConstants::pi);
+		matrices.view_matrices[5].MakeIdentity();
+
+		for(size_t i= 0u; i < 6u; ++i)
+			matrices.view_matrices[i]= matrices.view_matrices[i] * perspective_mat;
+
+		staging_buffer.command_buffer.updateBuffer(
+			*uniforms_buffer_,
+			0u,
+			sizeof(MatricesBuffer),
+			&matrices);
+
+		const vk::MemoryBarrier memory_barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
+		staging_buffer.command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eAllGraphics,
+			vk::DependencyFlags(),
+			1u, &memory_barrier,
+			0u, nullptr,
+			0u, nullptr);
+	}
+
+	// Change layout of all images to shader read only optimal to supress validation warnings.
+	// Actually we do not needed that, because before using cubemap we render to it and render pas changes it's layout to shader read only optimal.
+	for(const DetailLevel& detail_level : detail_levels_)
+	{
+		const vk::ImageMemoryBarrier image_memory_barrier(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+			window_vulkan.GetQueueFamilyIndex(),
+			window_vulkan.GetQueueFamilyIndex(),
+			*detail_level.depth_cubemap_array_image,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, detail_level.cubemap_count * 6u));
+
+		staging_buffer.command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_barrier);
+	}
+
+	gpu_data_uploader.Flush();
 }
 
 Shadowmapper::~Shadowmapper()
@@ -406,44 +467,6 @@ void Shadowmapper::DrawToDepthCubemap(
 	const float light_radius,
 	const std::function<void()>& draw_function)
 {
-	if(!matrices_buffer_filled_)
-	{
-		// Use same set of matrices for projection to cubemap faces.
-		matrices_buffer_filled_= true;
-
-		MatricesBuffer matrices;
-
-		m_Mat4 perspective_mat, rotate_z_mat;
-		perspective_mat.PerspectiveProjection(1.0f, MathConstants::half_pi, 0.125f, 128.0f);
-		rotate_z_mat.RotateZ(MathConstants::pi);
-		matrices.view_matrices[0].RotateY(+MathConstants::half_pi);
-		matrices.view_matrices[1].RotateY(-MathConstants::half_pi);
-		matrices.view_matrices[2].RotateX(-MathConstants::half_pi);
-		matrices.view_matrices[2]*= rotate_z_mat;
-		matrices.view_matrices[3].RotateX(+MathConstants::half_pi);
-		matrices.view_matrices[3]*= rotate_z_mat;
-		matrices.view_matrices[4].RotateY(-MathConstants::pi);
-		matrices.view_matrices[5].MakeIdentity();
-
-		for(size_t i= 0u; i < 6u; ++i)
-			matrices.view_matrices[i]= matrices.view_matrices[i] * perspective_mat;
-
-		command_buffer.updateBuffer(
-			*uniforms_buffer_,
-			0u,
-			sizeof(MatricesBuffer),
-			&matrices);
-
-		const vk::MemoryBarrier memory_barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
-		command_buffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTransfer,
-			vk::PipelineStageFlagBits::eAllGraphics,
-			vk::DependencyFlags(),
-			1u, &memory_barrier,
-			0u, nullptr,
-			0u, nullptr);
-	}
-
 	KK_ASSERT(slot.first < detail_levels_.size());
 	DetailLevel& detail_level= detail_levels_[slot.first];
 	const uint32_t cubemap_index= slot.second;
