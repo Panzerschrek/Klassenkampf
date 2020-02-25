@@ -15,17 +15,19 @@ namespace
 
 vk::PhysicalDeviceFeatures2 GetRequiredDeviceFeatures()
 {
-	// For 8bit values in
+	// http://vulkan.gpuinfo.org/listfeatures.php
+
+	// For 8bit values in shaderss
 	static vk::PhysicalDevice8BitStorageFeaturesKHR eight_bit_storage(
 		VK_TRUE,
 		VK_TRUE,
-		VK_TRUE);
+		VK_TRUE); // 49.9%
 
 	vk::PhysicalDeviceFeatures features;
-	features.setSamplerAnisotropy(VK_TRUE);
-	features.setGeometryShader(VK_TRUE); // For text glyphs
-	features.setImageCubeArray(VK_TRUE); // For shadows
-	features.setVertexPipelineStoresAndAtomics(VK_TRUE); // For tonemapping
+	features.setSamplerAnisotropy(VK_TRUE); // For anisothropy, 99.2%
+	features.setGeometryShader(VK_TRUE); // For text glyphs, cubemap shadows, 99.2%
+	features.setImageCubeArray(VK_TRUE); // For shadows, 99.5%
+	features.setVertexPipelineStoresAndAtomics(VK_TRUE); // For tonemapping, 99.7%
 
 	vk::PhysicalDeviceFeatures2 features2(features);
 	features2.setPNext(&eight_bit_storage);
