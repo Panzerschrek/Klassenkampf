@@ -21,6 +21,15 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
+	struct BlurBuffer
+	{
+		vk::UniqueImage image;
+		vk::UniqueDeviceMemory image_memory;
+		vk::UniqueImageView image_view;
+		vk::UniqueFramebuffer framebuffer;
+	};
+
+private:
 	Settings& settings_;
 	const vk::Device vk_device_;
 	const uint32_t queue_family_index_;
@@ -55,6 +64,9 @@ private:
 	vk::UniqueDescriptorSetLayout decriptor_set_layout_;
 	vk::UniquePipelineLayout pipeline_layout_;
 	vk::UniquePipeline pipeline_;
+
+	vk::UniqueRenderPass blur_render_pass_;
+	BlurBuffer blur_buffers_[2];
 
 	vk::UniqueDescriptorPool descriptor_pool_;
 	vk::UniqueDescriptorSet descriptor_set_;
