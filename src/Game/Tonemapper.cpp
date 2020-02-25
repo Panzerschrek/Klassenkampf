@@ -753,15 +753,16 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 				0u, nullptr);
 
 			UniformsBlur uniforms;
+			const float c_blur_size= 0.1f;
 			if(&blur_buffer == &blur_buffers_[0])
 			{
-				uniforms.blur_vector[0]= 0.01f;
+				uniforms.blur_vector[0]= c_blur_size * float(framebuffer_size_.height) / float(framebuffer_size_.width);
 				uniforms.blur_vector[1]= 0.0f;
 			}
 			else
 			{
 				uniforms.blur_vector[0]= 0.0f;
-				uniforms.blur_vector[1]= 0.01f;
+				uniforms.blur_vector[1]= c_blur_size;
 			}
 
 			command_buffer.pushConstants(
