@@ -753,7 +753,7 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 				0u, nullptr);
 
 			const std::string_view bloom_size_settings_name= "r_bloom_size";
-			const float bloom_size= std::max(0.01f, std::min(float(settings_.GetReal(bloom_size_settings_name, 0.1)), 0.25f));
+			const float bloom_size= std::max(0.01f, std::min(float(settings_.GetReal(bloom_size_settings_name, 0.0625)), 0.25f));
 			settings_.SetReal(bloom_size_settings_name, bloom_size);
 
 			UniformsBloom uniforms;
@@ -801,7 +801,7 @@ void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 	settings_.SetReal(color_deformation_factor_settings_name, color_deformation_factor);
 
 	const std::string_view bloom_scale_settings_name= "r_bloom_scale";
-	const float bloom_scale= std::max(0.0f, std::min(float(settings_.GetReal(bloom_scale_settings_name, 0.125)), 0.25f));
+	const float bloom_scale= std::max(0.01f, std::min(float(settings_.GetReal(bloom_scale_settings_name, 0.125)), 0.25f));
 	settings_.SetReal(bloom_scale_settings_name, bloom_scale);
 
 	Uniforms uniforms;
