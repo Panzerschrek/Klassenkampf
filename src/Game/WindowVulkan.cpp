@@ -24,6 +24,8 @@ vk::PhysicalDeviceFeatures2 GetRequiredDeviceFeatures()
 	vk::PhysicalDeviceFeatures features;
 	features.setSamplerAnisotropy(VK_TRUE);
 	features.setGeometryShader(VK_TRUE); // For text glyphs
+	features.setImageCubeArray(VK_TRUE); // For shadows
+	features.setVertexPipelineStoresAndAtomics(VK_TRUE); // For tonemapping
 
 	vk::PhysicalDeviceFeatures2 features2(features);
 	features2.setPNext(&eight_bit_storage);
