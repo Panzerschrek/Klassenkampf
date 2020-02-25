@@ -24,6 +24,12 @@ struct Uniforms
 	} fragment;
 };
 
+struct UniformsBlur
+{
+	float blur_vector[2];
+	float padding[2];
+};
+
 struct ExposureAccumulateBuffer
 {
 	float exposure[6];
@@ -399,6 +405,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 	}
 
 	main_pipeline_= CreateMainPipeline(window_vulkan);
+	blur_pipeline_= CreateBlurPipeline();
 
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
@@ -881,6 +888,144 @@ Tonemapper::Pipeline Tonemapper::CreateMainPipeline(WindowVulkan& window_vulkan)
 				window_vulkan.GetRenderPass(),
 				0u));
 
+	return pipeline;
+}
+
+Tonemapper::Pipeline Tonemapper::CreateBlurPipeline()
+{
+	Pipeline pipeline;
+
+	// Create shaders
+	pipeline.shader_vert= CreateShader(vk_device_, ShaderNames::blur_vert);
+	pipeline.shader_frag= CreateShader(vk_device_, ShaderNames::blur_frag);
+
+	// Create image sampler
+	pipeline.sampler=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
+	// Create pipeline layout
+	const vk::DescriptorSetLayoutBinding descriptor_set_layout_bindings[]
+	{
+		{
+			g_tex_uniform_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*pipeline.sampler,
+		},
+	};
+
+	pipeline.decriptor_set_layout=
+		vk_device_.createDescriptorSetLayoutUnique(
+			vk::DescriptorSetLayoutCreateInfo(
+				vk::DescriptorSetLayoutCreateFlags(),
+				uint32_t(std::size(descriptor_set_layout_bindings)), descriptor_set_layout_bindings));
+
+	const vk::PushConstantRange push_constant_range(
+		vk::ShaderStageFlagBits::eFragment,
+		0u,
+		sizeof(UniformsBlur));
+
+	pipeline.pipeline_layout=
+		vk_device_.createPipelineLayoutUnique(
+			vk::PipelineLayoutCreateInfo(
+				vk::PipelineLayoutCreateFlags(),
+				1u, &*pipeline.decriptor_set_layout,
+				1u, &push_constant_range));
+
+	// Create pipeline.
+	const vk::PipelineShaderStageCreateInfo shader_stage_create_info[2]
+	{
+		{
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eVertex,
+			*pipeline.shader_vert,
+			"main"
+		},
+		{
+			vk::PipelineShaderStageCreateFlags(),
+			vk::ShaderStageFlagBits::eFragment,
+			*pipeline.shader_frag,
+			"main"
+		},
+	};
+
+	const vk::PipelineVertexInputStateCreateInfo pipiline_vertex_input_state_create_info(
+		vk::PipelineVertexInputStateCreateFlags(),
+		0u, nullptr,
+		0u, nullptr);
+
+	const vk::PipelineInputAssemblyStateCreateInfo pipeline_input_assembly_state_create_info(
+		vk::PipelineInputAssemblyStateCreateFlags(),
+		vk::PrimitiveTopology::eTriangleList);
+
+	const vk::Viewport vk_viewport(0.0f, 0.0f, float(brightness_calculate_image_size_.width), float(brightness_calculate_image_size_.height), 0.0f, 1.0f);
+	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), brightness_calculate_image_size_);
+
+	const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
+		vk::PipelineViewportStateCreateFlags(),
+		1u, &vk_viewport,
+		1u, &vk_scissor);
+
+	const vk::PipelineRasterizationStateCreateInfo pipeline_rasterization_state_create_info(
+		vk::PipelineRasterizationStateCreateFlags(),
+		VK_FALSE,
+		VK_FALSE,
+		vk::PolygonMode::eFill,
+		vk::CullModeFlagBits::eNone,
+		vk::FrontFace::eCounterClockwise,
+		VK_FALSE, 0.0f, 0.0f, 0.0f,
+		1.0f);
+
+	const vk::PipelineMultisampleStateCreateInfo pipeline_multisample_state_create_info;
+
+	const vk::PipelineColorBlendAttachmentState pipeline_color_blend_attachment_state(
+		VK_FALSE,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+		vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+
+	const vk::PipelineColorBlendStateCreateInfo pipeline_color_blend_state_create_info(
+		vk::PipelineColorBlendStateCreateFlags(),
+		VK_FALSE,
+		vk::LogicOp::eCopy,
+		1u, &pipeline_color_blend_attachment_state);
+
+	pipeline.pipeline=
+		vk_device_.createGraphicsPipelineUnique(
+			nullptr,
+			vk::GraphicsPipelineCreateInfo(
+				vk::PipelineCreateFlags(),
+				uint32_t(std::size(shader_stage_create_info)), shader_stage_create_info,
+				&pipiline_vertex_input_state_create_info,
+				&pipeline_input_assembly_state_create_info,
+				nullptr,
+				&pipieline_viewport_state_create_info,
+				&pipeline_rasterization_state_create_info,
+				&pipeline_multisample_state_create_info,
+				nullptr,
+				&pipeline_color_blend_state_create_info,
+				nullptr,
+				*pipeline.pipeline_layout,
+				*blur_render_pass_,
+				0u));
 
 	return pipeline;
 }

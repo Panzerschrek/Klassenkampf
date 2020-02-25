@@ -41,6 +41,7 @@ private:
 
 private:
 	Pipeline CreateMainPipeline(WindowVulkan& window_vulkan);
+	Pipeline CreateBlurPipeline();
 
 private:
 	Settings& settings_;
@@ -72,6 +73,7 @@ private:
 	bool exposure_buffer_prepared_= false;
 
 	Pipeline main_pipeline_;
+	Pipeline blur_pipeline_;
 
 	vk::UniqueRenderPass blur_render_pass_;
 	BlurBuffer blur_buffers_[2];
