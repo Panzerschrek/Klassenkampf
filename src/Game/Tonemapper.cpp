@@ -103,13 +103,24 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 		}
 	}
 
+	// Calculate image sizes.
 	// Use bigger framebuffer, because we use lenses distortion effect.
 	framebuffer_size_.width = viewport_size.width  * 4u / 3u;
 	framebuffer_size_.height= viewport_size.height * 4u / 3u;
 	framebuffer_size_.width = (framebuffer_size_.width  + 7u) & ~7u;
 	framebuffer_size_.height= (framebuffer_size_.height + 7u) & ~7u;
 
+	// Use powert of two sizes, because we needs iterative downsampling and it works properly only for power of two images.
+	const vk::Extent2D aux_image_size_log2(
+		uint32_t(std::log2(double(framebuffer_size_.width ))) - 1u,
+		uint32_t(std::log2(double(framebuffer_size_.height))) - 1u);
+
+	aux_image_size_= vk::Extent2D(
+		1u << aux_image_size_log2.width ,
+		1u << aux_image_size_log2.height);
+
 	Log::Info("Main framebuffer size: ", framebuffer_size_.width, "x", framebuffer_size_.height);
+	Log::Info("Auxilarity images size: ", aux_image_size_.width, "x", aux_image_size_.height);
 	Log::Info("Main framebuffer color format: ", vk::to_string(framebuffer_image_format));
 	Log::Info("Main framebuffer depth format: ", vk::to_string(framebuffer_depth_format));
 
@@ -248,17 +259,8 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				framebuffer_size_.width , framebuffer_size_.height, 1u));
 
 	{ // Create brightness calculate image.
-		// Use powert of two sizes, because we needs iterative downsampling and it works properly only for power of two images.
-		const vk::Extent2D brightness_calculate_image_size_log2(
-			uint32_t(std::log2(double(framebuffer_size_.width ))) - 1u,
-			uint32_t(std::log2(double(framebuffer_size_.height))) - 1u);
-
-		brightness_calculate_image_size_= vk::Extent2D(
-			1u << brightness_calculate_image_size_log2.width ,
-			1u << brightness_calculate_image_size_log2.height);
-
 		brightness_calculate_image_mip_levels_=
-			1u + std::max(brightness_calculate_image_size_log2.width, brightness_calculate_image_size_log2.height);
+			1u + std::max(aux_image_size_log2.width, aux_image_size_log2.height);
 
 		brightness_calculate_image_=
 			vk_device_.createImageUnique(
@@ -266,7 +268,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::ImageCreateFlags(),
 					vk::ImageType::e2D,
 					framebuffer_image_format,
-					vk::Extent3D(brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1u),
+					vk::Extent3D(aux_image_size_.width, aux_image_size_.height, 1u),
 					brightness_calculate_image_mip_levels_,
 					1u,
 					vk::SampleCountFlagBits::e1,
@@ -340,7 +342,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::ImageCreateFlags(),
 					vk::ImageType::e2D,
 					framebuffer_image_format,
-					vk::Extent3D(brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1u),
+					vk::Extent3D(aux_image_size_.width, aux_image_size_.height, 1u),
 					1u,
 					1u,
 					vk::SampleCountFlagBits::e1,
@@ -379,7 +381,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::FramebufferCreateFlags(),
 					*blur_render_pass_,
 					1u, &*blur_buffer.image_view,
-					brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1u));
+					aux_image_size_.width, aux_image_size_.height, 1u));
 	}
 
 	// Create uniforms buffer.
@@ -632,7 +634,7 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
 			{
 				vk::Offset3D(0, 0, 0),
-				vk::Offset3D(brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1),
+				vk::Offset3D(aux_image_size_.width, aux_image_size_.height, 1),
 			});
 
 		command_buffer.blitImage(
@@ -669,12 +671,12 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 1u, 0u, 1u),
 			{
 				vk::Offset3D(0, 0, 0),
-				vk::Offset3D(std::max(1u, brightness_calculate_image_size_.width  >> (i-1u)), std::max(1u, brightness_calculate_image_size_.height >> (i-1u)), 1),
+				vk::Offset3D(std::max(1u, aux_image_size_.width  >> (i-1u)), std::max(1u, aux_image_size_.height >> (i-1u)), 1),
 			},
 			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 0u, 0u, 1u),
 			{
 				vk::Offset3D(0, 0, 0),
-				vk::Offset3D(std::max(1u, brightness_calculate_image_size_.width >> i), std::max(1u, brightness_calculate_image_size_.height >> i), 1),
+				vk::Offset3D(std::max(1u, aux_image_size_.width >> i), std::max(1u, aux_image_size_.height >> i), 1),
 			});
 
 		command_buffer.blitImage(
@@ -739,7 +741,7 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 				vk::RenderPassBeginInfo(
 					*blur_render_pass_,
 					*blur_buffer.framebuffer,
-					vk::Rect2D(vk::Offset2D(0, 0), brightness_calculate_image_size_),
+					vk::Rect2D(vk::Offset2D(0, 0), aux_image_size_),
 					1u, &clear_value),
 				vk::SubpassContents::eInline);
 
@@ -1081,8 +1083,8 @@ Tonemapper::Pipeline Tonemapper::CreateBlurPipeline()
 		vk::PipelineInputAssemblyStateCreateFlags(),
 		vk::PrimitiveTopology::eTriangleList);
 
-	const vk::Viewport vk_viewport(0.0f, 0.0f, float(brightness_calculate_image_size_.width), float(brightness_calculate_image_size_.height), 0.0f, 1.0f);
-	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), brightness_calculate_image_size_);
+	const vk::Viewport vk_viewport(0.0f, 0.0f, float(aux_image_size_.width), float(aux_image_size_.height), 0.0f, 1.0f);
+	const vk::Rect2D vk_scissor(vk::Offset2D(0, 0), aux_image_size_);
 
 	const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
 		vk::PipelineViewportStateCreateFlags(),
