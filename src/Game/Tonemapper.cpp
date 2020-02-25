@@ -21,6 +21,8 @@ struct Uniforms
 	struct
 	{
 		float deformation_factor[4];
+		float bloom_scale;
+		float padding[3];
 	} fragment;
 };
 
@@ -750,17 +752,20 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 				1u, &*bloom_buffer.descriptor_set,
 				0u, nullptr);
 
+			const std::string_view bloom_size_settings_name= "r_bloom_size";
+			const float bloom_size= std::max(0.01f, std::min(float(settings_.GetReal(bloom_size_settings_name, 0.1)), 0.25f));
+			settings_.SetReal(bloom_size_settings_name, bloom_size);
+
 			UniformsBloom uniforms;
-			const float c_blur_size= 0.1f;
 			if(&bloom_buffer == &bloom_buffers_[0])
 			{
-				uniforms.blur_vector[0]= c_blur_size * float(framebuffer_size_.height) / float(framebuffer_size_.width);
+				uniforms.blur_vector[0]= bloom_size * float(framebuffer_size_.height) / float(framebuffer_size_.width);
 				uniforms.blur_vector[1]= 0.0f;
 			}
 			else
 			{
 				uniforms.blur_vector[0]= 0.0f;
-				uniforms.blur_vector[1]= c_blur_size;
+				uniforms.blur_vector[1]= bloom_size;
 			}
 
 			command_buffer.pushConstants(
@@ -795,11 +800,16 @@ void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 	settings_.SetReal(deformation_factor_settings_name, deformation_factor);
 	settings_.SetReal(color_deformation_factor_settings_name, color_deformation_factor);
 
+	const std::string_view bloom_scale_settings_name= "r_bloom_scale";
+	const float bloom_scale= std::max(0.0f, std::min(float(settings_.GetReal(bloom_scale_settings_name, 0.125)), 0.25f));
+	settings_.SetReal(bloom_scale_settings_name, bloom_scale);
+
 	Uniforms uniforms;
 	uniforms.fragment.deformation_factor[0]= deformation_factor * (1.0f - 0.1f * color_deformation_factor);
 	uniforms.fragment.deformation_factor[1]= deformation_factor;
 	uniforms.fragment.deformation_factor[2]= deformation_factor * (1.0f + 0.1f * color_deformation_factor);
 	uniforms.fragment.deformation_factor[3]= 0.0f;
+	uniforms.fragment.bloom_scale= bloom_scale;
 
 	const float c_exposure_change_speed= 8.0f;
 	uniforms.vertex.mix_factor= 1.0f - std::pow(c_exposure_change_speed, -1.0f / ticks_counter_.GetTicksFrequency());
