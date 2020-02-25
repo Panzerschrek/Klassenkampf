@@ -293,6 +293,88 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, brightness_calculate_image_mip_levels_, 0u, 1u)));
 	}
 
+	// Create blur render pass.
+	{
+		const vk::AttachmentDescription attachment_description(
+				vk::AttachmentDescriptionFlags(),
+				framebuffer_image_format,
+				vk::SampleCountFlagBits::e1,
+				vk::AttachmentLoadOp::eClear,
+				vk::AttachmentStoreOp::eStore,
+				vk::AttachmentLoadOp::eDontCare,
+				vk::AttachmentStoreOp::eDontCare,
+				vk::ImageLayout::eUndefined,
+				vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::AttachmentReference attachment_reference(0u, vk::ImageLayout::eColorAttachmentOptimal);
+
+		const vk::SubpassDescription subpass_description(
+				vk::SubpassDescriptionFlags(),
+				vk::PipelineBindPoint::eGraphics,
+				0u, nullptr,
+				1u, &attachment_reference,
+				nullptr,
+				nullptr);
+
+		blur_render_pass_=
+			vk_device_.createRenderPassUnique(
+				vk::RenderPassCreateInfo(
+					vk::RenderPassCreateFlags(),
+					1u, &attachment_description,
+					1u, &subpass_description));
+	}
+
+	// Create blur images and framebuffers.
+	for(BlurBuffer& blur_buffer : blur_buffers_)
+	{
+		blur_buffer.image=
+			vk_device_.createImageUnique(
+				vk::ImageCreateInfo(
+					vk::ImageCreateFlags(),
+					vk::ImageType::e2D,
+					framebuffer_image_format,
+					vk::Extent3D(brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1u),
+					1u,
+					1u,
+					vk::SampleCountFlagBits::e1,
+					vk::ImageTiling::eOptimal,
+					vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+					vk::SharingMode::eExclusive,
+					0u, nullptr,
+					vk::ImageLayout::eUndefined));
+
+		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*blur_buffer.image);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		blur_buffer.image_memory= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindImageMemory(*blur_buffer.image, *blur_buffer.image_memory, 0u);
+
+		blur_buffer.image_view=
+			vk_device_.createImageViewUnique(
+				vk::ImageViewCreateInfo(
+					vk::ImageViewCreateFlags(),
+					*blur_buffer.image,
+					vk::ImageViewType::e2D,
+					framebuffer_image_format,
+					vk::ComponentMapping(),
+					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
+
+		blur_buffer.framebuffer=
+			vk_device_.createFramebufferUnique(
+				vk::FramebufferCreateInfo(
+					vk::FramebufferCreateFlags(),
+					*blur_render_pass_,
+					1u, &*blur_buffer.image_view,
+					brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1u));
+	}
+
 	// Create uniforms buffer.
 	{
 		exposure_accumulate_buffer_=
