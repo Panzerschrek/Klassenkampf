@@ -710,6 +710,56 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 			0u, nullptr,
 			1u, &image_memory_barrier_final);
 	}
+
+	// Make blur
+	{
+		for(BlurBuffer& blur_buffer : blur_buffers_)
+		{
+			const vk::ClearValue clear_value(
+				vk::ClearColorValue(std::array<float,4>{0.0f, 0.0f, 0.0f, 0.0f}));
+
+			// Horisontal blur.
+			command_buffer.beginRenderPass(
+				vk::RenderPassBeginInfo(
+					*blur_render_pass_,
+					*blur_buffer.framebuffer,
+					vk::Rect2D(vk::Offset2D(0, 0), brightness_calculate_image_size_),
+					1u, &clear_value),
+				vk::SubpassContents::eInline);
+
+			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *blur_pipeline_.pipeline);
+
+			command_buffer.bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*blur_pipeline_.pipeline_layout,
+				0u,
+				1u, &*blur_buffer.descriptor_set,
+				0u, nullptr);
+
+			UniformsBlur uniforms;
+			if(&blur_buffer == &blur_buffers_[0])
+			{
+				uniforms.blur_vector[0]= 0.01f;
+				uniforms.blur_vector[1]= 0.0f;
+			}
+			else
+			{
+				uniforms.blur_vector[0]= 0.0f;
+				uniforms.blur_vector[1]= 0.01f;
+			}
+
+			command_buffer.pushConstants(
+				*blur_pipeline_.pipeline_layout,
+				vk::ShaderStageFlagBits::eFragment,
+				0u,
+				sizeof(uniforms),
+				&uniforms);
+
+			command_buffer.draw(6u, 1u, 0u, 0u);
+
+			command_buffer.endRenderPass();
+		} // for blur buffers.
+	}
 }
 
 void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
