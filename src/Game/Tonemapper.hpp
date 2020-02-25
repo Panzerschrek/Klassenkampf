@@ -21,7 +21,7 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
-	struct BlurBuffer
+	struct BloomBuffer
 	{
 		vk::UniqueImage image;
 		vk::UniqueDeviceMemory image_memory;
@@ -42,7 +42,7 @@ private:
 
 private:
 	Pipeline CreateMainPipeline(WindowVulkan& window_vulkan);
-	Pipeline CreateBlurPipeline();
+	Pipeline CreateBloomPipeline();
 
 private:
 	Settings& settings_;
@@ -63,7 +63,7 @@ private:
 	vk::UniqueRenderPass framebuffer_render_pass_;
 	vk::UniqueFramebuffer framebuffer_;
 
-	// Size for brightness calculate image, blur images.
+	// Size for brightness calculate image, bloom images.
 	vk::Extent2D aux_image_size_;
 
 	vk::UniqueImage brightness_calculate_image_;
@@ -76,12 +76,12 @@ private:
 	bool exposure_buffer_prepared_= false;
 
 	Pipeline main_pipeline_;
-	Pipeline blur_pipeline_;
+	Pipeline bloom_pipeline_;
 
 	vk::UniqueDescriptorPool descriptor_pool_;
 
-	vk::UniqueRenderPass blur_render_pass_;
-	BlurBuffer blur_buffers_[2];
+	vk::UniqueRenderPass bloom_render_pass_;
+	BloomBuffer bloom_buffers_[2];
 
 	vk::UniqueDescriptorSet main_descriptor_set_;
 };

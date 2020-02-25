@@ -24,7 +24,7 @@ struct Uniforms
 	} fragment;
 };
 
-struct UniformsBlur
+struct UniformsBloom
 {
 	float blur_vector[2];
 	float padding[2];
@@ -302,7 +302,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, brightness_calculate_image_mip_levels_, 0u, 1u)));
 	}
 
-	// Create blur render pass.
+	// Create bloom render pass.
 	{
 		const vk::AttachmentDescription attachment_description(
 				vk::AttachmentDescriptionFlags(),
@@ -325,7 +325,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				nullptr,
 				nullptr);
 
-		blur_render_pass_=
+		bloom_render_pass_=
 			vk_device_.createRenderPassUnique(
 				vk::RenderPassCreateInfo(
 					vk::RenderPassCreateFlags(),
@@ -333,10 +333,10 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					1u, &subpass_description));
 	}
 
-	// Create blur images and framebuffers.
-	for(BlurBuffer& blur_buffer : blur_buffers_)
+	// Create bloom images and framebuffers.
+	for(BloomBuffer& bloom_buffer : bloom_buffers_)
 	{
-		blur_buffer.image=
+		bloom_buffer.image=
 			vk_device_.createImageUnique(
 				vk::ImageCreateInfo(
 					vk::ImageCreateFlags(),
@@ -352,7 +352,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					0u, nullptr,
 					vk::ImageLayout::eUndefined));
 
-		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*blur_buffer.image);
+		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*bloom_buffer.image);
 
 		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
 		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
@@ -362,25 +362,25 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				vk_memory_allocate_info.memoryTypeIndex= i;
 		}
 
-		blur_buffer.image_memory= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
-		vk_device_.bindImageMemory(*blur_buffer.image, *blur_buffer.image_memory, 0u);
+		bloom_buffer.image_memory= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindImageMemory(*bloom_buffer.image, *bloom_buffer.image_memory, 0u);
 
-		blur_buffer.image_view=
+		bloom_buffer.image_view=
 			vk_device_.createImageViewUnique(
 				vk::ImageViewCreateInfo(
 					vk::ImageViewCreateFlags(),
-					*blur_buffer.image,
+					*bloom_buffer.image,
 					vk::ImageViewType::e2D,
 					framebuffer_image_format,
 					vk::ComponentMapping(),
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
 
-		blur_buffer.framebuffer=
+		bloom_buffer.framebuffer=
 			vk_device_.createFramebufferUnique(
 				vk::FramebufferCreateInfo(
 					vk::FramebufferCreateFlags(),
-					*blur_render_pass_,
-					1u, &*blur_buffer.image_view,
+					*bloom_render_pass_,
+					1u, &*bloom_buffer.image_view,
 					aux_image_size_.width, aux_image_size_.height, 1u));
 	}
 
@@ -408,7 +408,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 	}
 
 	main_pipeline_= CreateMainPipeline(window_vulkan);
-	blur_pipeline_= CreateBlurPipeline();
+	bloom_pipeline_= CreateBloomPipeline();
 
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
@@ -447,7 +447,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			},
 			{
 				vk::Sampler(),
-				*blur_buffers_[1].image_view,
+				*bloom_buffers_[1].image_view,
 				vk::ImageLayout::eShaderReadOnlyOptimal
 			},
 		};
@@ -505,24 +505,24 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			0u, nullptr);
 	}
 
-	for(BlurBuffer& blur_buffer : blur_buffers_)
+	for(BloomBuffer& bloom_buffer : bloom_buffers_)
 	{
 		// Create descriptor set.
-		blur_buffer.descriptor_set=
+		bloom_buffer.descriptor_set=
 			std::move(
 			vk_device_.allocateDescriptorSetsUnique(
 				vk::DescriptorSetAllocateInfo(
 					*descriptor_pool_,
-					1u, &*blur_pipeline_.decriptor_set_layout)).front());
+					1u, &*bloom_pipeline_.decriptor_set_layout)).front());
 
 		// Write descriptor set.
 		const vk::DescriptorImageInfo descriptor_image_info(
 			vk::Sampler(),
-			&blur_buffer == &blur_buffers_[0] ? *brightness_calculate_image_view_ : *blur_buffers_[0].image_view,
+			&bloom_buffer == &bloom_buffers_[0] ? *brightness_calculate_image_view_ : *bloom_buffers_[0].image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::WriteDescriptorSet write_descriptor_set(
-			*blur_buffer.descriptor_set,
+			*bloom_buffer.descriptor_set,
 			g_tex_uniform_binding,
 			0u,
 			1u,
@@ -729,34 +729,33 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 			1u, &image_memory_barrier_final);
 	}
 
-	// Make blur
+	// Make blur for bloom.
 	{
-		for(BlurBuffer& blur_buffer : blur_buffers_)
+		for(BloomBuffer& bloom_buffer : bloom_buffers_)
 		{
 			const vk::ClearValue clear_value(
 				vk::ClearColorValue(std::array<float,4>{0.0f, 0.0f, 0.0f, 0.0f}));
 
-			// Horisontal blur.
 			command_buffer.beginRenderPass(
 				vk::RenderPassBeginInfo(
-					*blur_render_pass_,
-					*blur_buffer.framebuffer,
+					*bloom_render_pass_,
+					*bloom_buffer.framebuffer,
 					vk::Rect2D(vk::Offset2D(0, 0), aux_image_size_),
 					1u, &clear_value),
 				vk::SubpassContents::eInline);
 
-			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *blur_pipeline_.pipeline);
+			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloom_pipeline_.pipeline);
 
 			command_buffer.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
-				*blur_pipeline_.pipeline_layout,
+				*bloom_pipeline_.pipeline_layout,
 				0u,
-				1u, &*blur_buffer.descriptor_set,
+				1u, &*bloom_buffer.descriptor_set,
 				0u, nullptr);
 
-			UniformsBlur uniforms;
+			UniformsBloom uniforms;
 			const float c_blur_size= 0.1f;
-			if(&blur_buffer == &blur_buffers_[0])
+			if(&bloom_buffer == &bloom_buffers_[0])
 			{
 				uniforms.blur_vector[0]= c_blur_size * float(framebuffer_size_.height) / float(framebuffer_size_.width);
 				uniforms.blur_vector[1]= 0.0f;
@@ -768,7 +767,7 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 			}
 
 			command_buffer.pushConstants(
-				*blur_pipeline_.pipeline_layout,
+				*bloom_pipeline_.pipeline_layout,
 				vk::ShaderStageFlagBits::eFragment,
 				0u,
 				sizeof(uniforms),
@@ -777,7 +776,7 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 			command_buffer.draw(6u, 1u, 0u, 0u);
 
 			command_buffer.endRenderPass();
-		} // for blur buffers.
+		} // for bloom buffers.
 	}
 }
 
@@ -998,7 +997,7 @@ Tonemapper::Pipeline Tonemapper::CreateMainPipeline(WindowVulkan& window_vulkan)
 	return pipeline;
 }
 
-Tonemapper::Pipeline Tonemapper::CreateBlurPipeline()
+Tonemapper::Pipeline Tonemapper::CreateBloomPipeline()
 {
 	Pipeline pipeline;
 
@@ -1048,7 +1047,7 @@ Tonemapper::Pipeline Tonemapper::CreateBlurPipeline()
 	const vk::PushConstantRange push_constant_range(
 		vk::ShaderStageFlagBits::eFragment,
 		0u,
-		sizeof(UniformsBlur));
+		sizeof(UniformsBloom));
 
 	pipeline.pipeline_layout=
 		vk_device_.createPipelineLayoutUnique(
@@ -1131,7 +1130,7 @@ Tonemapper::Pipeline Tonemapper::CreateBlurPipeline()
 				&pipeline_color_blend_state_create_info,
 				nullptr,
 				*pipeline.pipeline_layout,
-				*blur_render_pass_,
+				*bloom_render_pass_,
 				0u));
 
 	return pipeline;
