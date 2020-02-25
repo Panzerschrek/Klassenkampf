@@ -72,7 +72,7 @@ WorldRenderer::WorldRenderer(
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(settings, window_vulkan)
-	, shadowmapper_(window_vulkan, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
+	, shadowmapper_(window_vulkan, gpu_data_uploader, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
 	, cluster_volume_builder_(16u, 8u, 24u)
 	, shadowmap_allocator_(shadowmapper_.GetSize())
 {
