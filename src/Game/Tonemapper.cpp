@@ -410,26 +410,26 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 	// Create descriptor set pool.
 	const vk::DescriptorPoolSize vk_descriptor_pool_sizes[]
 	{
-		{ vk::DescriptorType::eCombinedImageSampler, 2u },
-		{ vk::DescriptorType::eStorageBuffer, 1u }
+		{ vk::DescriptorType::eCombinedImageSampler, 2u * 3u },
+		{ vk::DescriptorType::eStorageBuffer, 1u * 3u }
 	};
 	descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				1u, // max sets.
+				3u, // max sets.
 				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
-	// Create descriptor set.
-	descriptor_set_=
-		std::move(
-		vk_device_.allocateDescriptorSetsUnique(
-			vk::DescriptorSetAllocateInfo(
-				*descriptor_pool_,
-				1u, &*main_pipeline_.decriptor_set_layout)).front());
-
-	// Write descriptor set.
 	{
+		// Create descriptor set.
+		main_descriptor_set_=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*descriptor_pool_,
+					1u, &*main_pipeline_.decriptor_set_layout)).front());
+
+		// Write descriptor set.
 		const vk::DescriptorImageInfo descriptor_image_info[]
 		{
 			{
@@ -452,7 +452,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
 			{
-				*descriptor_set_,
+				*main_descriptor_set_,
 				g_tex_uniform_binding,
 				0u,
 				1u,
@@ -462,7 +462,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				nullptr
 			},
 			{
-				*descriptor_set_,
+				*main_descriptor_set_,
 				g_brightness_tex_uniform_binding,
 				0u,
 				1u,
@@ -472,7 +472,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				nullptr
 			},
 			{
-				*descriptor_set_,
+				*main_descriptor_set_,
 				g_exposure_accumulate_tex_uniform_binding,
 				0u,
 				1u,
@@ -484,6 +484,37 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 		};
 		vk_device_.updateDescriptorSets(
 			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
+			0u, nullptr);
+	}
+
+	for(BlurBuffer& blur_buffer : blur_buffers_)
+	{
+		// Create descriptor set.
+		blur_buffer.descriptor_set=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*descriptor_pool_,
+					1u, &*blur_pipeline_.decriptor_set_layout)).front());
+
+		// Write descriptor set.
+		const vk::DescriptorImageInfo descriptor_image_info(
+			vk::Sampler(),
+			&blur_buffer == &blur_buffers_[0] ? *brightness_calculate_image_view_ : *blur_buffers_[0].image_view,
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::WriteDescriptorSet write_descriptor_set(
+				*blur_buffer.descriptor_set,
+				g_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr);
+
+		vk_device_.updateDescriptorSets(
+			1u, &write_descriptor_set,
 			0u, nullptr);
 	}
 }
@@ -689,7 +720,7 @@ void Tonemapper::EndFrame(const vk::CommandBuffer command_buffer)
 		vk::PipelineBindPoint::eGraphics,
 		*main_pipeline_.pipeline_layout,
 		0u,
-		1u, &*descriptor_set_,
+		1u, &*main_descriptor_set_,
 		0u, nullptr);
 
 	const std::string_view deformation_factor_settings_name= "r_lenses_deform_factor";

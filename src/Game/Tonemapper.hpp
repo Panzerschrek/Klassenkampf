@@ -27,6 +27,7 @@ private:
 		vk::UniqueDeviceMemory image_memory;
 		vk::UniqueImageView image_view;
 		vk::UniqueFramebuffer framebuffer;
+		vk::UniqueDescriptorSet descriptor_set;
 	};
 
 	struct Pipeline
@@ -75,11 +76,12 @@ private:
 	Pipeline main_pipeline_;
 	Pipeline blur_pipeline_;
 
+	vk::UniqueDescriptorPool descriptor_pool_;
+
 	vk::UniqueRenderPass blur_render_pass_;
 	BlurBuffer blur_buffers_[2];
 
-	vk::UniqueDescriptorPool descriptor_pool_;
-	vk::UniqueDescriptorSet descriptor_set_;
+	vk::UniqueDescriptorSet main_descriptor_set_;
 };
 
 } // namespace KK
