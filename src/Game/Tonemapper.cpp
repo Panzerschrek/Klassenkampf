@@ -308,7 +308,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				vk::AttachmentDescriptionFlags(),
 				framebuffer_image_format,
 				vk::SampleCountFlagBits::e1,
-				vk::AttachmentLoadOp::eClear,
+				vk::AttachmentLoadOp::eDontCare,
 				vk::AttachmentStoreOp::eStore,
 				vk::AttachmentLoadOp::eDontCare,
 				vk::AttachmentStoreOp::eDontCare,
@@ -733,15 +733,12 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 	{
 		for(BloomBuffer& bloom_buffer : bloom_buffers_)
 		{
-			const vk::ClearValue clear_value(
-				vk::ClearColorValue(std::array<float,4>{0.0f, 0.0f, 0.0f, 0.0f}));
-
 			command_buffer.beginRenderPass(
 				vk::RenderPassBeginInfo(
 					*bloom_render_pass_,
 					*bloom_buffer.framebuffer,
 					vk::Rect2D(vk::Offset2D(0, 0), aux_image_size_),
-					1u, &clear_value),
+					0u, nullptr),
 				vk::SubpassContents::eInline);
 
 			command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloom_pipeline_.pipeline);
