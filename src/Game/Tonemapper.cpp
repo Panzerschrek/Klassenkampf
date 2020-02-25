@@ -262,7 +262,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::Extent3D(brightness_calculate_image_size_.width, brightness_calculate_image_size_.height, 1u),
 					brightness_calculate_image_mip_levels_,
 					1u,
-					msaa_sample_count_,
+					vk::SampleCountFlagBits::e1,
 					vk::ImageTiling::eOptimal,
 					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
 					vk::SharingMode::eExclusive,
