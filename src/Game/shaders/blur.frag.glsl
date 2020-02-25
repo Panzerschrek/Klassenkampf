@@ -13,5 +13,8 @@ layout(location= 0) out vec4 color;
 
 void main()
 {
-	color= texture(tex, f_tex_coord);
+	vec4 r= vec4(0.0, 0.0, 0.0, 0.0);
+	for(int i= -5; i <= +5; ++i)
+		r+= texture(tex, f_tex_coord + float(i) * blur_vector.xy);
+	color= r * (1.0 / 11.0);
 }
