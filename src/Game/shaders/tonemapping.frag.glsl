@@ -2,10 +2,12 @@
 
 
 layout(binding= 0) uniform sampler2D tex;
+layout(binding= 3) uniform sampler2D blured_tex;
 
 layout(push_constant) uniform uniforms_block
 {
 	layout(offset = 16) vec4 deform_factor;
+	vec4 bloom_scale; // .x used
 };
 
 layout(location= 0) in vec2 f_tex_coord; // In range [-1; 1]
@@ -38,8 +40,14 @@ void main()
 			texture(tex, tex_coord_g).g,
 			texture(tex, tex_coord_b).b
 			);
+	vec3 blured_color=
+		vec3(
+			texture(blured_tex, tex_coord_r).r,
+			texture(blured_tex, tex_coord_g).g,
+			texture(blured_tex, tex_coord_b).b
+			);
 
-	color= tonemapping_function(color, f_exposure);
+	color= tonemapping_function(color + blured_color * bloom_scale.x, f_exposure);
 
 	out_color= vec4(color, 1.0);
 }

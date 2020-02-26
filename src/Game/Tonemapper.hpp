@@ -21,6 +21,30 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
+	struct BloomBuffer
+	{
+		vk::UniqueImage image;
+		vk::UniqueDeviceMemory image_memory;
+		vk::UniqueImageView image_view;
+		vk::UniqueFramebuffer framebuffer;
+		vk::UniqueDescriptorSet descriptor_set;
+	};
+
+	struct Pipeline
+	{
+		vk::UniqueShaderModule shader_vert;
+		vk::UniqueShaderModule shader_frag;
+		vk::UniqueSampler sampler;
+		vk::UniqueDescriptorSetLayout decriptor_set_layout;
+		vk::UniquePipelineLayout pipeline_layout;
+		vk::UniquePipeline pipeline;
+	};
+
+private:
+	Pipeline CreateMainPipeline(WindowVulkan& window_vulkan);
+	Pipeline CreateBloomPipeline();
+
+private:
 	Settings& settings_;
 	const vk::Device vk_device_;
 	const uint32_t queue_family_index_;
@@ -31,7 +55,6 @@ private:
 	vk::UniqueImage framebuffer_image_;
 	vk::UniqueDeviceMemory framebuffer_image_memory_;
 	vk::UniqueImageView framebuffer_image_view_;
-	vk::UniqueSampler framebuffer_image_sampler_;
 
 	vk::UniqueImage framebuffer_depth_image_;
 	vk::UniqueDeviceMemory framebuffer_depth_image_memory_;
@@ -40,24 +63,27 @@ private:
 	vk::UniqueRenderPass framebuffer_render_pass_;
 	vk::UniqueFramebuffer framebuffer_;
 
+	// Size for brightness calculate image, bloom images.
+	vk::Extent2D aux_image_size_;
+
 	vk::UniqueImage brightness_calculate_image_;
 	vk::UniqueDeviceMemory brightness_calculate_image_memory_;
 	vk::UniqueImageView brightness_calculate_image_view_;
-	vk::Extent2D brightness_calculate_image_size_;
 	uint32_t brightness_calculate_image_mip_levels_;
 
 	vk::UniqueBuffer exposure_accumulate_buffer_;
 	vk::UniqueDeviceMemory exposure_accumulate_memory_;
 	bool exposure_buffer_prepared_= false;
 
-	vk::UniqueShaderModule shader_vert_;
-	vk::UniqueShaderModule shader_frag_;
-	vk::UniqueDescriptorSetLayout decriptor_set_layout_;
-	vk::UniquePipelineLayout pipeline_layout_;
-	vk::UniquePipeline pipeline_;
+	Pipeline main_pipeline_;
+	Pipeline bloom_pipeline_;
 
 	vk::UniqueDescriptorPool descriptor_pool_;
-	vk::UniqueDescriptorSet descriptor_set_;
+
+	vk::UniqueRenderPass bloom_render_pass_;
+	BloomBuffer bloom_buffers_[2];
+
+	vk::UniqueDescriptorSet main_descriptor_set_;
 };
 
 } // namespace KK
