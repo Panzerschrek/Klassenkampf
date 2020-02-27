@@ -130,6 +130,7 @@ private:
 	void CommandTestLightRemove();
 
 private:
+	Settings& settings_;
 	GPUDataUploader& gpu_data_uploader_;
 	const CameraController& camera_controller_;
 	const vk::Device vk_device_;

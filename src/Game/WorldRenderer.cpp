@@ -65,7 +65,8 @@ WorldRenderer::WorldRenderer(
 	GPUDataUploader& gpu_data_uploader,
 	const CameraController& camera_controller,
 	const WorldData::World& world)
-	: gpu_data_uploader_(gpu_data_uploader)
+	: settings_(settings)
+	, gpu_data_uploader_(gpu_data_uploader)
 	, camera_controller_(camera_controller)
 	, vk_device_(window_vulkan.GetVulkanDevice())
 	, viewport_size_(window_vulkan.GetViewportSize())
@@ -339,9 +340,12 @@ WorldRenderer::~WorldRenderer()
 
 void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 {
+	const bool use_test_world_model= settings_.GetInt("test_world_model", 0) != 0;
+	settings_.SetInt("test_world_model", use_test_world_model ? 1 : 0);
+
 	const CameraController::ViewMatrix view_matrix= camera_controller_.CalculateViewMatrix();
 	const m_Vec3 cam_pos= camera_controller_.GetCameraPosition();
-	const WorldModel& model= world_model_;
+	const WorldModel& model= use_test_world_model ? test_world_model_ : world_model_;
 
 	// Calculate visible sectors.
 	const Sector* cam_sector= nullptr;
