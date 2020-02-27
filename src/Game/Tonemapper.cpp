@@ -605,6 +605,11 @@ vk::SampleCountFlagBits Tonemapper::GetSampleCount() const
 	return msaa_sample_count_;
 }
 
+vk::ImageView Tonemapper::GetDepthImageView() const
+{
+	return *framebuffer_depth_image_view_;
+}
+
 void Tonemapper::DeDepthPrePass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function)
 {
 	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));

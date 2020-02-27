@@ -17,6 +17,7 @@ public:
 	vk::RenderPass GetDepthPrePass() const;
 	vk::RenderPass GetMainRenderPass() const;
 	vk::SampleCountFlagBits GetSampleCount() const;
+	vk::ImageView GetDepthImageView() const;
 
 	void DeDepthPrePass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function);
 	void DoMainPass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function);

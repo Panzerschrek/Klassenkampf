@@ -2,6 +2,7 @@
 #include "../Common/MemoryMappedFile.hpp"
 #include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
+#include "AmbientOcclusionCalculator.hpp"
 #include "CameraController.hpp"
 #include "CommandsProcessor.hpp"
 #include "ClusterVolumeBuilder.hpp"
@@ -146,6 +147,7 @@ private:
 	CommandsMapConstPtr commands_map_;
 
 	Tonemapper tonemapper_;
+	AmbientOcclusionCalculator ambient_occlusion_culculator_;
 	Shadowmapper shadowmapper_;
 	ClusterVolumeBuilder cluster_volume_builder_;
 	ShadowmapAllocator shadowmap_allocator_;
