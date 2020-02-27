@@ -206,7 +206,7 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 		const vk::ImageMemoryBarrier image_memory_barrier_final(
 			vk::AccessFlagBits::eTransferWrite,
 			vk::AccessFlagBits::eMemoryRead,
-			vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
 			window_vulkan.GetQueueFamilyIndex(),
 			window_vulkan.GetQueueFamilyIndex(),
 			*random_vectors_image_,
