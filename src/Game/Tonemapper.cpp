@@ -178,7 +178,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					1u,
 					msaa_sample_count_,
 					vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eDepthStencilAttachment,
+					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
 					vk::SharingMode::eExclusive,
 					0u, nullptr,
 					vk::ImageLayout::eUndefined));
@@ -217,7 +217,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			vk::AttachmentLoadOp::eClear,
 			vk::AttachmentStoreOp::eStore,
 			vk::ImageLayout::eUndefined,
-			vk::ImageLayout::eGeneral);
+			vk::ImageLayout::eShaderReadOnlyOptimal); // Allow reading depth image after depth pre pass.
 
 		const vk::AttachmentReference vk_attachment_reference_depth(0u, vk::ImageLayout::eGeneral);
 
@@ -267,7 +267,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 				vk::AttachmentStoreOp::eStore,
 				vk::AttachmentLoadOp::eClear,
 				vk::AttachmentStoreOp::eStore,
-				vk::ImageLayout::eGeneral,
+				vk::ImageLayout::eShaderReadOnlyOptimal, // Betweeen passes depth image has ShaderReadOptimal layout.
 				vk::ImageLayout::eGeneral,
 			},
 		};
