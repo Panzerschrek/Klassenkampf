@@ -16,6 +16,7 @@ struct Uniforms
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
+const uint32_t g_random_vectors_tex_uniform_binding= 1u;
 
 } // namespace
 
@@ -221,12 +222,22 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 		gpu_data_uploader.Flush();
 	}
 
+	random_vectors_image_view_=
+		vk_device_.createImageViewUnique(
+			vk::ImageViewCreateInfo(
+				vk::ImageViewCreateFlags(),
+				*random_vectors_image_,
+				vk::ImageViewType::e2D,
+				vk::Format::eR8G8B8A8Snorm,
+				vk::ComponentMapping(),
+				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u)));
+
 	// Create shaders
 	shader_vert_= CreateShader(vk_device_, ShaderNames::ssao_vert);
 	shader_frag_= CreateShader(vk_device_, ShaderNames::ssao_frag);
 
-	// Create image sampler
-	image_sampler_=
+	// Create image samplers
+	depth_image_sampler_=
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -246,6 +257,26 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	random_vectors_image_sampler_=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eNearest,
+				vk::Filter::eNearest,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding descriptor_set_layout_bindings[]
 	{
@@ -254,7 +285,14 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*image_sampler_,
+			&*depth_image_sampler_,
+		},
+		{
+			g_random_vectors_tex_uniform_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*random_vectors_image_sampler_,
 		},
 	};
 
@@ -354,7 +392,7 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 				0u));
 
 	// Create descriptor set pool.
-	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 1u);
+	const vk::DescriptorPoolSize descriptor_pool_size(vk::DescriptorType::eCombinedImageSampler, 2u);
 	descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
@@ -370,23 +408,42 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 				1u, &*descriptor_set_layout_)).front());
 
 	// Write descriptor set.
-	const vk::DescriptorImageInfo descriptor_image_info(
+	const vk::DescriptorImageInfo descriptor_depth_image_info(
 		vk::Sampler(),
 		tonemapper.GetDepthImageView(),
 		vk::ImageLayout::eShaderReadOnlyOptimal);
 
-	const vk::WriteDescriptorSet write_descriptor_set(
-		*descriptor_set_,
-		g_tex_uniform_binding,
-		0u,
-		1u,
-		vk::DescriptorType::eCombinedImageSampler,
-		&descriptor_image_info,
-		nullptr,
-		nullptr);
+	const vk::DescriptorImageInfo descriptor_random_vectors_image_info(
+		vk::Sampler(),
+		*random_vectors_image_view_,
+		vk::ImageLayout::eShaderReadOnlyOptimal);
+
+	const vk::WriteDescriptorSet write_descriptor_set[]
+	{
+		{
+			*descriptor_set_,
+			g_tex_uniform_binding,
+			0u,
+			1u,
+			vk::DescriptorType::eCombinedImageSampler,
+			&descriptor_depth_image_info,
+			nullptr,
+			nullptr
+		},
+		{
+			*descriptor_set_,
+			g_random_vectors_tex_uniform_binding,
+			0u,
+			1u,
+			vk::DescriptorType::eCombinedImageSampler,
+			&descriptor_random_vectors_image_info,
+			nullptr,
+			nullptr
+		},
+	};
 
 	vk_device_.updateDescriptorSets(
-		1u, &write_descriptor_set,
+		uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
 		0u, nullptr);
 }
 
