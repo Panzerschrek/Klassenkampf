@@ -1,5 +1,6 @@
 #pragma once
 #include "GPUDataUploader.hpp"
+#include "CameraController.hpp"
 #include "Tonemapper.hpp"
 
 
@@ -17,7 +18,7 @@ public:
 
 	vk::ImageView GetAmbientOcclusionImageView() const;
 
-	void DoPass(vk::CommandBuffer command_buffer);
+	void DoPass(vk::CommandBuffer command_buffer, const CameraController::ViewMatrix& view_matrix);
 
 	~AmbientOcclusionCalculator();
 

@@ -11,6 +11,7 @@ namespace
 
 struct Uniforms
 {
+	float matrix_values[4];
 	float radius;
 	float padding[3];
 };
@@ -458,7 +459,9 @@ vk::ImageView AmbientOcclusionCalculator::GetAmbientOcclusionImageView() const
 	return *framebuffer_image_view_;
 }
 
-void AmbientOcclusionCalculator::DoPass(const vk::CommandBuffer command_buffer)
+void AmbientOcclusionCalculator::DoPass(
+	const vk::CommandBuffer command_buffer,
+	const CameraController::ViewMatrix& view_matrix)
 {
 	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
@@ -478,6 +481,12 @@ void AmbientOcclusionCalculator::DoPass(const vk::CommandBuffer command_buffer)
 		0u, nullptr);
 
 	Uniforms uniforms;
+	uniforms.matrix_values[0]= view_matrix.m0;
+	uniforms.matrix_values[1]= view_matrix.m5;
+	uniforms.matrix_values[2]= view_matrix.m10;
+	uniforms.matrix_values[3]= view_matrix.m14;
+	uniforms.radius= float(settings_.GetOrSetReal("r_ssao_radius", 1.0));
+
 	command_buffer.pushConstants(
 		*pipeline_layout_,
 		vk::ShaderStageFlagBits::eFragment,

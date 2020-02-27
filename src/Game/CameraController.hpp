@@ -15,6 +15,12 @@ public:
 		m_Mat4 mat;
 		float z_near;
 		float z_far;
+
+		// Parameters of projection matrix.
+		float m0;
+		float m5;
+		float m10;
+		float m14;
 	};
 public:
 	CameraController(Settings& settings, float aspect);

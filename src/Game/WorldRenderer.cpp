@@ -539,7 +539,7 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 		command_buffer,
 		[&]{ DrawWorldModelDepthPrePass(command_buffer, model, visible_sectors, view_matrix.mat); });
 
-	ambient_occlusion_culculator_.DoPass(command_buffer);
+	ambient_occlusion_culculator_.DoPass(command_buffer, view_matrix);
 
 	tonemapper_.DoMainPass(
 		command_buffer,

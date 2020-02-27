@@ -94,8 +94,14 @@ CameraController::ViewMatrix CameraController::CalculateViewMatrix() const
 
 	ViewMatrix result;
 	result.mat= translate * rotate_z * rotate_x * basis_change * perspective;
+
 	result.z_near= z_near;
 	result.z_far= z_far;
+
+	result. m0= perspective.value[ 0];
+	result. m5= perspective.value[ 5];
+	result.m10= perspective.value[10];
+	result.m14= perspective.value[14];
 
 	return result;
 }
