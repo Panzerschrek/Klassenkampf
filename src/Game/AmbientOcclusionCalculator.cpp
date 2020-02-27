@@ -26,7 +26,7 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 	, vk_device_(window_vulkan.GetVulkanDevice())
 {
 	const auto& memory_properties= window_vulkan.GetMemoryProperties();
-	const vk::Extent2D framebuffer_size= tonemapper.GetFramebufferSize();
+	framebuffer_size_= tonemapper.GetFramebufferSize();
 	const vk::Format framebuffer_image_format= vk::Format::eR8Unorm;
 
 	{ // Create framebuffer image
@@ -36,7 +36,7 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 					vk::ImageCreateFlags(),
 					vk::ImageType::e2D,
 					framebuffer_image_format,
-					vk::Extent3D(framebuffer_size.width, framebuffer_size.height, 1u),
+					vk::Extent3D(framebuffer_size_.width, framebuffer_size_.height, 1u),
 					1u,
 					1u,
 					vk::SampleCountFlagBits::e1,
@@ -107,7 +107,7 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 				vk::FramebufferCreateFlags(),
 				*render_pass_,
 				1u, &*framebuffer_image_view_,
-				framebuffer_size.width, framebuffer_size.height, 1u));
+				framebuffer_size_.width, framebuffer_size_.height, 1u));
 
 
 	// Create shaders
@@ -191,8 +191,8 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 		vk::PipelineInputAssemblyStateCreateFlags(),
 		vk::PrimitiveTopology::eTriangleList);
 
-	const vk::Viewport viewport(0.0f, 0.0f, float(framebuffer_size.width), float(framebuffer_size.height), 0.0f, 1.0f);
-	const vk::Rect2D scissor(vk::Offset2D(0, 0), framebuffer_size);
+	const vk::Viewport viewport(0.0f, 0.0f, float(framebuffer_size_.width), float(framebuffer_size_.height), 0.0f, 1.0f);
+	const vk::Rect2D scissor(vk::Offset2D(0, 0), framebuffer_size_);
 
 	const vk::PipelineViewportStateCreateInfo pipieline_viewport_state_create_info(
 		vk::PipelineViewportStateCreateFlags(),
@@ -283,6 +283,43 @@ AmbientOcclusionCalculator::~AmbientOcclusionCalculator()
 {
 	// Sync before destruction.
 	vk_device_.waitIdle();
+}
+
+vk::ImageView AmbientOcclusionCalculator::GetAmbientOcclusionImageView() const
+{
+	return *framebuffer_image_view_;
+}
+
+void AmbientOcclusionCalculator::DoPass(const vk::CommandBuffer command_buffer)
+{
+	command_buffer.beginRenderPass(
+		vk::RenderPassBeginInfo(
+			*render_pass_,
+			*framebuffer_,
+			vk::Rect2D(vk::Offset2D(0, 0), framebuffer_size_),
+			0u, nullptr),
+		vk::SubpassContents::eInline);
+
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+
+	command_buffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*pipeline_layout_,
+		0u,
+		1u, &*descriptor_set_,
+		0u, nullptr);
+
+	Uniforms uniforms;
+	command_buffer.pushConstants(
+		*pipeline_layout_,
+		vk::ShaderStageFlagBits::eFragment,
+		0u,
+		sizeof(uniforms),
+		&uniforms);
+
+	command_buffer.draw(6u, 1u, 0u, 0u);
+
+	command_buffer.endRenderPass();
 }
 
 } // namespace KK

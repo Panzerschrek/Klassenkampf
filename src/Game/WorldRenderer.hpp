@@ -101,6 +101,7 @@ private:
 		vk::UniqueShaderModule shader_frag;
 		vk::UniqueSampler image_sampler;
 		vk::UniqueSampler depth_cubemap_image_sampler;
+		vk::UniqueSampler ambient_occlusion_image_sampler;
 		vk::UniqueDescriptorSetLayout descriptor_set_layout;
 		vk::UniquePipelineLayout pipeline_layout;
 		vk::UniquePipeline pipeline;

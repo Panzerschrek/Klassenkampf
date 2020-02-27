@@ -55,6 +55,7 @@ const uint32_t g_light_buffer_binding= 1u;
 const uint32_t g_cluster_offset_buffer_binding= 2u;
 const uint32_t g_lights_list_buffer_binding= 3u;
 const uint32_t g_depth_cubemaps_array_binding= 4u;
+const uint32_t g_ambient_occlusion_buffer_binding= 5u;
 
 } // namespace
 
@@ -214,7 +215,7 @@ WorldRenderer::WorldRenderer(
 	{
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size() * (1u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
+			uint32_t(materials_.size() * (2u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
 		},
 		{
 			vk::DescriptorType::eStorageBuffer,
@@ -272,6 +273,11 @@ WorldRenderer::WorldRenderer(
 					image_view,
 					vk::ImageLayout::eShaderReadOnlyOptimal));
 
+		const vk::DescriptorImageInfo descriptor_ambient_occlusion_image_info(
+			vk::Sampler(),
+			ambient_occlusion_culculator_.GetAmbientOcclusionImageView(),
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
 			{
@@ -321,6 +327,16 @@ WorldRenderer::WorldRenderer(
 				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
 				vk::DescriptorType::eCombinedImageSampler,
 				descriptor_depth_cubemaps_array_image_infos.data(),
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_ambient_occlusion_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_ambient_occlusion_image_info,
 				nullptr,
 				nullptr
 			},
@@ -522,6 +538,9 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	tonemapper_.DeDepthPrePass(
 		command_buffer,
 		[&]{ DrawWorldModelDepthPrePass(command_buffer, model, visible_sectors, view_matrix.mat); });
+
+	ambient_occlusion_culculator_.DoPass(command_buffer);
+
 	tonemapper_.DoMainPass(
 		command_buffer,
 		[&]{ DrawWorldModelMainPass(command_buffer, model, visible_sectors, view_matrix.mat); });
@@ -699,6 +718,26 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	pipeline.ambient_occlusion_image_sampler=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eNearest,
+				vk::Filter::eNearest,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
 	const std::vector<vk::Sampler> depth_cubemap_image_samplers(
 		shadowmapper_.GetDepthCubemapArrayImagesView().size(),
 		*pipeline.depth_cubemap_image_sampler);
@@ -740,6 +779,13 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			uint32_t(depth_cubemap_image_samplers.size()),
 			vk::ShaderStageFlagBits::eFragment,
 			depth_cubemap_image_samplers.data(),
+		},
+		{
+			g_ambient_occlusion_buffer_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*pipeline.ambient_occlusion_image_sampler,
 		},
 	};
 

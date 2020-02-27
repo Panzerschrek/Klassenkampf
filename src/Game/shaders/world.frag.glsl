@@ -34,6 +34,8 @@ layout(binding= 3, std430) buffer readonly lights_list_buffer_block
 
 layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
+layout(binding= 5) uniform sampler2D ambient_occlusion_image;
+
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
 layout(location= 2) in vec3 f_pos; // World space position.
@@ -54,7 +56,7 @@ void main()
 		int(cluster_coord.y) * cluster_volume_size.x +
 		int(cluster_coord.z) * (cluster_volume_size.x * cluster_volume_size.y) ]);
 
-	vec3 l= ambient_color.rgb;
+	vec3 l= ambient_color.rgb * texture(ambient_occlusion_image, frag_coord_normalized).x;
 	int current_light_count= light_list[offset];
 	for(int i= 0; i < current_light_count; ++i)
 	{
