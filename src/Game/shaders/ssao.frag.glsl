@@ -33,10 +33,11 @@ void main()
 		vec3 sample_world_pos= world_pos + delta_vec;
 
 		vec2 sample_screen_pos= vec2(sample_world_pos.xy * view_matrix_values.xy) / sample_world_pos.z;
+		float sample_depth= view_matrix_values.z + view_matrix_values.w / sample_world_pos.z;
 		vec2 sample_tex_coord= sample_screen_pos * 0.5 + vec2(0.5, 0.5);
 
-		float sample_depth= texture(tex, sample_tex_coord).x;
-		occlusion_factor+= step(fragment_depth, sample_depth);
+		float actual_sample_depth= texture(tex, sample_tex_coord).x;
+		occlusion_factor+= step(sample_depth, actual_sample_depth);
 	}
 
 	color= occlusion_factor / float(iterations);
