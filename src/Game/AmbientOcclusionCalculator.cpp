@@ -1,4 +1,5 @@
 #include "AmbientOcclusionCalculator.hpp"
+#include "Rand.hpp"
 #include "ShaderList.hpp"
 
 
@@ -21,6 +22,7 @@ const uint32_t g_tex_uniform_binding= 0u;
 AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 	Settings& settings,
 	WindowVulkan& window_vulkan,
+	GPUDataUploader& gpu_data_uploader,
 	const Tonemapper& tonemapper)
 	: settings_(settings)
 	, vk_device_(window_vulkan.GetVulkanDevice())
@@ -109,6 +111,115 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 				1u, &*framebuffer_image_view_,
 				framebuffer_size_.width, framebuffer_size_.height, 1u));
 
+	{ // Create random vectors image
+
+		LongRand rand;
+		const vk::Extent2D random_vectors_image_size(64, 16);
+		const size_t texel_count= random_vectors_image_size.width * random_vectors_image_size.height;
+		std::vector<int8_t> texture_data(texel_count * 4u);
+
+		for(size_t i= 0u; i < texel_count; )
+		{
+			// Generate random vector in cube, skip vectors
+			float vec[3];
+			for(size_t j= 0u; j < 3u; ++j)
+				vec[j]= rand.RandValue(-1.0f, 1.0f);
+			const float square_length= vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
+			if(square_length > 1.0f)
+				continue;
+
+			for(size_t j= 0u; j < 3u; ++j)
+				texture_data[i * 4u + j]= int8_t(vec[j] * 126.9f);
+
+			++i;
+		}
+
+		random_vectors_image_=
+			vk_device_.createImageUnique(
+				vk::ImageCreateInfo(
+					vk::ImageCreateFlags(),
+					vk::ImageType::e2D,
+					vk::Format::eR8G8B8A8Snorm,
+					vk::Extent3D(random_vectors_image_size.width, random_vectors_image_size.height, 1u),
+					1u,
+					1u,
+					vk::SampleCountFlagBits::e1,
+					vk::ImageTiling::eOptimal,
+					vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+					vk::SharingMode::eExclusive,
+					0u, nullptr,
+					vk::ImageLayout::eUndefined));
+
+		const vk::MemoryRequirements image_memory_requirements= vk_device_.getImageMemoryRequirements(*random_vectors_image_);
+
+		vk::MemoryAllocateInfo vk_memory_allocate_info(image_memory_requirements.size);
+		for(uint32_t i= 0u; i < memory_properties.memoryTypeCount; ++i)
+		{
+			if((image_memory_requirements.memoryTypeBits & (1u << i)) != 0 &&
+				(memory_properties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags())
+				vk_memory_allocate_info.memoryTypeIndex= i;
+		}
+
+		random_vectors_image_memory_= vk_device_.allocateMemoryUnique(vk_memory_allocate_info);
+		vk_device_.bindImageMemory(*random_vectors_image_, *random_vectors_image_memory_, 0u);
+
+		const auto staging_buffer= gpu_data_uploader.RequestMemory(texture_data.size() * sizeof(int8_t));
+
+		std::memcpy(
+			reinterpret_cast<int8_t*>(staging_buffer.buffer_data) + staging_buffer.buffer_offset,
+			texture_data.data(),
+			texture_data.size() * sizeof(int8_t));
+
+		const vk::ImageMemoryBarrier image_memory_barrier_transfer(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+			window_vulkan.GetQueueFamilyIndex(),
+			window_vulkan.GetQueueFamilyIndex(),
+			*random_vectors_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+
+		staging_buffer.command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_barrier_transfer);
+
+		const vk::BufferImageCopy copy_region(
+			staging_buffer.buffer_offset,
+			random_vectors_image_size.width ,
+			random_vectors_image_size.height,
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u),
+			vk::Offset3D(0, 0, 0),
+			vk::Extent3D(random_vectors_image_size.width, random_vectors_image_size.height, 1u));
+
+		staging_buffer.command_buffer.copyBufferToImage(
+			staging_buffer.buffer,
+			*random_vectors_image_,
+			vk::ImageLayout::eTransferDstOptimal,
+			1u, &copy_region);
+
+		const vk::ImageMemoryBarrier image_memory_barrier_final(
+			vk::AccessFlagBits::eTransferWrite,
+			vk::AccessFlagBits::eMemoryRead,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+			window_vulkan.GetQueueFamilyIndex(),
+			window_vulkan.GetQueueFamilyIndex(),
+			*random_vectors_image_,
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
+
+		staging_buffer.command_buffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			vk::DependencyFlags(),
+			0u, nullptr,
+			0u, nullptr,
+			1u, &image_memory_barrier_final);
+
+		gpu_data_uploader.Flush();
+	}
 
 	// Create shaders
 	shader_vert_= CreateShader(vk_device_, ShaderNames::ssao_vert);

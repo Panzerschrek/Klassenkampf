@@ -1,4 +1,5 @@
 #pragma once
+#include "GPUDataUploader.hpp"
 #include "Tonemapper.hpp"
 
 
@@ -11,6 +12,7 @@ public:
 	AmbientOcclusionCalculator(
 		Settings& settings,
 		WindowVulkan& window_vulkan,
+		GPUDataUploader& gpu_data_uploader,
 		const Tonemapper& tonemapper);
 
 	vk::ImageView GetAmbientOcclusionImageView() const;
@@ -31,6 +33,9 @@ private:
 	vk::UniqueRenderPass render_pass_;
 
 	vk::UniqueFramebuffer framebuffer_;
+
+	vk::UniqueImage random_vectors_image_;
+	vk::UniqueDeviceMemory random_vectors_image_memory_;
 
 	vk::UniqueDescriptorPool descriptor_pool_;
 
