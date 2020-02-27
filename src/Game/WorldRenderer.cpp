@@ -518,9 +518,12 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	}
 
 	// Draw
-	tonemapper_.DoRenderPass(
+	tonemapper_.DeDepthPrePass(
 		command_buffer,
-		[&]{ DrawWorldModel(command_buffer, model, visible_sectors, view_matrix.mat); });
+		[&]{ DrawWorldModelDepthPrePass(command_buffer, model, visible_sectors, view_matrix.mat); });
+	tonemapper_.DoMainPass(
+		command_buffer,
+		[&]{ DrawWorldModelMainPass(command_buffer, model, visible_sectors, view_matrix.mat); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
@@ -640,7 +643,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateDepthPrePassPipeline()
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
 				*pipeline.pipeline_layout,
-				tonemapper_.GetRenderPass(),
+				tonemapper_.GetDepthPrePass(),
 				0u));
 
 	return pipeline;
@@ -859,73 +862,75 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
 				*pipeline.pipeline_layout,
-				tonemapper_.GetRenderPass(),
+				tonemapper_.GetMainRenderPass(),
 				0u));
 
 	return pipeline;
 }
 
-void WorldRenderer::DrawWorldModel(
+void WorldRenderer::DrawWorldModelDepthPrePass(
 	const vk::CommandBuffer command_buffer,
 	const WorldModel& world_model,
 	const VisibleSectors& visible_setors,
 	const m_Mat4& view_matrix)
 {
-	// Depth pre-pass.
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *depth_pre_pass_pipeline_.pipeline);
+
+	Uniforms uniforms;
+	uniforms.view_matrix= view_matrix;
+	command_buffer.pushConstants(
+		*depth_pre_pass_pipeline_.pipeline_layout,
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(uniforms),
+		&uniforms);
+
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const size_t sector_index : visible_setors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+}
+
+void WorldRenderer::DrawWorldModelMainPass(
+	const vk::CommandBuffer command_buffer,
+	const WorldModel& world_model,
+	const VisibleSectors& visible_setors,
+	const m_Mat4& view_matrix)
+{
+	const Material& test_material= materials_.find(test_material_id_)->second;
+
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
+
+	Uniforms uniforms;
+	uniforms.view_matrix= view_matrix;
+	command_buffer.pushConstants(
+		*lighting_pass_pipeline_.pipeline_layout,
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(uniforms),
+		&uniforms);
+
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const size_t sector_index : visible_setors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
 	{
-		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *depth_pre_pass_pipeline_.pipeline);
+		const Material& material= materials_.find(triangle_group.material_id)->second;
 
-		Uniforms uniforms;
-		uniforms.view_matrix= view_matrix;
-		command_buffer.pushConstants(
-			*depth_pre_pass_pipeline_.pipeline_layout,
-			vk::ShaderStageFlagBits::eVertex,
-			0,
-			sizeof(uniforms),
-			&uniforms);
-
-		const vk::DeviceSize offsets= 0u;
-		command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
-		command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
-
-		for(const size_t sector_index : visible_setors)
-		for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-	}
-	// Lighting pass.
-	{
-		const Material& test_material= materials_.find(test_material_id_)->second;
-
-		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
-
-		Uniforms uniforms;
-		uniforms.view_matrix= view_matrix;
-		command_buffer.pushConstants(
+		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
 			*lighting_pass_pipeline_.pipeline_layout,
-			vk::ShaderStageFlagBits::eVertex,
-			0,
-			sizeof(uniforms),
-			&uniforms);
+			0u,
+			1u, &desctipor_set,
+			0u, nullptr);
 
-		const vk::DeviceSize offsets= 0u;
-		command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
-		command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
-
-		for(const size_t sector_index : visible_setors)
-		for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
-		{
-			const Material& material= materials_.find(triangle_group.material_id)->second;
-
-			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-			command_buffer.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*lighting_pass_pipeline_.pipeline_layout,
-				0u,
-				1u, &desctipor_set,
-				0u, nullptr);
-
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-		}
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 	}
 }
 

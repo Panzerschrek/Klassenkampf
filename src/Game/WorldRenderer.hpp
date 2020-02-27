@@ -109,7 +109,13 @@ private:
 	Pipeline CreateDepthPrePassPipeline();
 	Pipeline CreateLightingPassPipeline();
 
-	void DrawWorldModel(
+	void DrawWorldModelDepthPrePass(
+		vk::CommandBuffer command_buffer,
+		const WorldModel& world_model,
+		const VisibleSectors& visible_sectors,
+		const m_Mat4& view_matrix);
+
+	void DrawWorldModelMainPass(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
 		const VisibleSectors& visible_sectors,
