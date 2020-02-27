@@ -25,11 +25,19 @@ void main()
 	vec2 screen_coord= f_tex_coord * 2.0 - vec2(1.0, 1.0); // in range [-1;+1]
 	vec3 world_pos= vec3(w * screen_coord / view_matrix_values.xy, w);
 
+	// TODO - calculate normal more accurately.
+	vec3 normal= normalize(cross(dFdy(world_pos), dFdx(world_pos)));
+
 	float occlusion_factor= 0.0;
 	const int iterations= 64;
 	for(int i= 0; i < iterations; ++i)
 	{
 		vec3 delta_vec= radius.x * texelFetch(random_vectors_tex, ivec2(i, random_vectors_tex_y), 0).xyz;
+
+		float vec_dot= dot(delta_vec, normal);
+		if(vec_dot < 0.0)
+			delta_vec-= 2.0 * vec_dot * normal;
+
 		vec3 sample_world_pos= world_pos + delta_vec;
 
 		vec2 sample_screen_pos= vec2(sample_world_pos.xy * view_matrix_values.xy) / sample_world_pos.z;
