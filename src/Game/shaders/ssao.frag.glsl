@@ -55,7 +55,7 @@ void main()
 		((int(gl_FragCoord.y) & 3) << 2);
 
 	float occlusion_factor= 0.0;
-	const int iterations= 64;
+	const int iterations= 16;
 	for(int i= 0; i < iterations; ++i)
 	{
 		vec3 delta_vec= radius.x * texelFetch(random_vectors_tex, ivec2(i, random_vectors_tex_y), 0).xyz;
