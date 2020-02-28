@@ -31,7 +31,13 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 	, vk_device_(window_vulkan.GetVulkanDevice())
 {
 	const auto& memory_properties= window_vulkan.GetMemoryProperties();
+
+	// Calculate ssao in half resolution, because calculating it in full resolution is too expensive.
+	// This may create some artefacts on polygon edges, but it is not so visible.
 	framebuffer_size_= tonemapper.GetFramebufferSize();
+	framebuffer_size_.width /= 2u;
+	framebuffer_size_.height/= 2u;
+
 	const vk::Format framebuffer_image_format= vk::Format::eR8Unorm;
 
 	// Create render pass.

@@ -722,8 +722,8 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
-				vk::Filter::eNearest,
-				vk::Filter::eNearest,
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
 				vk::SamplerMipmapMode::eNearest,
 				vk::SamplerAddressMode::eClampToEdge,
 				vk::SamplerAddressMode::eClampToEdge,
