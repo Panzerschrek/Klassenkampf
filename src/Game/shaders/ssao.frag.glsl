@@ -15,18 +15,44 @@ layout(location= 0) out float color;
 
 void main()
 {
+	// Reconstruct normal, using depth values.
+	// use 4 neighbor texels and select delta vector with minimum absolute depth change.
+	vec2 inv_tex_size= vec2(1.0, 1.0) / vec2(textureSize(tex, 0));
+	float fragment_depth= texture(tex, f_tex_coord).x;
+	float depth_x_plus = texture(tex, f_tex_coord + vec2(+inv_tex_size.x, 0)).x;
+	float depth_x_minus= texture(tex, f_tex_coord + vec2(-inv_tex_size.x, 0)).x;
+	float depth_y_plus = texture(tex, f_tex_coord + vec2(0, +inv_tex_size.y)).x;
+	float depth_y_minus= texture(tex, f_tex_coord + vec2(0, -inv_tex_size.y)).x;
+	vec2 screen_coord= f_tex_coord * 2.0 - vec2(1.0, 1.0); // in range [-1;+1]
+	vec2 screen_coord_x_plus = (f_tex_coord + vec2(+inv_tex_size.x, 0.0)) * 2.0 - vec2(1.0, 1.0);
+	vec2 screen_coord_x_minus= (f_tex_coord + vec2(-inv_tex_size.x, 0.0)) * 2.0 - vec2(1.0, 1.0);
+	vec2 screen_coord_y_plus = (f_tex_coord + vec2(0.0, +inv_tex_size.y)) * 2.0 - vec2(1.0, 1.0);
+	vec2 screen_coord_y_minus= (f_tex_coord + vec2(0.0, -inv_tex_size.y)) * 2.0 - vec2(1.0, 1.0);
+
+	float depth_delta_x_plus = abs(fragment_depth - depth_x_plus );
+	float depth_delta_x_minus= abs(fragment_depth - depth_x_minus);
+	float depth_delta_y_plus = abs(fragment_depth - depth_y_plus );
+	float depth_delta_y_minus= abs(fragment_depth - depth_y_minus);
+
+	float w= view_matrix_values.w / (fragment_depth - view_matrix_values.z);
+	float w_x_plus = view_matrix_values.w / (depth_x_plus  - view_matrix_values.z);
+	float w_x_minus= view_matrix_values.w / (depth_x_minus - view_matrix_values.z);
+	float w_y_plus = view_matrix_values.w / (depth_y_plus  - view_matrix_values.z);
+	float w_y_minus= view_matrix_values.w / (depth_y_minus - view_matrix_values.z);
+
+	vec3 world_pos= vec3(w * screen_coord / view_matrix_values.xy, w);
+	vec3 world_pos_x_plus = vec3(w_x_plus  * screen_coord_x_plus  / view_matrix_values.xy, w_x_plus );
+	vec3 world_pos_x_minus= vec3(w_x_minus * screen_coord_x_minus / view_matrix_values.xy, w_x_minus);
+	vec3 world_pos_y_plus = vec3(w_y_plus  * screen_coord_y_plus  / view_matrix_values.xy, w_y_plus );
+	vec3 world_pos_y_minus= vec3(w_y_minus * screen_coord_y_minus / view_matrix_values.xy, w_y_minus);
+
+	vec3 vnx= mix(world_pos_x_plus - world_pos, world_pos - world_pos_x_minus, step(depth_delta_x_minus, depth_delta_x_plus));
+	vec3 vny= mix(world_pos_y_plus - world_pos, world_pos - world_pos_y_minus, step(depth_delta_y_minus, depth_delta_y_plus));
+	vec3 normal= normalize(cross(vny, vnx));
+
 	int random_vectors_tex_y=
 		(int(gl_FragCoord.x) & 3) |
 		((int(gl_FragCoord.y) & 3) << 2);
-
-	float fragment_depth= texture(tex, f_tex_coord).x;
-	float w= view_matrix_values.w / (fragment_depth - view_matrix_values.z);
-
-	vec2 screen_coord= f_tex_coord * 2.0 - vec2(1.0, 1.0); // in range [-1;+1]
-	vec3 world_pos= vec3(w * screen_coord / view_matrix_values.xy, w);
-
-	// TODO - calculate normal more accurately.
-	vec3 normal= normalize(cross(dFdy(world_pos), dFdx(world_pos)));
 
 	float occlusion_factor= 0.0;
 	const int iterations= 64;
