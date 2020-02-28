@@ -74,8 +74,10 @@ void main()
 		float actual_samle_w= view_matrix_values.w / (actual_sample_depth - view_matrix_values.z);
 
 		occlusion_factor+=
-			smoothstep(actual_samle_w, actual_samle_w + radius.x / 16.0, sample_world_pos.z) *
-			(1.0 - smoothstep(radius.x, radius.x * 1.5, sample_world_pos.z - actual_samle_w));
+			smoothstep(actual_samle_w, actual_samle_w + radius.x / 16.0, sample_world_pos.z) * // Occlusion itself
+			(1.0 - smoothstep(radius.x, radius.x * 1.5, sample_world_pos.z - actual_samle_w)) * // Remove dark halo around objects
+			step(max(abs(sample_screen_pos.x), abs(sample_screen_pos.y)), 1.0) * // Discard samples outside viewport
+			step(0.0, sample_world_pos.z); // Discard samples behind camera
 	}
 
 	color= 1.0 - occlusion_factor / float(iterations);
