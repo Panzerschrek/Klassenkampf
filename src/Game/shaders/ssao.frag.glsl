@@ -60,9 +60,9 @@ void main()
 	{
 		vec3 delta_vec= radius.x * texelFetch(random_vectors_tex, ivec2(i, random_vectors_tex_y), 0).xyz;
 
+		// Reflect delta vector against plane of surface, using plane normal.
 		float vec_dot= dot(delta_vec, normal);
-		if(vec_dot < 0.0)
-			delta_vec-= 2.0 * vec_dot * normal;
+		delta_vec-= step(vec_dot, 0.0) * 2.0 * vec_dot * normal;
 
 		vec3 sample_world_pos= world_pos + delta_vec;
 
