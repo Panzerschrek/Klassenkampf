@@ -56,7 +56,7 @@ void main()
 		int(cluster_coord.y) * cluster_volume_size.x +
 		int(cluster_coord.z) * (cluster_volume_size.x * cluster_volume_size.y) ]);
 
-	vec3 l= ambient_color.rgb * (0.2 + 0.8 * texture(ambient_occlusion_image, frag_coord_normalized).r);
+	vec3 l= ambient_color.rgb * (0.5 + 0.5 * texture(ambient_occlusion_image, frag_coord_normalized).r);
 	int current_light_count= light_list[offset];
 	for(int i= 0; i < current_light_count; ++i)
 	{
