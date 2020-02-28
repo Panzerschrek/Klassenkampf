@@ -80,7 +80,7 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 						1u,
 						vk::SampleCountFlagBits::e1,
 						vk::ImageTiling::eOptimal,
-						vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
+						vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment,
 						vk::SharingMode::eExclusive,
 						0u, nullptr,
 						vk::ImageLayout::eUndefined));
