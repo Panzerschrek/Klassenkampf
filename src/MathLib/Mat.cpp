@@ -22,6 +22,49 @@ float inline Mat3Det(
 
 } // namespace
 
+void m_Mat3::MakeIdentity()
+{
+	static constexpr float c_identity_data[9]
+	{
+		1.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 1.0f,
+	};
+	std::memcpy(value, c_identity_data, sizeof(c_identity_data));
+}
+
+m_Mat3 m_Mat3::GetInverseMatrix() const
+{
+	m_Mat3 r;
+
+	const float det=
+		value[0] * (value[4] * value[8] - value[7] * value[5]) -
+		value[1] * (value[3] * value[8] - value[6] * value[5]) +
+		value[2] * (value[3] * value[7] - value[6] * value[4]);
+
+	if(det == 0.0f)
+	{
+		r.MakeIdentity();
+		return r;
+	}
+
+	const float inv_det= 1.0f / det;
+
+	r.value[0]= (value[4] * value[8] - value[7] * value[5]) * inv_det;
+	r.value[1]= (value[2] * value[7] - value[1] * value[8]) * inv_det;
+	r.value[2]= (value[1] * value[5] - value[2] * value[4]) * inv_det;
+
+	r.value[3]= (value[5] * value[6] - value[3] * value[8]) * inv_det;
+	r.value[4]= (value[0] * value[8] - value[2] * value[6]) * inv_det;
+	r.value[5]= (value[2] * value[3] - value[0] * value[5]) * inv_det;
+
+	r.value[6]= (value[3] * value[7] - value[4] * value[6]) * inv_det;
+	r.value[7]= (value[1] * value[6] - value[0] * value[7]) * inv_det;
+	r.value[8]= (value[0] * value[4] - value[1] * value[3]) * inv_det;
+
+	return r;
+}
+
 m_Mat4 m_Mat4::operator*(const m_Mat4& m) const
 {
 	m_Mat4 r;

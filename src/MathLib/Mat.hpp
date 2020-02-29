@@ -5,6 +5,16 @@
 namespace KK
 {
 
+class m_Mat3
+{
+public:
+	// TODO - add other stuff.
+	void MakeIdentity();
+	m_Mat3 GetInverseMatrix() const;
+
+	float value[9];
+};
+
 class m_Mat4
 {
 public:

@@ -41,6 +41,8 @@ struct VertexCombined
 {
 	float pos[3]{0.0f, 0.0f, 0.0f};
 	float normal[3]{0.0f, 0.0f, 0.0f};
+	float binormal[3]{0.0f, 0.0f, 0.0f};
+	float tangent[3]{0.0f, 0.0f, 0.0f};
 	float tex_coord[2]{0.0f, 0.0f};
 };
 
@@ -53,6 +55,12 @@ bool operator==(const VertexCombined& v0, const VertexCombined& v1)
 		v0.normal[0] == v1.normal[0] &&
 		v0.normal[1] == v1.normal[1] &&
 		v0.normal[2] == v1.normal[2] &&
+		v0.binormal[0] == v1.binormal[0] &&
+		v0.binormal[1] == v1.binormal[1] &&
+		v0.binormal[2] == v1.binormal[2] &&
+		v0.tangent [0] == v1.tangent [0] &&
+		v0.tangent [1] == v1.tangent [1] &&
+		v0.tangent [2] == v1.tangent [2] &&
 		v0.tex_coord[0] == v1.tex_coord[0] &&
 		v0.tex_coord[1] == v1.tex_coord[1];
 }
@@ -70,6 +78,12 @@ struct VertexCombinedHasher
 			hf(v.normal[0]) ^
 			hf(v.normal[1]) ^
 			hf(v.normal[2]) ^
+			hf(v.binormal[0]) ^
+			hf(v.binormal[1]) ^
+			hf(v.binormal[2]) ^
+			hf(v.tangent [0]) ^
+			hf(v.tangent [1]) ^
+			hf(v.tangent [2]) ^
 			hf(v.tex_coord[0]) ^
 			hf(v.tex_coord[1]);
 	}
@@ -146,6 +160,57 @@ CoordSource ReadCoordSource(const tinyxml2::XMLElement& source_element)
 	}
 
 	return result;
+}
+
+void CalculateBinormalTangent(TriangleGroup& triangle_group)
+{
+	for(size_t i= 0u; i < triangle_group.vertices.size(); i+= 3u)
+	{
+		VertexCombined& v0= triangle_group.vertices[i + 0u];
+		VertexCombined& v1= triangle_group.vertices[i + 1u];
+		VertexCombined& v2= triangle_group.vertices[i + 2u];
+
+		const m_Vec3 dv0(v1.pos[0] - v0.pos[0], v1.pos[1] - v0.pos[1], v1.pos[2] - v0.pos[2]);
+		const m_Vec3 dv1(v2.pos[0] - v0.pos[0], v2.pos[1] - v0.pos[1], v2.pos[2] - v0.pos[2]);
+		const m_Vec3 dv2= mVec3Cross(dv0, dv1);
+
+		const m_Vec2 dtc0(v1.tex_coord[0] - v0.tex_coord[0], v1.tex_coord[1] - v0.tex_coord[1]);
+		const m_Vec2 dtc1(v2.tex_coord[0] - v0.tex_coord[0], v2.tex_coord[1] - v0.tex_coord[1]);
+
+		m_Mat3 delta_vec_mat;
+		delta_vec_mat.value[0]= dv0.x;
+		delta_vec_mat.value[1]= dv0.y;
+		delta_vec_mat.value[2]= dv0.z;
+		delta_vec_mat.value[3]= dv1.x;
+		delta_vec_mat.value[4]= dv1.y;
+		delta_vec_mat.value[5]= dv1.z;
+		delta_vec_mat.value[6]= dv2.x;
+		delta_vec_mat.value[7]= dv2.y;
+		delta_vec_mat.value[8]= dv2.z;
+
+		const m_Mat3 delta_vec_mat_iverse= delta_vec_mat.GetInverseMatrix();
+
+		m_Vec3 b(
+			delta_vec_mat_iverse.value[0] * dtc0.x + delta_vec_mat_iverse.value[1] * dtc1.x,
+			delta_vec_mat_iverse.value[3] * dtc0.x + delta_vec_mat_iverse.value[4] * dtc1.x,
+			delta_vec_mat_iverse.value[6] * dtc0.x + delta_vec_mat_iverse.value[7] * dtc1.x);
+		m_Vec3 t(
+			delta_vec_mat_iverse.value[0] * dtc0.y + delta_vec_mat_iverse.value[1] * dtc1.y,
+			delta_vec_mat_iverse.value[3] * dtc0.y + delta_vec_mat_iverse.value[4] * dtc1.y,
+			delta_vec_mat_iverse.value[6] * dtc0.y + delta_vec_mat_iverse.value[7] * dtc1.y);
+
+		// Normalize it.
+		const float max_l= std::max(b.GetLength(), t.GetLength());
+		b/= max_l;
+		t/= max_l;
+
+		v0.binormal[0]= v1.binormal[0]= v2.binormal[0]= b.x;
+		v0.binormal[1]= v1.binormal[1]= v2.binormal[1]= b.y;
+		v0.binormal[2]= v1.binormal[2]= v2.binormal[2]= b.z;
+		v0.tangent [0]= v1.tangent [0]= v2.tangent [0]= t.x;
+		v0.tangent [1]= v1.tangent [1]= v2.tangent [1]= t.y;
+		v0.tangent [2]= v1.tangent [2]= v2.tangent [2]= t.z;
+	}
 }
 
 TriangleGroup ReadTriangleGroup(
@@ -333,6 +398,7 @@ TriangleGroup ReadTriangleGroup(
 	if(material != nullptr)
 		result.material= material;
 
+	CalculateBinormalTangent(result);
 	return result;
 }
 
@@ -496,6 +562,12 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 			{
 				const float normal_scaled= c_max_normal_value * vertex.normal[i];
 				out_vertex.normal[i]= int8_t(std::min(std::max(-c_max_normal_value, normal_scaled), +c_max_normal_value));
+
+				const float binormal_scaled= c_max_normal_value * vertex.binormal[i];
+				out_vertex.binormal[i]= int8_t(std::min(std::max(-c_max_normal_value, binormal_scaled), +c_max_normal_value));
+
+				const float tangent_scaled= c_max_normal_value * vertex.tangent[i];
+				out_vertex.tangent[i]= int8_t(std::min(std::max(-c_max_normal_value, tangent_scaled), +c_max_normal_value));
 			}
 		}
 
@@ -875,11 +947,27 @@ int Main(const int argc, const char* const argv[])
 					v.pos[2]= pos_transformed.z;
 
 					const m_Vec3 normal(v.normal[0], v.normal[1], v.normal[2]);
+					const m_Vec3 binormal(v.binormal[0], v.binormal[1], v.binormal[2]);
+					const m_Vec3 tangent(v.tangent[0], v.tangent[1], v.tangent[2]);
+
 					m_Vec3 normal_transformed= normals_matrix * normal;
 					normal_transformed/= normal_transformed.GetLength();
+
+					m_Vec3 binormal_transformed= normals_matrix * binormal;
+
+					m_Vec3 tangent_transformed= normals_matrix * tangent;
+
 					v.normal[0]= normal_transformed.x;
 					v.normal[1]= normal_transformed.y;
 					v.normal[2]= normal_transformed.z;
+
+					v.binormal[0]= binormal_transformed.x;
+					v.binormal[1]= binormal_transformed.y;
+					v.binormal[2]= binormal_transformed.z;
+
+					v.tangent[0]= tangent_transformed.x;
+					v.tangent[1]= tangent_transformed.y;
+					v.tangent[2]= tangent_transformed.z;
 				}
 				triangle_groups.push_back(MakeTriangleGroupIndexed(group_copy));
 			}

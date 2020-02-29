@@ -48,6 +48,9 @@ struct WorldVertex
 	float pos[3];
 	float tex_coord[2];
 	int8_t normal[3];
+	int8_t binormal[3];
+	int8_t tangent[3];
+	int8_t reserved[3];
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
@@ -838,6 +841,8 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
 		{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, tex_coord)},
 		{2u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, normal)},
+		{3u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, binormal)},
+		{4u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, tangent)},
 	};
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
@@ -1084,11 +1089,21 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 					out_v.pos[2]= pos_transformed.z;
 
 					const m_Vec3 normal(float(in_v.normal[0]), float(in_v.normal[1]), float(in_v.normal[2]));
+					const m_Vec3 binormal(float(in_v.binormal[0]), float(in_v.binormal[1]), float(in_v.binormal[2]));
+					const m_Vec3 tangent(float(in_v.tangent[0]), float(in_v.tangent[1]), float(in_v.tangent[2]));
 					const m_Vec3 normal_transformed= normal * rotate_mat;
+					const m_Vec3 binormal_transformed= binormal * rotate_mat;
+					const m_Vec3 tangent_transformed= tangent * rotate_mat;
 
 					out_v.normal[0]= int8_t(normal_transformed.x);
 					out_v.normal[1]= int8_t(normal_transformed.y);
 					out_v.normal[2]= int8_t(normal_transformed.z);
+					out_v.binormal[0]= int8_t(binormal_transformed.x);
+					out_v.binormal[1]= int8_t(binormal_transformed.y);
+					out_v.binormal[2]= int8_t(binormal_transformed.z);
+					out_v.tangent[0]= int8_t(tangent_transformed.x);
+					out_v.tangent[1]= int8_t(tangent_transformed.y);
+					out_v.tangent[2]= int8_t(tangent_transformed.z);
 
 					for(size_t j= 0u; j < 2u; ++j)
 						out_v.tex_coord[j]= float(in_v.tex_coord[j]) / float(SegmentModelFormat::c_tex_coord_scale);

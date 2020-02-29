@@ -39,6 +39,8 @@ layout(binding= 5) uniform sampler2D ambient_occlusion_image;
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
 layout(location= 2) in vec3 f_pos; // World space position.
+layout(location= 3) in vec3 f_binormal;
+layout(location= 4) in vec3 f_tangent;
 
 layout(location = 0) out vec4 out_color;
 

@@ -13,7 +13,7 @@ constexpr const int32_t c_tex_coord_scale= 1024;
 struct SegmentModelHeader
 {
 	static constexpr const char c_expected_header[16]= "KK-SegmentModel";
-	static constexpr const uint32_t c_expected_version= 5u; // Change this each time, when "SegmentModelFormat" structs changed.
+	static constexpr const uint32_t c_expected_version= 6u; // Change this each time, when "SegmentModelFormat" structs changed.
 
 	uint8_t header[16];
 	uint32_t version;
@@ -46,9 +46,11 @@ struct Vertex
 	// Normalized texture coordinates in 4.12 format.
 	int16_t tex_coord[2];
 	int8_t normal[3];
-	int8_t reserved[3];
+	int8_t binormal[3]; // texture coordinates U vector
+	int8_t tangent[3]; // texture coordinates V vector
+	int8_t reserved;
 };
-static_assert(sizeof(Vertex) == 16u, "Invalid size");
+static_assert(sizeof(Vertex) == 20u, "Invalid size");
 
 using IndexType= uint16_t;
 
