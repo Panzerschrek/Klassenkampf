@@ -36,11 +36,17 @@ public:
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
-	struct Material
+	struct ImageGPU
 	{
 		vk::UniqueImage image;
 		vk::UniqueImageView image_view;
 		vk::UniqueDeviceMemory image_memory;
+	};
+
+	struct Material
+	{
+		std::string albedo_image_id;
+		std::string normals_image_id;
 
 		vk::UniqueDescriptorSet descriptor_set;
 	};
@@ -133,6 +139,10 @@ private:
 	std::optional<SegmentModel> LoadSegmentModel(std::string_view file_name);
 
 	void LoadMaterial(const std::string& material_name);
+	void LoadImage(const std::string& image_name);
+
+	const ImageGPU& GetMaterialAlbedoImage(const Material& material);
+	const ImageGPU& GetMaterialNormalsImage(const Material& material);
 
 	void ComandTestLightAdd(const CommandsArguments& args);
 	void CommandTestLightRemove();
@@ -175,8 +185,10 @@ private:
 	WorldModel world_model_;
 	WorldModel test_world_model_;
 
+	std::unordered_map<std::string, ImageGPU> images_;
 	std::unordered_map<std::string, Material> materials_;
-	std::string test_material_id_;
+	std::string stub_albedo_image_id_;
+	std::string stub_normal_map_image_id_;
 
 	std::optional<Sector::Light> test_light_;
 };

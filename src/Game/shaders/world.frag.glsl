@@ -36,6 +36,8 @@ layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
 layout(binding= 5) uniform sampler2D ambient_occlusion_image;
 
+layout(binding= 6) uniform sampler2D normals_map;
+
 layout(location= 0) in vec3 f_normal;
 layout(location= 1) in vec2 f_tex_coord;
 layout(location= 2) in vec3 f_pos; // World space position.
@@ -46,7 +48,10 @@ layout(location = 0) out vec4 out_color;
 
 void main()
 {
-	vec3 normal_normalized= normalize(f_normal);
+	vec3 map_normal= texture(normals_map, f_tex_coord).xyz * 2.0 - vec3(1.0, 1.0, 1.0);
+	mat3 space_mat= mat3(f_binormal, f_tangent, f_normal);
+	vec3 normal_normalized= normalize(space_mat * map_normal);
+
 	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size;
 
 	vec3 cluster_coord=
