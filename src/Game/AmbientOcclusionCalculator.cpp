@@ -71,7 +71,6 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 					1u, &subpass_description));
 	}
 
-
 	for(PassData& pass_data : pass_data_)
 	{
 		{ // Create framebuffer image
@@ -126,8 +125,9 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 
 	{ // Create random vectors image
 
+		// TODO - use not simple random, but somethink like Poisson Disk.
 		LongRand rand;
-		const vk::Extent2D random_vectors_image_size(64, 16);
+		const vk::Extent2D random_vectors_image_size(16, 16); // Size must match size in shader.
 		const size_t texel_count= random_vectors_image_size.width * random_vectors_image_size.height;
 		std::vector<int8_t> texture_data(texel_count * 4u);
 

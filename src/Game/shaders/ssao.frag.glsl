@@ -50,6 +50,7 @@ void main()
 	vec3 vny= mix(world_pos_y_plus - world_pos, world_pos - world_pos_y_minus, step(depth_delta_y_minus, depth_delta_y_plus));
 	vec3 normal= normalize(cross(vny, vnx));
 
+	// Interation count and "y" must be not greater, than random vectors texture size.
 	int random_vectors_tex_y=
 		(int(gl_FragCoord.x) & 3) |
 		((int(gl_FragCoord.y) & 3) << 2);
