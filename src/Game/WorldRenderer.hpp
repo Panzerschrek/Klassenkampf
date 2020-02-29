@@ -2,6 +2,7 @@
 #include "../Common/MemoryMappedFile.hpp"
 #include "../Common/SegmentModelFormat.hpp"
 #include "../MathLib/Mat.hpp"
+#include "AmbientOcclusionCalculator.hpp"
 #include "CameraController.hpp"
 #include "CommandsProcessor.hpp"
 #include "ClusterVolumeBuilder.hpp"
@@ -100,6 +101,7 @@ private:
 		vk::UniqueShaderModule shader_frag;
 		vk::UniqueSampler image_sampler;
 		vk::UniqueSampler depth_cubemap_image_sampler;
+		vk::UniqueSampler ambient_occlusion_image_sampler;
 		vk::UniqueDescriptorSetLayout descriptor_set_layout;
 		vk::UniquePipelineLayout pipeline_layout;
 		vk::UniquePipeline pipeline;
@@ -109,7 +111,13 @@ private:
 	Pipeline CreateDepthPrePassPipeline();
 	Pipeline CreateLightingPassPipeline();
 
-	void DrawWorldModel(
+	void DrawWorldModelDepthPrePass(
+		vk::CommandBuffer command_buffer,
+		const WorldModel& world_model,
+		const VisibleSectors& visible_sectors,
+		const m_Mat4& view_matrix);
+
+	void DrawWorldModelMainPass(
 		vk::CommandBuffer command_buffer,
 		const WorldModel& world_model,
 		const VisibleSectors& visible_sectors,
@@ -141,6 +149,7 @@ private:
 	CommandsMapConstPtr commands_map_;
 
 	Tonemapper tonemapper_;
+	AmbientOcclusionCalculator ambient_occlusion_culculator_;
 	Shadowmapper shadowmapper_;
 	ClusterVolumeBuilder cluster_volume_builder_;
 	ShadowmapAllocator shadowmap_allocator_;

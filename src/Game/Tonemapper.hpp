@@ -14,10 +14,13 @@ public:
 	~Tonemapper();
 
 	vk::Extent2D GetFramebufferSize() const;
-	vk::RenderPass GetRenderPass() const;
+	vk::RenderPass GetDepthPrePass() const;
+	vk::RenderPass GetMainRenderPass() const;
 	vk::SampleCountFlagBits GetSampleCount() const;
+	vk::ImageView GetDepthImageView() const;
 
-	void DoRenderPass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function);
+	void DeDepthPrePass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function);
+	void DoMainPass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function);
 	void EndFrame(vk::CommandBuffer command_buffer);
 
 private:
@@ -60,8 +63,10 @@ private:
 	vk::UniqueDeviceMemory framebuffer_depth_image_memory_;
 	vk::UniqueImageView framebuffer_depth_image_view_;
 
-	vk::UniqueRenderPass framebuffer_render_pass_;
-	vk::UniqueFramebuffer framebuffer_;
+	vk::UniqueRenderPass depth_pre_pass_;
+	vk::UniqueFramebuffer depth_pre_pass_framebuffer_;
+	vk::UniqueRenderPass main_pass_;
+	vk::UniqueFramebuffer main_pass_framebuffer_;
 
 	// Size for brightness calculate image, bloom images.
 	vk::Extent2D aux_image_size_;

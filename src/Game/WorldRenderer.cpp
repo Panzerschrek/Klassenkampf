@@ -55,6 +55,7 @@ const uint32_t g_light_buffer_binding= 1u;
 const uint32_t g_cluster_offset_buffer_binding= 2u;
 const uint32_t g_lights_list_buffer_binding= 3u;
 const uint32_t g_depth_cubemaps_array_binding= 4u;
+const uint32_t g_ambient_occlusion_buffer_binding= 5u;
 
 } // namespace
 
@@ -73,6 +74,7 @@ WorldRenderer::WorldRenderer(
 	, memory_properties_(window_vulkan.GetMemoryProperties())
 	, queue_family_index_(window_vulkan.GetQueueFamilyIndex())
 	, tonemapper_(settings, window_vulkan)
+	, ambient_occlusion_culculator_(settings, window_vulkan, gpu_data_uploader, tonemapper_)
 	, shadowmapper_(window_vulkan, gpu_data_uploader, sizeof(WorldVertex), offsetof(WorldVertex, pos), vk::Format::eR32G32B32Sfloat)
 	, cluster_volume_builder_(16u, 8u, 24u)
 	, shadowmap_allocator_(shadowmapper_.GetSize())
@@ -214,7 +216,7 @@ WorldRenderer::WorldRenderer(
 	{
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size() * (1u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
+			uint32_t(materials_.size() * (2u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
 		},
 		{
 			vk::DescriptorType::eStorageBuffer,
@@ -272,6 +274,11 @@ WorldRenderer::WorldRenderer(
 					image_view,
 					vk::ImageLayout::eShaderReadOnlyOptimal));
 
+		const vk::DescriptorImageInfo descriptor_ambient_occlusion_image_info(
+			vk::Sampler(),
+			ambient_occlusion_culculator_.GetAmbientOcclusionImageView(),
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
 			{
@@ -321,6 +328,16 @@ WorldRenderer::WorldRenderer(
 				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
 				vk::DescriptorType::eCombinedImageSampler,
 				descriptor_depth_cubemaps_array_image_infos.data(),
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_ambient_occlusion_buffer_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_ambient_occlusion_image_info,
 				nullptr,
 				nullptr
 			},
@@ -522,9 +539,15 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	}
 
 	// Draw
-	tonemapper_.DoRenderPass(
+	tonemapper_.DeDepthPrePass(
 		command_buffer,
-		[&]{ DrawWorldModel(command_buffer, model, visible_sectors, view_matrix.mat); });
+		[&]{ DrawWorldModelDepthPrePass(command_buffer, model, visible_sectors, view_matrix.mat); });
+
+	ambient_occlusion_culculator_.DoPass(command_buffer, view_matrix);
+
+	tonemapper_.DoMainPass(
+		command_buffer,
+		[&]{ DrawWorldModelMainPass(command_buffer, model, visible_sectors, view_matrix.mat); });
 }
 
 void WorldRenderer::EndFrame(const vk::CommandBuffer command_buffer)
@@ -644,7 +667,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateDepthPrePassPipeline()
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
 				*pipeline.pipeline_layout,
-				tonemapper_.GetRenderPass(),
+				tonemapper_.GetDepthPrePass(),
 				0u));
 
 	return pipeline;
@@ -699,6 +722,26 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE));
 
+	pipeline.ambient_occlusion_image_sampler=
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f,
+				VK_FALSE,
+				0.0f,
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				0.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE));
+
 	const std::vector<vk::Sampler> depth_cubemap_image_samplers(
 		shadowmapper_.GetDepthCubemapArrayImagesView().size(),
 		*pipeline.depth_cubemap_image_sampler);
@@ -740,6 +783,13 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			uint32_t(depth_cubemap_image_samplers.size()),
 			vk::ShaderStageFlagBits::eFragment,
 			depth_cubemap_image_samplers.data(),
+		},
+		{
+			g_ambient_occlusion_buffer_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*pipeline.ambient_occlusion_image_sampler,
 		},
 	};
 
@@ -863,73 +913,75 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				&vk_pipeline_color_blend_state_create_info,
 				nullptr,
 				*pipeline.pipeline_layout,
-				tonemapper_.GetRenderPass(),
+				tonemapper_.GetMainRenderPass(),
 				0u));
 
 	return pipeline;
 }
 
-void WorldRenderer::DrawWorldModel(
+void WorldRenderer::DrawWorldModelDepthPrePass(
 	const vk::CommandBuffer command_buffer,
 	const WorldModel& world_model,
 	const VisibleSectors& visible_setors,
 	const m_Mat4& view_matrix)
 {
-	// Depth pre-pass.
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *depth_pre_pass_pipeline_.pipeline);
+
+	Uniforms uniforms;
+	uniforms.view_matrix= view_matrix;
+	command_buffer.pushConstants(
+		*depth_pre_pass_pipeline_.pipeline_layout,
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(uniforms),
+		&uniforms);
+
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const size_t sector_index : visible_setors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
+}
+
+void WorldRenderer::DrawWorldModelMainPass(
+	const vk::CommandBuffer command_buffer,
+	const WorldModel& world_model,
+	const VisibleSectors& visible_setors,
+	const m_Mat4& view_matrix)
+{
+	const Material& test_material= materials_.find(test_material_id_)->second;
+
+	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
+
+	Uniforms uniforms;
+	uniforms.view_matrix= view_matrix;
+	command_buffer.pushConstants(
+		*lighting_pass_pipeline_.pipeline_layout,
+		vk::ShaderStageFlagBits::eVertex,
+		0,
+		sizeof(uniforms),
+		&uniforms);
+
+	const vk::DeviceSize offsets= 0u;
+	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
+	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
+
+	for(const size_t sector_index : visible_setors)
+	for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
 	{
-		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *depth_pre_pass_pipeline_.pipeline);
+		const Material& material= materials_.find(triangle_group.material_id)->second;
 
-		Uniforms uniforms;
-		uniforms.view_matrix= view_matrix;
-		command_buffer.pushConstants(
-			*depth_pre_pass_pipeline_.pipeline_layout,
-			vk::ShaderStageFlagBits::eVertex,
-			0,
-			sizeof(uniforms),
-			&uniforms);
-
-		const vk::DeviceSize offsets= 0u;
-		command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
-		command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
-
-		for(const size_t sector_index : visible_setors)
-		for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-	}
-	// Lighting pass.
-	{
-		const Material& test_material= materials_.find(test_material_id_)->second;
-
-		command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
-
-		Uniforms uniforms;
-		uniforms.view_matrix= view_matrix;
-		command_buffer.pushConstants(
+		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
+		command_buffer.bindDescriptorSets(
+			vk::PipelineBindPoint::eGraphics,
 			*lighting_pass_pipeline_.pipeline_layout,
-			vk::ShaderStageFlagBits::eVertex,
-			0,
-			sizeof(uniforms),
-			&uniforms);
+			0u,
+			1u, &desctipor_set,
+			0u, nullptr);
 
-		const vk::DeviceSize offsets= 0u;
-		command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
-		command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
-
-		for(const size_t sector_index : visible_setors)
-		for(const Sector::TriangleGroup& triangle_group : world_model.sectors[sector_index].triangle_groups)
-		{
-			const Material& material= materials_.find(triangle_group.material_id)->second;
-
-			const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
-			command_buffer.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*lighting_pass_pipeline_.pipeline_layout,
-				0u,
-				1u, &desctipor_set,
-				0u, nullptr);
-
-			command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
-		}
+		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
 	}
 }
 

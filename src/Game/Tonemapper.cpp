@@ -178,7 +178,7 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					1u,
 					msaa_sample_count_,
 					vk::ImageTiling::eOptimal,
-					vk::ImageUsageFlagBits::eDepthStencilAttachment,
+					vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
 					vk::SharingMode::eExclusive,
 					0u, nullptr,
 					vk::ImageLayout::eUndefined));
@@ -207,20 +207,8 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, 1u)));
 	}
 
-	const vk::AttachmentDescription vk_attachment_description[]
-	{
-		{
-			vk::AttachmentDescriptionFlags(),
-			framebuffer_image_format,
-			msaa_sample_count_,
-			vk::AttachmentLoadOp::eClear,
-			vk::AttachmentStoreOp::eStore,
-			vk::AttachmentLoadOp::eDontCare,
-			vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eUndefined,
-			vk::ImageLayout::eTransferSrcOptimal,
-		},
-		{
+	{ // Create depth pre pass.
+		const vk::AttachmentDescription attachment_description(
 			vk::AttachmentDescriptionFlags(),
 			framebuffer_depth_format,
 			msaa_sample_count_,
@@ -229,36 +217,88 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			vk::AttachmentLoadOp::eClear,
 			vk::AttachmentStoreOp::eStore,
 			vk::ImageLayout::eUndefined,
-			vk::ImageLayout::eGeneral,
-		},
-	};
+			vk::ImageLayout::eShaderReadOnlyOptimal); // Allow reading depth image after depth pre pass.
 
-	const vk::AttachmentReference vk_attachment_reference_color(0u, vk::ImageLayout::eColorAttachmentOptimal);
-	const vk::AttachmentReference vk_attachment_reference_depth(1u, vk::ImageLayout::eGeneral);
+		const vk::AttachmentReference vk_attachment_reference_depth(0u, vk::ImageLayout::eGeneral);
 
-	const vk::SubpassDescription vk_subpass_description(
-			vk::SubpassDescriptionFlags(),
-			vk::PipelineBindPoint::eGraphics,
-			0u, nullptr,
-			1u, &vk_attachment_reference_color,
-			nullptr,
-			&vk_attachment_reference_depth);
+		const vk::SubpassDescription subpass_description(
+				vk::SubpassDescriptionFlags(),
+				vk::PipelineBindPoint::eGraphics,
+				0u, nullptr,
+				0u, nullptr,
+				nullptr,
+				&vk_attachment_reference_depth);
 
-	framebuffer_render_pass_=
-		vk_device_.createRenderPassUnique(
-			vk::RenderPassCreateInfo(
-				vk::RenderPassCreateFlags(),
-				uint32_t(std::size(vk_attachment_description)), vk_attachment_description,
-				1u, &vk_subpass_description));
+		depth_pre_pass_=
+			vk_device_.createRenderPassUnique(
+				vk::RenderPassCreateInfo(
+					vk::RenderPassCreateFlags(),
+					1u, &attachment_description,
+					1u, &subpass_description));
 
-	const vk::ImageView framebuffer_images[]{ *framebuffer_image_view_, *framebuffer_depth_image_view_ };
-	framebuffer_=
-		vk_device_.createFramebufferUnique(
-			vk::FramebufferCreateInfo(
-				vk::FramebufferCreateFlags(),
-				*framebuffer_render_pass_,
-				2u, framebuffer_images,
-				framebuffer_size_.width , framebuffer_size_.height, 1u));
+		depth_pre_pass_framebuffer_=
+			vk_device_.createFramebufferUnique(
+				vk::FramebufferCreateInfo(
+					vk::FramebufferCreateFlags(),
+					*depth_pre_pass_,
+					1u, &*framebuffer_depth_image_view_,
+					framebuffer_size_.width , framebuffer_size_.height, 1u));
+	}
+
+	{ // Create main render pass.
+		const vk::AttachmentDescription attachment_description[]
+		{
+			{
+				vk::AttachmentDescriptionFlags(),
+				framebuffer_image_format,
+				msaa_sample_count_,
+				vk::AttachmentLoadOp::eClear,
+				vk::AttachmentStoreOp::eStore,
+				vk::AttachmentLoadOp::eDontCare,
+				vk::AttachmentStoreOp::eDontCare,
+				vk::ImageLayout::eUndefined,
+				vk::ImageLayout::eTransferSrcOptimal,
+			},
+			{
+				vk::AttachmentDescriptionFlags(),
+				framebuffer_depth_format,
+				msaa_sample_count_,
+				vk::AttachmentLoadOp::eDontCare,
+				vk::AttachmentStoreOp::eStore,
+				vk::AttachmentLoadOp::eClear,
+				vk::AttachmentStoreOp::eStore,
+				vk::ImageLayout::eShaderReadOnlyOptimal, // Betweeen passes depth image has ShaderReadOptimal layout.
+				vk::ImageLayout::eGeneral,
+			},
+		};
+
+		const vk::AttachmentReference attachment_reference_color(0u, vk::ImageLayout::eColorAttachmentOptimal);
+		const vk::AttachmentReference vk_attachment_reference_depth(1u, vk::ImageLayout::eGeneral);
+
+		const vk::SubpassDescription subpass_description(
+				vk::SubpassDescriptionFlags(),
+				vk::PipelineBindPoint::eGraphics,
+				0u, nullptr,
+				1u, &attachment_reference_color,
+				nullptr,
+				&vk_attachment_reference_depth);
+
+		main_pass_=
+			vk_device_.createRenderPassUnique(
+				vk::RenderPassCreateInfo(
+					vk::RenderPassCreateFlags(),
+					uint32_t(std::size(attachment_description)), attachment_description,
+					1u, &subpass_description));
+
+		const vk::ImageView framebuffer_images[]{ *framebuffer_image_view_, *framebuffer_depth_image_view_ };
+		main_pass_framebuffer_=
+			vk_device_.createFramebufferUnique(
+				vk::FramebufferCreateInfo(
+					vk::FramebufferCreateFlags(),
+					*main_pass_,
+					2u, framebuffer_images,
+					framebuffer_size_.width , framebuffer_size_.height, 1u));
+	}
 
 	{ // Create brightness calculate image.
 		brightness_calculate_image_mip_levels_=
@@ -550,9 +590,14 @@ vk::Extent2D Tonemapper::GetFramebufferSize() const
 	return framebuffer_size_;
 }
 
-vk::RenderPass Tonemapper::GetRenderPass() const
+vk::RenderPass Tonemapper::GetDepthPrePass() const
 {
-	return *framebuffer_render_pass_;
+	return *depth_pre_pass_;
+}
+
+vk::RenderPass Tonemapper::GetMainRenderPass() const
+{
+	return *main_pass_;
 }
 
 vk::SampleCountFlagBits Tonemapper::GetSampleCount() const
@@ -560,7 +605,29 @@ vk::SampleCountFlagBits Tonemapper::GetSampleCount() const
 	return msaa_sample_count_;
 }
 
-void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std::function<void()>& draw_function)
+vk::ImageView Tonemapper::GetDepthImageView() const
+{
+	return *framebuffer_depth_image_view_;
+}
+
+void Tonemapper::DeDepthPrePass(vk::CommandBuffer command_buffer, const std::function<void()>& draw_function)
+{
+	const vk::ClearValue clear_value(vk::ClearDepthStencilValue(1.0f, 0u));
+
+	command_buffer.beginRenderPass(
+		vk::RenderPassBeginInfo(
+			*depth_pre_pass_,
+			*depth_pre_pass_framebuffer_,
+			vk::Rect2D(vk::Offset2D(0, 0), framebuffer_size_),
+			1u, &clear_value),
+		vk::SubpassContents::eInline);
+
+	draw_function();
+
+	command_buffer.endRenderPass();
+}
+
+void Tonemapper::DoMainPass(const vk::CommandBuffer command_buffer, const std::function<void()>& draw_function)
 {
 	if(!exposure_buffer_prepared_)
 	{
@@ -594,8 +661,8 @@ void Tonemapper::DoRenderPass(const vk::CommandBuffer command_buffer, const std:
 
 	command_buffer.beginRenderPass(
 		vk::RenderPassBeginInfo(
-			*framebuffer_render_pass_,
-			*framebuffer_,
+			*main_pass_,
+			*main_pass_framebuffer_,
 			vk::Rect2D(vk::Offset2D(0, 0), framebuffer_size_),
 			2u, clear_value),
 		vk::SubpassContents::eInline);
