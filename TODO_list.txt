@@ -1,0 +1,37 @@
+Bližajšije zadaci, uporädocennyje po prioritetu v každoj kategorii.
+
+Generaçija urovnä:
+* Najti sposob generirovatj urovnej s çiklami. Eto nado, naprimer, ctoby možno bylo shoditj za klücöm i vernutjsä korotkim putöm.
+* Boleje odnogo koridora, primykajuscego k storone komnaty
+* Lestniçy
+* Vtoroj etaž v komnatah - mosty, balkony
+* Komnaty bez potolka - otkrytyje areny
+* Okna v potolke
+* Kupola
+* Dekor komnat - niši, okna
+
+Sozdanije napolnenija igry:
+* Sozdanije neobhodimyh modelej segmentov
+* Sozdanije razvörtok dlä svetokart
+* Dekoraçii
+
+Eksport modelej:
+* Eksport razvörtki svetokart
+* Generaçija vektorov kasateljnogo teksturnogo prostranstva - binormali, tangenta
+
+Grafika:
+* Postrojenije svetokart fonovogo sveta
+* Sistema materialov
+* Karty normalej
+* Istocniki sveta - prožektory
+* Nebo
+* Dekali
+* Boleje ravnomernoje raspredelenije vektorov v "SSAO", po ikosaedru, naprimer
+* "Ambient occlusion" tekstury
+* Karty okruženija - dlä blikov na glänçevyh poverhnostäh
+* Fiziceski-korrektnaja modelj osvescenija
+
+Igrovoj proçess:
+* Ucot stolknovenij s urovenm
+* Dviženije igroka
+* Streljba
