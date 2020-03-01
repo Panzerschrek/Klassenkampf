@@ -36,15 +36,21 @@ layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
 layout(binding= 5) uniform sampler2D ambient_occlusion_image;
 
-layout(location= 0) in vec3 f_normal;
-layout(location= 1) in vec2 f_tex_coord;
-layout(location= 2) in vec3 f_pos; // World space position.
+layout(binding= 6) uniform sampler2D normals_map;
+
+layout(location= 0) in mat3 f_texture_space_mat;
+layout(location= 3) in vec2 f_tex_coord;
+layout(location= 4) in vec3 f_pos; // World space position.
 
 layout(location = 0) out vec4 out_color;
 
 void main()
 {
-	vec3 normal_normalized= normalize(f_normal);
+	// Reconstruct z, because normal map may not contain it or may be invalud.
+	vec2 map_normal_xy= texture(normals_map, f_tex_coord).xy * 2.0 - vec2(1.0, 1.0);
+	vec3 map_normal= vec3(map_normal_xy, sqrt(max(0.0, 1.0 - dot(map_normal_xy, map_normal_xy))));
+	vec3 normal_normalized= normalize(f_texture_space_mat * map_normal);
+
 	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size;
 
 	vec3 cluster_coord=

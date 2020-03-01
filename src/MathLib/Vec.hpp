@@ -85,6 +85,7 @@ public:
 bool operator==(const m_Vec3& v1, const m_Vec3& v2);
 bool operator!=(const m_Vec3& v1, const m_Vec3& v2);
 
+float mVec3Dot(const m_Vec3& v1, const m_Vec3& v2);
 m_Vec3 mVec3Cross(const m_Vec3& v1, const m_Vec3& v2);
 
 /*
@@ -305,6 +306,11 @@ inline bool operator==(const m_Vec3& v0, const m_Vec3& v1)
 inline bool operator!=(const m_Vec3& v0, const m_Vec3& v1)
 {
 	return !(v0 == v1);
+}
+
+inline float mVec3Dot(const m_Vec3& v1, const m_Vec3& v2)
+{
+	return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
 }
 
 inline m_Vec3 mVec3Cross(const m_Vec3& v1, const m_Vec3& v2)

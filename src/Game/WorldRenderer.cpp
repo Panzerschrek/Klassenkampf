@@ -48,6 +48,9 @@ struct WorldVertex
 	float pos[3];
 	float tex_coord[2];
 	int8_t normal[3];
+	int8_t binormal[3];
+	int8_t tangent[3];
+	int8_t reserved[3];
 };
 
 const uint32_t g_tex_uniform_binding= 0u;
@@ -56,6 +59,7 @@ const uint32_t g_cluster_offset_buffer_binding= 2u;
 const uint32_t g_lights_list_buffer_binding= 3u;
 const uint32_t g_depth_cubemaps_array_binding= 4u;
 const uint32_t g_ambient_occlusion_buffer_binding= 5u;
+const uint32_t g_normals_tex_uniform_binding= 6u;
 
 } // namespace
 
@@ -185,8 +189,10 @@ WorldRenderer::WorldRenderer(
 	}
 
 	// Load materials.
-	test_material_id_= "test_image";
-	LoadMaterial(test_material_id_);
+	stub_albedo_image_id_= "albedo_stub";
+	LoadImage(stub_albedo_image_id_);
+	stub_normal_map_image_id_= "normals_stub";
+	LoadImage(stub_normal_map_image_id_);
 
 	world_model_= LoadWorld(world, segment_models);
 
@@ -234,8 +240,6 @@ WorldRenderer::WorldRenderer(
 	for(auto& material_pair : materials_)
 	{
 		Material& material= material_pair.second;
-		if(!material.image_view)
-			continue;
 
 		// Create descriptor set.
 		material.descriptor_set=
@@ -248,7 +252,7 @@ WorldRenderer::WorldRenderer(
 		// Write descriptor set.
 		const vk::DescriptorImageInfo descriptor_image_info(
 			vk::Sampler(),
-			*material.image_view,
+			*GetMaterialAlbedoImage(material).image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
@@ -277,6 +281,11 @@ WorldRenderer::WorldRenderer(
 		const vk::DescriptorImageInfo descriptor_ambient_occlusion_image_info(
 			vk::Sampler(),
 			ambient_occlusion_culculator_.GetAmbientOcclusionImageView(),
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::DescriptorImageInfo descriptor_normals_image_info(
+			vk::Sampler(),
+			*GetMaterialNormalsImage(material).image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::WriteDescriptorSet write_descriptor_set[]
@@ -338,6 +347,16 @@ WorldRenderer::WorldRenderer(
 				1u,
 				vk::DescriptorType::eCombinedImageSampler,
 				&descriptor_ambient_occlusion_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				g_normals_tex_uniform_binding,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_normals_image_info,
 				nullptr,
 				nullptr
 			},
@@ -681,8 +700,9 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 	pipeline.shader_vert= CreateShader(vk_device_, ShaderNames::world_vert);
 	pipeline.shader_frag= CreateShader(vk_device_, ShaderNames::world_frag);
 
-	// Create image sampler
-	pipeline.image_sampler=
+	// Create image samplers
+	// Albedo sampler.
+	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -700,9 +720,10 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				100.0f,
 				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
+				VK_FALSE)));
 
-	pipeline.depth_cubemap_image_sampler=
+	// Depth cubemap sampler.
+	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -720,9 +741,10 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				0.0f,
 				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
+				VK_FALSE)));
 
-	pipeline.ambient_occlusion_image_sampler=
+	// SSAO sampler.
+	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -740,11 +762,32 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				0.0f,
 				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
+				VK_FALSE)));
+
+	// Normals sampler.
+	pipeline.samplers.push_back(
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eLinear,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				0.5f, // Increase mip bias for normals
+				VK_TRUE, // anisotropy
+				4.0f, // anisotropy level
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				100.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE)));
 
 	const std::vector<vk::Sampler> depth_cubemap_image_samplers(
 		shadowmapper_.GetDepthCubemapArrayImagesView().size(),
-		*pipeline.depth_cubemap_image_sampler);
+		*pipeline.samplers[1]);
 
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
@@ -754,7 +797,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.image_sampler,
+			&*pipeline.samplers[0],
 		},
 		{
 			g_light_buffer_binding,
@@ -789,7 +832,14 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.ambient_occlusion_image_sampler,
+			&*pipeline.samplers[2],
+		},
+		{
+			g_normals_tex_uniform_binding,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*pipeline.samplers[3],
 		},
 	};
 
@@ -838,6 +888,8 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		{0u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, pos)},
 		{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(WorldVertex, tex_coord)},
 		{2u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, normal)},
+		{3u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, binormal)},
+		{4u, 0u, vk::Format::eR8G8B8A8Snorm, offsetof(WorldVertex, tangent)},
 	};
 
 	const vk::PipelineVertexInputStateCreateInfo vk_pipiline_vertex_input_state_create_info(
@@ -951,8 +1003,6 @@ void WorldRenderer::DrawWorldModelMainPass(
 	const VisibleSectors& visible_setors,
 	const m_Mat4& view_matrix)
 {
-	const Material& test_material= materials_.find(test_material_id_)->second;
-
 	command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *lighting_pass_pipeline_.pipeline);
 
 	Uniforms uniforms;
@@ -973,12 +1023,11 @@ void WorldRenderer::DrawWorldModelMainPass(
 	{
 		const Material& material= materials_.find(triangle_group.material_id)->second;
 
-		const vk::DescriptorSet desctipor_set= material.descriptor_set ? *material.descriptor_set : *test_material.descriptor_set;
 		command_buffer.bindDescriptorSets(
 			vk::PipelineBindPoint::eGraphics,
 			*lighting_pass_pipeline_.pipeline_layout,
 			0u,
-			1u, &desctipor_set,
+			1u, &*material.descriptor_set,
 			0u, nullptr);
 
 		command_buffer.drawIndexed(triangle_group.index_count, 1u, triangle_group.first_index, triangle_group.first_vertex, 0u);
@@ -1084,11 +1133,21 @@ WorldRenderer::WorldModel WorldRenderer::LoadWorld(const WorldData::World& world
 					out_v.pos[2]= pos_transformed.z;
 
 					const m_Vec3 normal(float(in_v.normal[0]), float(in_v.normal[1]), float(in_v.normal[2]));
+					const m_Vec3 binormal(float(in_v.binormal[0]), float(in_v.binormal[1]), float(in_v.binormal[2]));
+					const m_Vec3 tangent(float(in_v.tangent[0]), float(in_v.tangent[1]), float(in_v.tangent[2]));
 					const m_Vec3 normal_transformed= normal * rotate_mat;
+					const m_Vec3 binormal_transformed= binormal * rotate_mat;
+					const m_Vec3 tangent_transformed= tangent * rotate_mat;
 
 					out_v.normal[0]= int8_t(normal_transformed.x);
 					out_v.normal[1]= int8_t(normal_transformed.y);
 					out_v.normal[2]= int8_t(normal_transformed.z);
+					out_v.binormal[0]= int8_t(binormal_transformed.x);
+					out_v.binormal[1]= int8_t(binormal_transformed.y);
+					out_v.binormal[2]= int8_t(binormal_transformed.z);
+					out_v.tangent[0]= int8_t(tangent_transformed.x);
+					out_v.tangent[1]= int8_t(tangent_transformed.y);
+					out_v.tangent[2]= int8_t(tangent_transformed.z);
 
 					for(size_t j= 0u; j < 2u; ++j)
 						out_v.tex_coord[j]= float(in_v.tex_coord[j]) / float(SegmentModelFormat::c_tex_coord_scale);
@@ -1270,7 +1329,21 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 	Material& out_material= materials_[material_name];
 
-	if(const auto dds_image_opt= DDSImage::Load(("textures/" + material_name + ".dds")))
+	out_material.albedo_image_id= material_name + "-albedo";
+	LoadImage(out_material.albedo_image_id);
+
+	out_material.normals_image_id= material_name + "-normals";
+	LoadImage(out_material.normals_image_id);
+}
+
+void WorldRenderer::LoadImage(const std::string& image_name)
+{
+	if(materials_.count(image_name) > 0)
+		return;
+
+	ImageGPU out_image;
+
+	if(const auto dds_image_opt= DDSImage::Load(("textures/" + image_name + ".dds")))
 	{
 		const DDSImage& image= *dds_image_opt;
 		const std::vector<DDSImage::MipLevel>& mip_levels= image.GetMipLevels();
@@ -1280,7 +1353,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 		KK_ASSERT((mip_levels[0].size[0] & (mip_levels[0].size[0] - 1u)) == 0u);
 		KK_ASSERT((mip_levels[0].size[1] & (mip_levels[0].size[1] - 1u)) == 0u);
 
-		out_material.image= vk_device_.createImageUnique(
+		out_image.image= vk_device_.createImageUnique(
 			vk::ImageCreateInfo(
 				vk::ImageCreateFlags(),
 				vk::ImageType::e2D,
@@ -1295,7 +1368,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				0u, nullptr,
 				vk::ImageLayout::eUndefined));
 
-		const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_material.image);
+		const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_image.image);
 
 		vk::MemoryAllocateInfo memory_allocate_info(memory_requirements.size);
 		for(uint32_t j= 0u; j < memory_properties_.memoryTypeCount; ++j)
@@ -1305,8 +1378,8 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				memory_allocate_info.memoryTypeIndex= j;
 		}
 
-		out_material.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
-		vk_device_.bindImageMemory(*out_material.image, *out_material.image_memory, 0u);
+		out_image.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
+		vk_device_.bindImageMemory(*out_image.image, *out_image.image_memory, 0u);
 
 		for(size_t i= 0u; i < mip_levels.size(); ++i)
 		{
@@ -1325,7 +1398,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
 				queue_family_index_,
 				queue_family_index_,
-				*out_material.image,
+				*out_image.image,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, uint32_t(i), 1u, 0u, 1u));
 
 			staging_buffer.command_buffer.pipelineBarrier(
@@ -1346,7 +1419,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 			staging_buffer.command_buffer.copyBufferToImage(
 				staging_buffer.buffer,
-				*out_material.image,
+				*out_image.image,
 				vk::ImageLayout::eTransferDstOptimal,
 				1u, &copy_region);
 
@@ -1358,7 +1431,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 					vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
 					queue_family_index_,
 					queue_family_index_,
-					*out_material.image,
+					*out_image.image,
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u));
 
 				staging_buffer.command_buffer.pipelineBarrier(
@@ -1371,22 +1444,22 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 			}
 		} // for mip levels
 
-		out_material.image_view= vk_device_.createImageViewUnique(
+		out_image.image_view= vk_device_.createImageViewUnique(
 			vk::ImageViewCreateInfo(
 				vk::ImageViewCreateFlags(),
-				*out_material.image,
+				*out_image.image,
 				vk::ImageViewType::e2D,
 				image.GetFormat(),
 				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, uint32_t(mip_levels.size()), 0u, 1u)));
 	}
-	else if(const auto image_loaded_opt= Image::Load(("textures/" + material_name + ".png")))
+	else if(const auto image_loaded_opt= Image::Load(("textures/" + image_name + ".png")))
 	{
 		const Image& image= *image_loaded_opt;
 
 		const uint32_t mip_levels= uint32_t(std::log2(float(std::min(image.GetWidth(), image.GetHeight()))) - 1.0f);
 
-		out_material.image= vk_device_.createImageUnique(
+		out_image.image= vk_device_.createImageUnique(
 			vk::ImageCreateInfo(
 				vk::ImageCreateFlags(),
 				vk::ImageType::e2D,
@@ -1401,7 +1474,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				0u, nullptr,
 				vk::ImageLayout::eUndefined));
 
-		const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_material.image);
+		const vk::MemoryRequirements memory_requirements= vk_device_.getImageMemoryRequirements(*out_image.image);
 
 		vk::MemoryAllocateInfo memory_allocate_info(memory_requirements.size);
 		for(uint32_t j= 0u; j < memory_properties_.memoryTypeCount; ++j)
@@ -1411,8 +1484,8 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				memory_allocate_info.memoryTypeIndex= j;
 		}
 
-		out_material.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
-		vk_device_.bindImageMemory(*out_material.image, *out_material.image_memory, 0u);
+		out_image.image_memory= vk_device_.allocateMemoryUnique(memory_allocate_info);
+		vk_device_.bindImageMemory(*out_image.image, *out_image.image_memory, 0u);
 
 		const GPUDataUploader::RequestResult staging_buffer=
 			gpu_data_uploader_.RequestMemory(image.GetWidth() * image.GetHeight() * 4u);
@@ -1427,7 +1500,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
 			queue_family_index_,
 			queue_family_index_,
-			*out_material.image,
+			*out_image.image,
 			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u));
 
 		staging_buffer.command_buffer.pipelineBarrier(
@@ -1447,7 +1520,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 		staging_buffer.command_buffer.copyBufferToImage(
 			staging_buffer.buffer,
-			*out_material.image,
+			*out_image.image,
 			vk::ImageLayout::eTransferDstOptimal,
 			1u, &copy_region);
 
@@ -1461,7 +1534,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
 				queue_family_index_,
 				queue_family_index_,
-				*out_material.image,
+				*out_image.image,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
 
 			staging_buffer.command_buffer.pipelineBarrier(
@@ -1478,7 +1551,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
 				queue_family_index_,
 				queue_family_index_,
-				*out_material.image,
+				*out_image.image,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j, 1u, 0u, 1u));
 
 			staging_buffer.command_buffer.pipelineBarrier(
@@ -1502,9 +1575,9 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				});
 
 			staging_buffer.command_buffer.blitImage(
-				*out_material.image,
+				*out_image.image,
 				vk::ImageLayout::eTransferSrcOptimal,
-				*out_material.image,
+				*out_image.image,
 				vk::ImageLayout::eTransferDstOptimal,
 				1u, &image_blit,
 				vk::Filter::eLinear);
@@ -1515,7 +1588,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 				vk::ImageLayout::eTransferSrcOptimal, image_layout_final,
 				queue_family_index_,
 				queue_family_index_,
-				*out_material.image,
+				*out_image.image,
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j - 1u, 1u, 0u, 1u));
 
 			staging_buffer.command_buffer.pipelineBarrier(
@@ -1534,7 +1607,7 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 					vk::ImageLayout::eTransferDstOptimal, image_layout_final,
 					queue_family_index_,
 					queue_family_index_,
-					*out_material.image,
+					*out_image.image,
 					vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, j, 1u, 0u, 1u));
 
 				staging_buffer.command_buffer.pipelineBarrier(
@@ -1547,15 +1620,37 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 			}
 		} // for mips
 
-		out_material.image_view= vk_device_.createImageViewUnique(
+		out_image.image_view= vk_device_.createImageViewUnique(
 			vk::ImageViewCreateInfo(
 				vk::ImageViewCreateFlags(),
-				*out_material.image,
+				*out_image.image,
 				vk::ImageViewType::e2D,
 				vk::Format::eR8G8B8A8Unorm,
 				vk::ComponentMapping(),
 				vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0u, mip_levels, 0u, 1u)));
 	}
+	else
+		return;
+
+	images_[image_name]= std::move(out_image);
+}
+
+const WorldRenderer::ImageGPU& WorldRenderer::GetMaterialAlbedoImage(const Material& material)
+{
+	const auto it= images_.find(material.albedo_image_id);
+	if(it != images_.end())
+		return it->second;
+
+	return images_.find(stub_albedo_image_id_)->second;
+}
+
+const WorldRenderer::ImageGPU& WorldRenderer::GetMaterialNormalsImage(const Material& material)
+{
+	const auto it= images_.find(material.normals_image_id);
+	if(it != images_.end())
+		return it->second;
+
+	return images_.find(stub_normal_map_image_id_)->second;
 }
 
 void WorldRenderer::ComandTestLightAdd(const CommandsArguments& args)
