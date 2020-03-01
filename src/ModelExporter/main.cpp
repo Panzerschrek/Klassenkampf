@@ -41,9 +41,13 @@ struct VertexCombined
 {
 	float pos[3]{0.0f, 0.0f, 0.0f};
 	float normal[3]{0.0f, 0.0f, 0.0f};
+	float tex_coord[2]{0.0f, 0.0f};
+};
+
+struct VertexWithTangentSpace : public VertexCombined
+{
 	float binormal[3]{0.0f, 0.0f, 0.0f};
 	float tangent[3]{0.0f, 0.0f, 0.0f};
-	float tex_coord[2]{0.0f, 0.0f};
 };
 
 bool operator==(const VertexCombined& v0, const VertexCombined& v1)
@@ -55,12 +59,6 @@ bool operator==(const VertexCombined& v0, const VertexCombined& v1)
 		v0.normal[0] == v1.normal[0] &&
 		v0.normal[1] == v1.normal[1] &&
 		v0.normal[2] == v1.normal[2] &&
-		v0.binormal[0] == v1.binormal[0] &&
-		v0.binormal[1] == v1.binormal[1] &&
-		v0.binormal[2] == v1.binormal[2] &&
-		v0.tangent [0] == v1.tangent [0] &&
-		v0.tangent [1] == v1.tangent [1] &&
-		v0.tangent [2] == v1.tangent [2] &&
 		v0.tex_coord[0] == v1.tex_coord[0] &&
 		v0.tex_coord[1] == v1.tex_coord[1];
 }
@@ -78,12 +76,6 @@ struct VertexCombinedHasher
 			hf(v.normal[0]) ^
 			hf(v.normal[1]) ^
 			hf(v.normal[2]) ^
-			hf(v.binormal[0]) ^
-			hf(v.binormal[1]) ^
-			hf(v.binormal[2]) ^
-			hf(v.tangent [0]) ^
-			hf(v.tangent [1]) ^
-			hf(v.tangent [2]) ^
 			hf(v.tex_coord[0]) ^
 			hf(v.tex_coord[1]);
 	}
@@ -100,7 +92,7 @@ using Geometries= std::unordered_map<std::string, TriangleGroups>;
 
 struct TriangleGroupIndexed
 {
-	std::vector<VertexCombined> vertices;
+	std::vector<VertexWithTangentSpace> vertices;
 	std::vector<uint16_t> indices;
 	std::string material;
 };
@@ -160,57 +152,6 @@ CoordSource ReadCoordSource(const tinyxml2::XMLElement& source_element)
 	}
 
 	return result;
-}
-
-void CalculateBinormalTangent(TriangleGroup& triangle_group)
-{
-	for(size_t i= 0u; i < triangle_group.vertices.size(); i+= 3u)
-	{
-		VertexCombined& v0= triangle_group.vertices[i + 0u];
-		VertexCombined& v1= triangle_group.vertices[i + 1u];
-		VertexCombined& v2= triangle_group.vertices[i + 2u];
-
-		const m_Vec3 dv0(v1.pos[0] - v0.pos[0], v1.pos[1] - v0.pos[1], v1.pos[2] - v0.pos[2]);
-		const m_Vec3 dv1(v2.pos[0] - v0.pos[0], v2.pos[1] - v0.pos[1], v2.pos[2] - v0.pos[2]);
-		const m_Vec3 dv2= mVec3Cross(dv0, dv1);
-
-		const m_Vec2 dtc0(v1.tex_coord[0] - v0.tex_coord[0], v1.tex_coord[1] - v0.tex_coord[1]);
-		const m_Vec2 dtc1(v2.tex_coord[0] - v0.tex_coord[0], v2.tex_coord[1] - v0.tex_coord[1]);
-
-		m_Mat3 delta_vec_mat;
-		delta_vec_mat.value[0]= dv0.x;
-		delta_vec_mat.value[1]= dv0.y;
-		delta_vec_mat.value[2]= dv0.z;
-		delta_vec_mat.value[3]= dv1.x;
-		delta_vec_mat.value[4]= dv1.y;
-		delta_vec_mat.value[5]= dv1.z;
-		delta_vec_mat.value[6]= dv2.x;
-		delta_vec_mat.value[7]= dv2.y;
-		delta_vec_mat.value[8]= dv2.z;
-
-		const m_Mat3 delta_vec_mat_iverse= delta_vec_mat.GetInverseMatrix();
-
-		m_Vec3 b(
-			delta_vec_mat_iverse.value[0] * dtc0.x + delta_vec_mat_iverse.value[1] * dtc1.x,
-			delta_vec_mat_iverse.value[3] * dtc0.x + delta_vec_mat_iverse.value[4] * dtc1.x,
-			delta_vec_mat_iverse.value[6] * dtc0.x + delta_vec_mat_iverse.value[7] * dtc1.x);
-		m_Vec3 t(
-			delta_vec_mat_iverse.value[0] * dtc0.y + delta_vec_mat_iverse.value[1] * dtc1.y,
-			delta_vec_mat_iverse.value[3] * dtc0.y + delta_vec_mat_iverse.value[4] * dtc1.y,
-			delta_vec_mat_iverse.value[6] * dtc0.y + delta_vec_mat_iverse.value[7] * dtc1.y);
-
-		// Normalize it.
-		const float max_l= std::max(b.GetLength(), t.GetLength());
-		b/= max_l;
-		t/= max_l;
-
-		v0.binormal[0]= v1.binormal[0]= v2.binormal[0]= b.x;
-		v0.binormal[1]= v1.binormal[1]= v2.binormal[1]= b.y;
-		v0.binormal[2]= v1.binormal[2]= v2.binormal[2]= b.z;
-		v0.tangent [0]= v1.tangent [0]= v2.tangent [0]= t.x;
-		v0.tangent [1]= v1.tangent [1]= v2.tangent [1]= t.y;
-		v0.tangent [2]= v1.tangent [2]= v2.tangent [2]= t.z;
-	}
 }
 
 TriangleGroup ReadTriangleGroup(
@@ -398,30 +339,116 @@ TriangleGroup ReadTriangleGroup(
 	if(material != nullptr)
 		result.material= material;
 
-	CalculateBinormalTangent(result);
 	return result;
 }
 
 TriangleGroupIndexed MakeTriangleGroupIndexed(const TriangleGroup& triangle_group)
 {
+	struct VertexTangentGroup
+	{
+		size_t out_index;
+		std::vector< std::pair<m_Vec3, m_Vec3> > binormals_tangents;
+	};
+
+	std::unordered_map<VertexCombined, std::vector<VertexTangentGroup>, VertexCombinedHasher> vertex_to_index;
+
 	TriangleGroupIndexed result;
 	result.material= triangle_group.material;
-
-	std::unordered_map<VertexCombined, uint16_t, VertexCombinedHasher> vertex_to_index;
-
-	for(const VertexCombined& v : triangle_group.vertices)
+	for(size_t i= 0u; i < triangle_group.vertices.size(); i+= 3u)
 	{
-		uint16_t index= 65535u;
-		const auto it= vertex_to_index.find(v);
-		if(it == vertex_to_index.end())
+		const VertexCombined& v0= triangle_group.vertices[i + 0u];
+		const VertexCombined& v1= triangle_group.vertices[i + 1u];
+		const VertexCombined& v2= triangle_group.vertices[i + 2u];
+
+		const m_Vec3 dv0(v1.pos[0] - v0.pos[0], v1.pos[1] - v0.pos[1], v1.pos[2] - v0.pos[2]);
+		const m_Vec3 dv1(v2.pos[0] - v0.pos[0], v2.pos[1] - v0.pos[1], v2.pos[2] - v0.pos[2]);
+		const m_Vec3 dv2= mVec3Cross(dv0, dv1);
+
+		const m_Vec2 dtc0(v1.tex_coord[0] - v0.tex_coord[0], v1.tex_coord[1] - v0.tex_coord[1]);
+		const m_Vec2 dtc1(v2.tex_coord[0] - v0.tex_coord[0], v2.tex_coord[1] - v0.tex_coord[1]);
+
+		m_Mat3 delta_vec_mat;
+		delta_vec_mat.value[0]= dv0.x;
+		delta_vec_mat.value[1]= dv0.y;
+		delta_vec_mat.value[2]= dv0.z;
+		delta_vec_mat.value[3]= dv1.x;
+		delta_vec_mat.value[4]= dv1.y;
+		delta_vec_mat.value[5]= dv1.z;
+		delta_vec_mat.value[6]= dv2.x;
+		delta_vec_mat.value[7]= dv2.y;
+		delta_vec_mat.value[8]= dv2.z;
+
+		const m_Mat3 delta_vec_mat_iverse= delta_vec_mat.GetInverseMatrix();
+
+		m_Vec3 b(
+			delta_vec_mat_iverse.value[0] * dtc0.x + delta_vec_mat_iverse.value[1] * dtc1.x,
+			delta_vec_mat_iverse.value[3] * dtc0.x + delta_vec_mat_iverse.value[4] * dtc1.x,
+			delta_vec_mat_iverse.value[6] * dtc0.x + delta_vec_mat_iverse.value[7] * dtc1.x);
+		m_Vec3 t(
+			delta_vec_mat_iverse.value[0] * dtc0.y + delta_vec_mat_iverse.value[1] * dtc1.y,
+			delta_vec_mat_iverse.value[3] * dtc0.y + delta_vec_mat_iverse.value[4] * dtc1.y,
+			delta_vec_mat_iverse.value[6] * dtc0.y + delta_vec_mat_iverse.value[7] * dtc1.y);
+
+		// Normalize it.
+		const float max_l= std::max(b.GetLength(), t.GetLength());
+		b/= max_l;
+		t/= max_l;
+
+		for(size_t j= 0u; j < 3u; ++j)
 		{
-			index= uint16_t(result.vertices.size());
-			result.vertices.push_back(v);
-			vertex_to_index.emplace(v, index);
+			std::vector<VertexTangentGroup>& vertex_tangent_groups= vertex_to_index[triangle_group.vertices[i + j]];
+			VertexTangentGroup* dst_group= nullptr;
+
+			for(VertexTangentGroup& group : vertex_tangent_groups)
+			{
+				bool all_ok= true;
+				for(const std::pair<m_Vec3, m_Vec3>& bt : group.binormals_tangents)
+					all_ok= all_ok && mVec3Dot(bt.first, b) > 0.0f && mVec3Dot(bt.second, t) > 0.0f;
+				if(all_ok)
+				{
+					dst_group= &group;
+					break;
+				}
+			}
+
+			if(dst_group == nullptr)
+			{
+				vertex_tangent_groups.emplace_back();
+				dst_group= &vertex_tangent_groups.back();
+				dst_group->out_index= result.vertices.size();
+
+				VertexWithTangentSpace out_v;
+				static_cast<VertexCombined&>(out_v)= triangle_group.vertices[i + j];
+				result.vertices.push_back(out_v);
+			}
+
+			dst_group->binormals_tangents.push_back(std::make_pair(b, t));
+			result.indices.push_back(uint16_t(dst_group->out_index));
+
+		} // for thriangle vertices
+	} // for triangles
+
+	for(const auto& groups_pair : vertex_to_index)
+	for(const VertexTangentGroup& group : groups_pair.second)
+	{
+		m_Vec3 b(0.0f, 0.0f, 0.0f);
+		m_Vec3 t(0.0f, 0.0f, 0.0f);
+		for(const std::pair<m_Vec3, m_Vec3>& bt : group.binormals_tangents)
+		{
+			b+= bt.first;
+			t+= bt.second;
 		}
-		else
-			index= it->second;
-		result.indices.push_back(index);
+
+		const float max_l= std::max(b.GetLength(), t.GetLength());
+		b/= max_l;
+		t/= max_l;
+
+		result.vertices[group.out_index].binormal[0]= b.x;
+		result.vertices[group.out_index].binormal[1]= b.y;
+		result.vertices[group.out_index].binormal[2]= b.z;
+		result.vertices[group.out_index].tangent [0]= t.x;
+		result.vertices[group.out_index].tangent [1]= t.y;
+		result.vertices[group.out_index].tangent [2]= t.z;
 	}
 
 	return result;
@@ -546,7 +573,7 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 	get_data_file().vertices_offset= uint32_t(file_data.size());
 	for(const TriangleGroupIndexed& triangle_group : triangle_groups)
 	{
-		for(const VertexCombined& vertex : triangle_group.vertices)
+		for(const VertexWithTangentSpace& vertex : triangle_group.vertices)
 		{
 			file_data.resize(file_data.size() + sizeof(SegmentModelFormat::Vertex));
 			SegmentModelFormat::Vertex& out_vertex= *reinterpret_cast<SegmentModelFormat::Vertex*>(file_data.data() + file_data.size() - sizeof(SegmentModelFormat::Vertex));
@@ -947,27 +974,13 @@ int Main(const int argc, const char* const argv[])
 					v.pos[2]= pos_transformed.z;
 
 					const m_Vec3 normal(v.normal[0], v.normal[1], v.normal[2]);
-					const m_Vec3 binormal(v.binormal[0], v.binormal[1], v.binormal[2]);
-					const m_Vec3 tangent(v.tangent[0], v.tangent[1], v.tangent[2]);
 
 					m_Vec3 normal_transformed= normals_matrix * normal;
 					normal_transformed/= normal_transformed.GetLength();
 
-					m_Vec3 binormal_transformed= normals_matrix * binormal;
-
-					m_Vec3 tangent_transformed= normals_matrix * tangent;
-
 					v.normal[0]= normal_transformed.x;
 					v.normal[1]= normal_transformed.y;
 					v.normal[2]= normal_transformed.z;
-
-					v.binormal[0]= binormal_transformed.x;
-					v.binormal[1]= binormal_transformed.y;
-					v.binormal[2]= binormal_transformed.z;
-
-					v.tangent[0]= tangent_transformed.x;
-					v.tangent[1]= tangent_transformed.y;
-					v.tangent[2]= tangent_transformed.z;
 				}
 				triangle_groups.push_back(MakeTriangleGroupIndexed(group_copy));
 			}
