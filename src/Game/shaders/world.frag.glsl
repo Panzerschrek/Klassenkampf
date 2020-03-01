@@ -46,7 +46,9 @@ layout(location = 0) out vec4 out_color;
 
 void main()
 {
-	vec3 map_normal= texture(normals_map, f_tex_coord).xyz * 2.0 - vec3(1.0, 1.0, 1.0);
+	// Reconstruct z, because normal map may not contain it or may be invalud.
+	vec2 map_normal_xy= texture(normals_map, f_tex_coord).xy * 2.0 - vec2(1.0, 1.0);
+	vec3 map_normal= vec3(map_normal_xy, sqrt(max(0.0, 1.0 - dot(map_normal_xy, map_normal_xy))));
 	vec3 normal_normalized= normalize(f_texture_space_mat * map_normal);
 
 	vec2 frag_coord_normalized= gl_FragCoord.xy / viewport_size;
