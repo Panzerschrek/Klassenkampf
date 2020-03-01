@@ -700,8 +700,9 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 	pipeline.shader_vert= CreateShader(vk_device_, ShaderNames::world_vert);
 	pipeline.shader_frag= CreateShader(vk_device_, ShaderNames::world_frag);
 
-	// Create image sampler
-	pipeline.image_sampler=
+	// Create image samplers
+	// Albedo sampler.
+	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -719,9 +720,10 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				100.0f,
 				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
+				VK_FALSE)));
 
-	pipeline.depth_cubemap_image_sampler=
+	// Depth cubemap sampler.
+	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -739,9 +741,10 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				0.0f,
 				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
+				VK_FALSE)));
 
-	pipeline.ambient_occlusion_image_sampler=
+	// SSAO sampler.
+	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
@@ -759,11 +762,32 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				0.0f,
 				vk::BorderColor::eFloatTransparentBlack,
-				VK_FALSE));
+				VK_FALSE)));
+
+	// Normals sampler.
+	pipeline.samplers.push_back(
+		vk_device_.createSamplerUnique(
+			vk::SamplerCreateInfo(
+				vk::SamplerCreateFlags(),
+				vk::Filter::eLinear,
+				vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eLinear,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				0.5f, // Increase mip bias for normals
+				VK_TRUE, // anisotropy
+				4.0f, // anisotropy level
+				VK_FALSE,
+				vk::CompareOp::eNever,
+				0.0f,
+				100.0f,
+				vk::BorderColor::eFloatTransparentBlack,
+				VK_FALSE)));
 
 	const std::vector<vk::Sampler> depth_cubemap_image_samplers(
 		shadowmapper_.GetDepthCubemapArrayImagesView().size(),
-		*pipeline.depth_cubemap_image_sampler);
+		*pipeline.samplers[1]);
 
 	// Create pipeline layout
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
@@ -773,7 +797,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.image_sampler,
+			&*pipeline.samplers[0],
 		},
 		{
 			g_light_buffer_binding,
@@ -808,14 +832,14 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.ambient_occlusion_image_sampler,
+			&*pipeline.samplers[2],
 		},
 		{
 			g_normals_tex_uniform_binding,
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
-			&*pipeline.image_sampler,
+			&*pipeline.samplers[3],
 		},
 	};
 
