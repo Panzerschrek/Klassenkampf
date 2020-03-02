@@ -489,7 +489,7 @@ AmbientOcclusionCalculator::Pipeline AmbientOcclusionCalculator::CreateSSAOPipel
 			g_tex_uniform_binding,
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
-			vk::ShaderStageFlagBits::eFragment,
+			vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
 			&*pipeline.samplers[0],
 		},
 		{
