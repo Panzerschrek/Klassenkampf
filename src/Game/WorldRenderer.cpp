@@ -222,7 +222,7 @@ WorldRenderer::WorldRenderer(
 	{
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size() * (2u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
+			uint32_t(materials_.size() * (3u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
 		},
 		{
 			vk::DescriptorType::eStorageBuffer,
