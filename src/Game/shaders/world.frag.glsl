@@ -10,9 +10,7 @@ struct Light
 	ivec2 shadowmap_index; // .x - number of cubemap array, .y - layer number
 };
 
-layout(binding= 0) uniform sampler2D tex;
-
-layout(binding= 1, std430) buffer readonly light_buffer_block
+layout(binding= 0, std430) buffer readonly light_buffer_block
 {
 	// Use vec4 for fit alignment.
 	vec4 ambient_color;
@@ -22,21 +20,22 @@ layout(binding= 1, std430) buffer readonly light_buffer_block
 	Light lights[];
 };
 
-layout(binding= 2, std430) buffer readonly cluster_offset_buffer_block
+layout(binding= 1, std430) buffer readonly cluster_offset_buffer_block
 {
 	int light_offsets[];
 };
 
-layout(binding= 3, std430) buffer readonly lights_list_buffer_block
+layout(binding= 2, std430) buffer readonly lights_list_buffer_block
 {
 	uint8_t light_list[];
 };
 
-layout(binding= 4) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
+layout(binding= 4) uniform sampler2D ambient_occlusion_image;
 
-layout(binding= 5) uniform sampler2D ambient_occlusion_image;
+layout(binding= 5) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
-layout(binding= 6) uniform sampler2D normals_map;
+layout(binding= 8) uniform sampler2D albedo_tex;
+layout(binding= 9) uniform sampler2D normals_tex;
 
 layout(location= 0) in mat3 f_texture_space_mat;
 layout(location= 3) in vec2 f_tex_coord;
@@ -46,8 +45,12 @@ layout(location = 0) out vec4 out_color;
 
 void main()
 {
+	// Do mipmapped images fetches before any branching, because branching may break mip calculation.
+
+	vec4 albedo_alpha= texture(albedo_tex, f_tex_coord);
+
 	// Reconstruct z, because normal map may not contain it or may be invalud.
-	vec2 map_normal_xy= texture(normals_map, f_tex_coord).xy * 2.0 - vec2(1.0, 1.0);
+	vec2 map_normal_xy= texture(normals_tex, f_tex_coord).xy * 2.0 - vec2(1.0, 1.0);
 	vec3 map_normal= vec3(map_normal_xy, sqrt(max(0.0, 1.0 - dot(map_normal_xy, map_normal_xy))));
 	vec3 normal_normalized= normalize(f_texture_space_mat * map_normal);
 
@@ -90,7 +93,5 @@ void main()
 	}
 	//l+= vec3(0.05, 0.0, 0.0) * float(current_light_count);
 
-	const vec4 tex_value= texture(tex, f_tex_coord);
-
-	out_color= vec4(l * tex_value.xyz, tex_value.a);
+	out_color= vec4(l * albedo_alpha.rgb, albedo_alpha.a);
 }

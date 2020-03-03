@@ -53,13 +53,17 @@ struct WorldVertex
 	int8_t reserved[3];
 };
 
-const uint32_t g_tex_uniform_binding= 0u;
-const uint32_t g_light_buffer_binding= 1u;
-const uint32_t g_cluster_offset_buffer_binding= 2u;
-const uint32_t g_lights_list_buffer_binding= 3u;
-const uint32_t g_depth_cubemaps_array_binding= 4u;
-const uint32_t g_ambient_occlusion_buffer_binding= 5u;
-const uint32_t g_normals_tex_uniform_binding= 6u;
+// Bindings must match shader bindings.
+namespace WorldShaderBindings
+{
+	const uint32_t light_buffer= 0u;
+	const uint32_t cluster_offset_buffer= 1u;
+	const uint32_t lights_list_buffer= 2u;
+	const uint32_t ssao_image= 4u;
+	const uint32_t depth_cubemaps_array= 5u;
+	const uint32_t albedo_tex= 8u;
+	const uint32_t normals_tex= 9u;
+}
 
 } // namespace
 
@@ -250,11 +254,6 @@ WorldRenderer::WorldRenderer(
 					1u, &*lighting_pass_pipeline_.descriptor_set_layout)).front());
 
 		// Write descriptor set.
-		const vk::DescriptorImageInfo descriptor_image_info(
-			vk::Sampler(),
-			*GetMaterialAlbedoImage(material).image_view,
-			vk::ImageLayout::eShaderReadOnlyOptimal);
-
 		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
 			*vk_light_data_buffer_,
 			0u,
@@ -270,20 +269,23 @@ WorldRenderer::WorldRenderer(
 			0u,
 			sizeof(uint8_t) * lights_list_buffer_size_);
 
-		std::vector<vk::DescriptorImageInfo> descriptor_depth_cubemaps_array_image_infos;
-		for(const vk::ImageView& image_view : shadowmapper_.GetDepthCubemapArrayImagesView())
-			descriptor_depth_cubemaps_array_image_infos.push_back(
-				vk::DescriptorImageInfo(
-					vk::Sampler(),
-					image_view,
-					vk::ImageLayout::eShaderReadOnlyOptimal));
-
-		const vk::DescriptorImageInfo descriptor_ambient_occlusion_image_info(
+		const vk::DescriptorImageInfo descriptor_ssao_image_info(
 			vk::Sampler(),
 			ambient_occlusion_culculator_.GetAmbientOcclusionImageView(),
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::DescriptorImageInfo descriptor_normals_image_info(
+		std::vector<vk::DescriptorImageInfo> descriptor_depth_cubemaps_array_image_infos;
+		for(const vk::ImageView& image_view : shadowmapper_.GetDepthCubemapArrayImagesView())
+			descriptor_depth_cubemaps_array_image_infos.emplace_back(
+				vk::Sampler(),
+				image_view,
+				vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		const vk::DescriptorImageInfo descriptor_albedo_tex_info(
+			vk::Sampler(),
+			*GetMaterialAlbedoImage(material).image_view,
+			vk::ImageLayout::eShaderReadOnlyOptimal);
+		const vk::DescriptorImageInfo descriptor_normals_tex_info(
 			vk::Sampler(),
 			*GetMaterialNormalsImage(material).image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -292,17 +294,7 @@ WorldRenderer::WorldRenderer(
 		{
 			{
 				*material.descriptor_set,
-				g_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_image_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				g_light_buffer_binding,
+				WorldShaderBindings::light_buffer,
 				0u,
 				1u,
 				vk::DescriptorType::eStorageBuffer,
@@ -312,7 +304,7 @@ WorldRenderer::WorldRenderer(
 			},
 			{
 				*material.descriptor_set,
-				g_cluster_offset_buffer_binding,
+				WorldShaderBindings::cluster_offset_buffer,
 				0u,
 				1u,
 				vk::DescriptorType::eStorageBuffer,
@@ -322,7 +314,7 @@ WorldRenderer::WorldRenderer(
 			},
 			{
 				*material.descriptor_set,
-				g_lights_list_buffer_binding,
+				WorldShaderBindings::lights_list_buffer,
 				0u,
 				1u,
 				vk::DescriptorType::eStorageBuffer,
@@ -332,7 +324,17 @@ WorldRenderer::WorldRenderer(
 			},
 			{
 				*material.descriptor_set,
-				g_depth_cubemaps_array_binding,
+				WorldShaderBindings::ssao_image,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_ssao_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				WorldShaderBindings::depth_cubemaps_array,
 				0u,
 				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
 				vk::DescriptorType::eCombinedImageSampler,
@@ -342,21 +344,21 @@ WorldRenderer::WorldRenderer(
 			},
 			{
 				*material.descriptor_set,
-				g_ambient_occlusion_buffer_binding,
+				WorldShaderBindings::albedo_tex,
 				0u,
 				1u,
 				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_ambient_occlusion_image_info,
+				&descriptor_albedo_tex_info,
 				nullptr,
 				nullptr
 			},
 			{
 				*material.descriptor_set,
-				g_normals_tex_uniform_binding,
+				WorldShaderBindings::normals_tex,
 				0u,
 				1u,
 				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_normals_image_info,
+				&descriptor_normals_tex_info,
 				nullptr,
 				nullptr
 			},
@@ -701,24 +703,25 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 	pipeline.shader_frag= CreateShader(vk_device_, ShaderNames::world_frag);
 
 	// Create image samplers
-	// Albedo sampler.
+
+	// SSAO sampler.
 	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
 				vk::Filter::eLinear,
 				vk::Filter::eLinear,
-				vk::SamplerMipmapMode::eLinear,
-				vk::SamplerAddressMode::eRepeat,
-				vk::SamplerAddressMode::eRepeat,
-				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
 				0.0f,
-				VK_TRUE, // anisotropy
-				4.0f, // anisotropy level
+				VK_FALSE,
+				0.0f,
 				VK_FALSE,
 				vk::CompareOp::eNever,
 				0.0f,
-				100.0f,
+				0.0f,
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE)));
 
@@ -743,24 +746,25 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE)));
 
-	// SSAO sampler.
+
+	// Albedo sampler.
 	pipeline.samplers.push_back(
 		vk_device_.createSamplerUnique(
 			vk::SamplerCreateInfo(
 				vk::SamplerCreateFlags(),
 				vk::Filter::eLinear,
 				vk::Filter::eLinear,
-				vk::SamplerMipmapMode::eNearest,
-				vk::SamplerAddressMode::eClampToEdge,
-				vk::SamplerAddressMode::eClampToEdge,
-				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerMipmapMode::eLinear,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
+				vk::SamplerAddressMode::eRepeat,
 				0.0f,
-				VK_FALSE,
-				0.0f,
+				VK_TRUE, // anisotropy
+				4.0f, // anisotropy level
 				VK_FALSE,
 				vk::CompareOp::eNever,
 				0.0f,
-				0.0f,
+				100.0f,
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE)));
 
@@ -793,49 +797,49 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
 	{
 		{
-			g_tex_uniform_binding,
+			WorldShaderBindings::light_buffer,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			WorldShaderBindings::cluster_offset_buffer,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			WorldShaderBindings::lights_list_buffer,
+			vk::DescriptorType::eStorageBuffer,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			nullptr,
+		},
+		{
+			WorldShaderBindings::ssao_image,
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
 			&*pipeline.samplers[0],
 		},
 		{
-			g_light_buffer_binding,
-			vk::DescriptorType::eStorageBuffer,
-			1u,
-			vk::ShaderStageFlagBits::eFragment,
-			nullptr,
-		},
-		{
-			g_cluster_offset_buffer_binding,
-			vk::DescriptorType::eStorageBuffer,
-			1u,
-			vk::ShaderStageFlagBits::eFragment,
-			nullptr,
-		},
-		{
-			g_lights_list_buffer_binding,
-			vk::DescriptorType::eStorageBuffer,
-			1u,
-			vk::ShaderStageFlagBits::eFragment,
-			nullptr,
-		},
-		{
-			g_depth_cubemaps_array_binding,
+			WorldShaderBindings::depth_cubemaps_array,
 			vk::DescriptorType::eCombinedImageSampler,
 			uint32_t(depth_cubemap_image_samplers.size()),
 			vk::ShaderStageFlagBits::eFragment,
 			depth_cubemap_image_samplers.data(),
 		},
 		{
-			g_ambient_occlusion_buffer_binding,
+			WorldShaderBindings::albedo_tex,
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
 			&*pipeline.samplers[2],
 		},
 		{
-			g_normals_tex_uniform_binding,
+			WorldShaderBindings::normals_tex,
 			vk::DescriptorType::eCombinedImageSampler,
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
