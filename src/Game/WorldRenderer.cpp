@@ -63,6 +63,7 @@ namespace WorldShaderBindings
 	const uint32_t depth_cubemaps_array= 5u;
 	const uint32_t albedo_tex= 8u;
 	const uint32_t normals_tex= 9u;
+	const uint32_t occlusion_tex= 10u;
 }
 
 } // namespace
@@ -197,6 +198,8 @@ WorldRenderer::WorldRenderer(
 	LoadImage(stub_albedo_image_id_);
 	stub_normal_map_image_id_= "normals_stub";
 	LoadImage(stub_normal_map_image_id_);
+	stub_occlusion_image_id_= "occlusion_stub";
+	LoadImage(stub_occlusion_image_id_);
 
 	world_model_= LoadWorld(world, segment_models);
 
@@ -234,7 +237,7 @@ WorldRenderer::WorldRenderer(
 		},
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size() * 2u) // Per material - albedo + normals
+			uint32_t(materials_.size() * 3u) // Per material - albedo + normals + occlusion
 		},
 	};
 
@@ -360,6 +363,10 @@ WorldRenderer::WorldRenderer(
 			vk::Sampler(),
 			*GetMaterialNormalsImage(material).image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
+		const vk::DescriptorImageInfo descriptor_occlusion_tex_info(
+			vk::Sampler(),
+			*GetMaterialOcclusionImage(material).image_view,
+			vk::ImageLayout::eShaderReadOnlyOptimal);
 
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
@@ -380,6 +387,16 @@ WorldRenderer::WorldRenderer(
 				1u,
 				vk::DescriptorType::eCombinedImageSampler,
 				&descriptor_normals_tex_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*material.descriptor_set,
+				WorldShaderBindings::occlusion_tex,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_occlusion_tex_info,
 				nullptr,
 				nullptr
 			},
@@ -869,6 +886,13 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			1u,
 			vk::ShaderStageFlagBits::eFragment,
 			&*pipeline.samplers[3],
+		},
+		{
+			WorldShaderBindings::occlusion_tex,
+			vk::DescriptorType::eCombinedImageSampler,
+			1u,
+			vk::ShaderStageFlagBits::eFragment,
+			&*pipeline.samplers[2],
 		},
 	};
 
@@ -1378,6 +1402,9 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 	out_material.normals_image_id= material_name + "-normals";
 	LoadImage(out_material.normals_image_id);
+
+	out_material.occlusion_image_id= material_name + "-occlusion";
+	LoadImage(out_material.occlusion_image_id);
 }
 
 void WorldRenderer::LoadImage(const std::string& image_name)
@@ -1695,6 +1722,15 @@ const WorldRenderer::ImageGPU& WorldRenderer::GetMaterialNormalsImage(const Mate
 		return it->second;
 
 	return images_.find(stub_normal_map_image_id_)->second;
+}
+
+const WorldRenderer::ImageGPU& WorldRenderer::GetMaterialOcclusionImage(const Material& material)
+{
+	const auto it= images_.find(material.occlusion_image_id);
+	if(it != images_.end())
+		return it->second;
+
+	return images_.find(stub_occlusion_image_id_)->second;
 }
 
 void WorldRenderer::ComandTestLightAdd(const CommandsArguments& args)

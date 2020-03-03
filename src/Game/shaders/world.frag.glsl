@@ -34,8 +34,9 @@ layout(set= 0, binding= 4) uniform sampler2D ambient_occlusion_image;
 
 layout(set= 0, binding= 5) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
-layout(set= 1, binding= 8) uniform sampler2D albedo_tex;
-layout(set= 1, binding= 9) uniform sampler2D normals_tex;
+layout(set= 1, binding=  8) uniform sampler2D albedo_tex;
+layout(set= 1, binding=  9) uniform sampler2D normals_tex;
+layout(set= 1, binding= 10) uniform sampler2D occlusion_tex;
 
 layout(location= 0) in mat3 f_texture_space_mat;
 layout(location= 3) in vec2 f_tex_coord;
@@ -48,6 +49,7 @@ void main()
 	// Do mipmapped images fetches before any branching, because branching may break mip calculation.
 
 	vec4 albedo_alpha= texture(albedo_tex, f_tex_coord);
+	float occlusion= texture(occlusion_tex, f_tex_coord).r;
 
 	// Reconstruct z, because normal map may not contain it or may be invalud.
 	vec2 map_normal_xy= texture(normals_tex, f_tex_coord).xy * 2.0 - vec2(1.0, 1.0);
@@ -65,7 +67,7 @@ void main()
 		int(cluster_coord.y) * cluster_volume_size.x +
 		int(cluster_coord.z) * (cluster_volume_size.x * cluster_volume_size.y) ]);
 
-	vec3 l= ambient_color.rgb * (0.5 + 0.5 * texture(ambient_occlusion_image, frag_coord_normalized).r);
+	vec3 l= ambient_color.rgb * (0.5 + 0.5 * occlusion * texture(ambient_occlusion_image, frag_coord_normalized).r);
 	int current_light_count= light_list[offset];
 	for(int i= 0; i < current_light_count; ++i)
 	{

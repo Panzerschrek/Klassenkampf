@@ -47,6 +47,7 @@ private:
 	{
 		std::string albedo_image_id;
 		std::string normals_image_id;
+		std::string occlusion_image_id;
 
 		vk::UniqueDescriptorSet descriptor_set;
 	};
@@ -141,6 +142,7 @@ private:
 
 	const ImageGPU& GetMaterialAlbedoImage(const Material& material);
 	const ImageGPU& GetMaterialNormalsImage(const Material& material);
+	const ImageGPU& GetMaterialOcclusionImage(const Material& material);
 
 	void ComandTestLightAdd(const CommandsArguments& args);
 	void CommandTestLightRemove();
@@ -190,6 +192,7 @@ private:
 	std::unordered_map<std::string, Material> materials_;
 	std::string stub_albedo_image_id_;
 	std::string stub_normal_map_image_id_;
+	std::string stub_occlusion_image_id_;
 
 	std::optional<Sector::Light> test_light_;
 };

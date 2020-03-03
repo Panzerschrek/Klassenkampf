@@ -99,7 +99,8 @@ std::optional<DDSImage> DDSImage::Load(const std::string_view file_name)
 			format= vk::Format::eBc3UnormBlock;
 			bits_per_pixel= 8u;
 		}
-		if(std::memcmp(&header.pixel_format.fourCC, "BC4U", sizeof(uint32_t)) == 0u)
+		if(std::memcmp(&header.pixel_format.fourCC, "BC4U", sizeof(uint32_t)) == 0u ||
+			std::memcmp(&header.pixel_format.fourCC, "ATI1", sizeof(uint32_t)) == 0u)
 		{
 			format= vk::Format::eBc4UnormBlock;
 			bits_per_pixel= 4u;
