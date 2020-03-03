@@ -226,34 +226,34 @@ WorldRenderer::WorldRenderer(
 	{
 		{
 			vk::DescriptorType::eCombinedImageSampler,
-			uint32_t(materials_.size() * (3u + shadowmapper_.GetDepthCubemapArrayImagesView().size()))
+			uint32_t(1u + shadowmapper_.GetDepthCubemapArrayImagesView().size()) // ssao image + depth cubemaps
 		},
 		{
 			vk::DescriptorType::eStorageBuffer,
-			uint32_t(materials_.size()) * 3u
-		}
+			3u // global storage buffers
+		},
+		{
+			vk::DescriptorType::eCombinedImageSampler,
+			uint32_t(materials_.size() * 2u) // Per material - albedo + normals
+		},
 	};
 
 	vk_descriptor_pool_=
 		vk_device_.createDescriptorPoolUnique(
 			vk::DescriptorPoolCreateInfo(
 				vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-				uint32_t(materials_.size()), // max sets.
+				uint32_t(materials_.size()) + 1u, // max sets.
 				uint32_t(std::size(vk_descriptor_pool_sizes)), vk_descriptor_pool_sizes));
 
-	for(auto& material_pair : materials_)
-	{
-		Material& material= material_pair.second;
-
+	{ // Create globals descriptor set
 		// Create descriptor set.
-		material.descriptor_set=
+		global_descriptors_set_=
 			std::move(
 			vk_device_.allocateDescriptorSetsUnique(
 				vk::DescriptorSetAllocateInfo(
 					*vk_descriptor_pool_,
-					1u, &*lighting_pass_pipeline_.descriptor_set_layout)).front());
+					1u, &*lighting_pass_pipeline_.descriptor_set_layouts[0])).front());
 
-		// Write descriptor set.
 		const vk::DescriptorBufferInfo descriptor_light_buffer_info(
 			*vk_light_data_buffer_,
 			0u,
@@ -281,6 +281,77 @@ WorldRenderer::WorldRenderer(
 				image_view,
 				vk::ImageLayout::eShaderReadOnlyOptimal);
 
+		const vk::WriteDescriptorSet write_descriptor_set[]
+		{
+			{
+				*global_descriptors_set_,
+				WorldShaderBindings::light_buffer,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_light_buffer_info,
+				nullptr
+			},
+			{
+				*global_descriptors_set_,
+				WorldShaderBindings::cluster_offset_buffer,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_offset_buffer_info,
+				nullptr
+			},
+			{
+				*global_descriptors_set_,
+				WorldShaderBindings::lights_list_buffer,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&lights_list_buffer_info,
+				nullptr
+			},
+			{
+				*global_descriptors_set_,
+				WorldShaderBindings::ssao_image,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_ssao_image_info,
+				nullptr,
+				nullptr
+			},
+			{
+				*global_descriptors_set_,
+				WorldShaderBindings::depth_cubemaps_array,
+				0u,
+				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
+				vk::DescriptorType::eCombinedImageSampler,
+				descriptor_depth_cubemaps_array_image_infos.data(),
+				nullptr,
+				nullptr
+			},
+		};
+
+		vk_device_.updateDescriptorSets(
+			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
+			0u, nullptr);
+	}
+	for(auto& material_pair : materials_)
+	{
+		Material& material= material_pair.second;
+
+		// Create descriptor set.
+		material.descriptor_set=
+			std::move(
+			vk_device_.allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(
+					*vk_descriptor_pool_,
+					1u, &*lighting_pass_pipeline_.descriptor_set_layouts[1])).front());
+
+		// Write descriptor set.
 		const vk::DescriptorImageInfo descriptor_albedo_tex_info(
 			vk::Sampler(),
 			*GetMaterialAlbedoImage(material).image_view,
@@ -292,56 +363,6 @@ WorldRenderer::WorldRenderer(
 
 		const vk::WriteDescriptorSet write_descriptor_set[]
 		{
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::light_buffer,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&descriptor_light_buffer_info,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::cluster_offset_buffer,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&descriptor_offset_buffer_info,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::lights_list_buffer,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&lights_list_buffer_info,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::ssao_image,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_ssao_image_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::depth_cubemaps_array,
-				0u,
-				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
-				vk::DescriptorType::eCombinedImageSampler,
-				descriptor_depth_cubemaps_array_image_infos.data(),
-				nullptr,
-				nullptr
-			},
 			{
 				*material.descriptor_set,
 				WorldShaderBindings::albedo_tex,
@@ -794,7 +815,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		*pipeline.samplers[1]);
 
 	// Create pipeline layout
-	const vk::DescriptorSetLayoutBinding vk_descriptor_set_layout_bindings[]
+	const vk::DescriptorSetLayoutBinding descriptor_set_layout_bindings_global[]
 	{
 		{
 			WorldShaderBindings::light_buffer,
@@ -831,6 +852,10 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 			vk::ShaderStageFlagBits::eFragment,
 			depth_cubemap_image_samplers.data(),
 		},
+	};
+
+	const vk::DescriptorSetLayoutBinding descriptor_set_layout_bindings_per_material[]
+	{
 		{
 			WorldShaderBindings::albedo_tex,
 			vk::DescriptorType::eCombinedImageSampler,
@@ -847,11 +872,19 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		},
 	};
 
-	pipeline.descriptor_set_layout=
+	pipeline.descriptor_set_layouts[0]=
 		vk_device_.createDescriptorSetLayoutUnique(
 			vk::DescriptorSetLayoutCreateInfo(
 				vk::DescriptorSetLayoutCreateFlags(),
-				uint32_t(std::size(vk_descriptor_set_layout_bindings)), vk_descriptor_set_layout_bindings));
+				uint32_t(std::size(descriptor_set_layout_bindings_global)), descriptor_set_layout_bindings_global));
+
+	pipeline.descriptor_set_layouts[1]=
+		vk_device_.createDescriptorSetLayoutUnique(
+			vk::DescriptorSetLayoutCreateInfo(
+				vk::DescriptorSetLayoutCreateFlags(),
+				uint32_t(std::size(descriptor_set_layout_bindings_per_material)), descriptor_set_layout_bindings_per_material));
+
+	const vk::DescriptorSetLayout descriptor_set_layouts[]{ *pipeline.descriptor_set_layouts[0], *pipeline.descriptor_set_layouts[1] };
 
 	const vk::PushConstantRange vk_push_constant_range(
 		vk::ShaderStageFlagBits::eVertex,
@@ -862,7 +895,7 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 		vk_device_.createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(
 				vk::PipelineLayoutCreateFlags(),
-				1u, &*pipeline.descriptor_set_layout,
+				uint32_t(std::size(descriptor_set_layouts)), descriptor_set_layouts,
 				1u, &vk_push_constant_range));
 
 	// Create pipeline.
@@ -1018,6 +1051,13 @@ void WorldRenderer::DrawWorldModelMainPass(
 		sizeof(uniforms),
 		&uniforms);
 
+	command_buffer.bindDescriptorSets(
+		vk::PipelineBindPoint::eGraphics,
+		*lighting_pass_pipeline_.pipeline_layout,
+		0u,
+		1u, &*global_descriptors_set_,
+		0u, nullptr);
+
 	const vk::DeviceSize offsets= 0u;
 	command_buffer.bindVertexBuffers(0u, 1u, &*world_model.vertex_buffer, &offsets);
 	command_buffer.bindIndexBuffer(*world_model.index_buffer, 0u, vk::IndexType::eUint16);
@@ -1030,7 +1070,7 @@ void WorldRenderer::DrawWorldModelMainPass(
 		command_buffer.bindDescriptorSets(
 			vk::PipelineBindPoint::eGraphics,
 			*lighting_pass_pipeline_.pipeline_layout,
-			0u,
+			1u,
 			1u, &*material.descriptor_set,
 			0u, nullptr);
 

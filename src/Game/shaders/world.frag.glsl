@@ -10,7 +10,7 @@ struct Light
 	ivec2 shadowmap_index; // .x - number of cubemap array, .y - layer number
 };
 
-layout(binding= 0, std430) buffer readonly light_buffer_block
+layout(set= 0, binding= 0, std430) buffer readonly light_buffer_block
 {
 	// Use vec4 for fit alignment.
 	vec4 ambient_color;
@@ -20,22 +20,22 @@ layout(binding= 0, std430) buffer readonly light_buffer_block
 	Light lights[];
 };
 
-layout(binding= 1, std430) buffer readonly cluster_offset_buffer_block
+layout(set= 0, binding= 1, std430) buffer readonly cluster_offset_buffer_block
 {
 	int light_offsets[];
 };
 
-layout(binding= 2, std430) buffer readonly lights_list_buffer_block
+layout(set= 0, binding= 2, std430) buffer readonly lights_list_buffer_block
 {
 	uint8_t light_list[];
 };
 
-layout(binding= 4) uniform sampler2D ambient_occlusion_image;
+layout(set= 0, binding= 4) uniform sampler2D ambient_occlusion_image;
 
-layout(binding= 5) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
+layout(set= 0, binding= 5) uniform samplerCubeArrayShadow depth_cubemaps_array[4];
 
-layout(binding= 8) uniform sampler2D albedo_tex;
-layout(binding= 9) uniform sampler2D normals_tex;
+layout(set= 1, binding= 8) uniform sampler2D albedo_tex;
+layout(set= 1, binding= 9) uniform sampler2D normals_tex;
 
 layout(location= 0) in mat3 f_texture_space_mat;
 layout(location= 3) in vec2 f_tex_coord;

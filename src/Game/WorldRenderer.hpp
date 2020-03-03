@@ -106,7 +106,7 @@ private:
 		vk::UniqueShaderModule shader_vert;
 		vk::UniqueShaderModule shader_frag;
 		std::vector<vk::UniqueSampler> samplers;
-		vk::UniqueDescriptorSetLayout descriptor_set_layout;
+		vk::UniqueDescriptorSetLayout descriptor_set_layouts[2]; // 0 - globals, 1 - per-material
 		vk::UniquePipelineLayout pipeline_layout;
 		vk::UniquePipeline pipeline;
 	};
@@ -179,6 +179,9 @@ private:
 	vk::UniqueDeviceMemory lights_list_buffer_memory_;
 
 	vk::UniqueDescriptorPool vk_descriptor_pool_;
+
+	// All material-independent descriptors goes here.
+	vk::UniqueDescriptorSet global_descriptors_set_;
 
 	WorldModel world_model_;
 	WorldModel test_world_model_;
