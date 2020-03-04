@@ -275,33 +275,30 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 			*random_vectors_image_view_,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set[]
-		{
-			{
-				*ssao_descriptor_set_,
-				g_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_depth_image_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*ssao_descriptor_set_,
-				g_random_vectors_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_random_vectors_image_info,
-				nullptr,
-				nullptr
-			},
-		};
-
 		vk_device_.updateDescriptorSets(
-			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
-			0u, nullptr);
+			{
+				{
+					*ssao_descriptor_set_,
+					g_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_depth_image_info,
+					nullptr,
+					nullptr
+				},
+				{
+					*ssao_descriptor_set_,
+					g_random_vectors_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_random_vectors_image_info,
+					nullptr,
+					nullptr
+				},
+			},
+			{});
 	}
 	{
 		blur_descriptor_set_=
@@ -322,33 +319,30 @@ AmbientOcclusionCalculator::AmbientOcclusionCalculator(
 			*pass_data_[0].framebuffer_image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set[]
-		{
-			{
-				*blur_descriptor_set_,
-				g_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_depth_image_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*blur_descriptor_set_,
-				g_ssao_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_ssao_image_info,
-				nullptr,
-				nullptr
-			},
-		};
-
 		vk_device_.updateDescriptorSets(
-			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
-			0u, nullptr);
+			{
+				{
+					*blur_descriptor_set_,
+					g_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_depth_image_info,
+					nullptr,
+					nullptr
+				},
+				{
+					*blur_descriptor_set_,
+					g_ssao_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_ssao_image_info,
+					nullptr,
+					nullptr
+				},
+			},
+			{});
 	}
 }
 

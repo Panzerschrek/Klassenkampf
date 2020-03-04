@@ -284,63 +284,60 @@ WorldRenderer::WorldRenderer(
 				image_view,
 				vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set[]
-		{
-			{
-				*global_descriptors_set_,
-				WorldShaderBindings::light_buffer,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&descriptor_light_buffer_info,
-				nullptr
-			},
-			{
-				*global_descriptors_set_,
-				WorldShaderBindings::cluster_offset_buffer,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&descriptor_offset_buffer_info,
-				nullptr
-			},
-			{
-				*global_descriptors_set_,
-				WorldShaderBindings::lights_list_buffer,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&lights_list_buffer_info,
-				nullptr
-			},
-			{
-				*global_descriptors_set_,
-				WorldShaderBindings::ssao_image,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_ssao_image_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*global_descriptors_set_,
-				WorldShaderBindings::depth_cubemaps_array,
-				0u,
-				uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
-				vk::DescriptorType::eCombinedImageSampler,
-				descriptor_depth_cubemaps_array_image_infos.data(),
-				nullptr,
-				nullptr
-			},
-		};
-
 		vk_device_.updateDescriptorSets(
-			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
-			0u, nullptr);
+			{
+				{
+					*global_descriptors_set_,
+					WorldShaderBindings::light_buffer,
+					0u,
+					1u,
+					vk::DescriptorType::eStorageBuffer,
+					nullptr,
+					&descriptor_light_buffer_info,
+					nullptr
+				},
+				{
+					*global_descriptors_set_,
+					WorldShaderBindings::cluster_offset_buffer,
+					0u,
+					1u,
+					vk::DescriptorType::eStorageBuffer,
+					nullptr,
+					&descriptor_offset_buffer_info,
+					nullptr
+				},
+				{
+					*global_descriptors_set_,
+					WorldShaderBindings::lights_list_buffer,
+					0u,
+					1u,
+					vk::DescriptorType::eStorageBuffer,
+					nullptr,
+					&lights_list_buffer_info,
+					nullptr
+				},
+				{
+					*global_descriptors_set_,
+					WorldShaderBindings::ssao_image,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_ssao_image_info,
+					nullptr,
+					nullptr
+				},
+				{
+					*global_descriptors_set_,
+					WorldShaderBindings::depth_cubemaps_array,
+					0u,
+					uint32_t(descriptor_depth_cubemaps_array_image_infos.size()),
+					vk::DescriptorType::eCombinedImageSampler,
+					descriptor_depth_cubemaps_array_image_infos.data(),
+					nullptr,
+					nullptr
+				},
+			},
+			{});
 	}
 	for(auto& material_pair : materials_)
 	{
@@ -368,43 +365,40 @@ WorldRenderer::WorldRenderer(
 			*GetMaterialOcclusionImage(material).image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set[]
-		{
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::albedo_tex,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_albedo_tex_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::normals_tex,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_normals_tex_info,
-				nullptr,
-				nullptr
-			},
-			{
-				*material.descriptor_set,
-				WorldShaderBindings::occlusion_tex,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_occlusion_tex_info,
-				nullptr,
-				nullptr
-			},
-		};
-
 		vk_device_.updateDescriptorSets(
-			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
-			0u, nullptr);
+			{
+				{
+					*material.descriptor_set,
+					WorldShaderBindings::albedo_tex,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_albedo_tex_info,
+					nullptr,
+					nullptr
+				},
+				{
+					*material.descriptor_set,
+					WorldShaderBindings::normals_tex,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_normals_tex_info,
+					nullptr,
+					nullptr
+				},
+				{
+					*material.descriptor_set,
+					WorldShaderBindings::occlusion_tex,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_occlusion_tex_info,
+					nullptr,
+					nullptr
+				},
+			},
+			{});
 	}
 }
 
@@ -783,7 +777,6 @@ WorldRenderer::Pipeline WorldRenderer::CreateLightingPassPipeline()
 				0.0f,
 				vk::BorderColor::eFloatTransparentBlack,
 				VK_FALSE)));
-
 
 	// Albedo sampler.
 	pipeline.samplers.push_back(

@@ -281,18 +281,20 @@ Shadowmapper::Shadowmapper(
 		0u,
 		sizeof(MatricesBuffer));
 
-	const vk::WriteDescriptorSet write_descriptor_set(
-		*descriptor_set_,
-		0u,
-		0u,
-		1u,
-		vk::DescriptorType::eStorageBuffer,
-		nullptr,
-		&descriptor_buffer_info,
-		nullptr);
 	vk_device_.updateDescriptorSets(
-		1u, &write_descriptor_set,
-		0u, nullptr);
+		{
+			{
+				*descriptor_set_,
+				0u,
+				0u,
+				1u,
+				vk::DescriptorType::eStorageBuffer,
+				nullptr,
+				&descriptor_buffer_info,
+				nullptr
+			}
+		},
+		{});
 
 	// Create cubemaps arrays.
 	for(uint32_t d= 0u; d < detail_level_count; ++d)
