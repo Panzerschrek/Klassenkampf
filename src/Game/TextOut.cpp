@@ -416,18 +416,20 @@ TextOut::TextOut(
 		*font_image_view_,
 		vk::ImageLayout::eShaderReadOnlyOptimal);
 
-	const vk::WriteDescriptorSet write_descriptor_set(
-		*descriptor_set_,
-		0u,
-		0u,
-		1u,
-		vk::DescriptorType::eCombinedImageSampler,
-		&descriptor_image_info,
-		nullptr,
-		nullptr);
 	vk_device_.updateDescriptorSets(
-		1u, &write_descriptor_set,
-		0u, nullptr);
+		{
+			{
+				*descriptor_set_,
+				0u,
+				0u,
+				1u,
+				vk::DescriptorType::eCombinedImageSampler,
+				&descriptor_image_info,
+				nullptr,
+				nullptr
+			}
+		},
+		{});
 
 	gpu_data_uploader_.Flush();
 }

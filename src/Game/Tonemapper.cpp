@@ -499,52 +499,50 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			0u,
 			sizeof(ExposureAccumulateBuffer));
 
-		const vk::WriteDescriptorSet write_descriptor_set[]
-		{
-			{
-				*main_descriptor_set_,
-				g_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_image_info[0],
-				nullptr,
-				nullptr
-			},
-			{
-				*main_descriptor_set_,
-				g_brightness_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_image_info[1],
-				nullptr,
-				nullptr
-			},
-			{
-				*main_descriptor_set_,
-				g_exposure_accumulate_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eStorageBuffer,
-				nullptr,
-				&descriptor_exposure_accumulate_buffer_info,
-				nullptr
-			},
-			{
-				*main_descriptor_set_,
-				g_blured_tex_uniform_binding,
-				0u,
-				1u,
-				vk::DescriptorType::eCombinedImageSampler,
-				&descriptor_image_info[2],
-				nullptr,
-				nullptr
-			},
-		};
 		vk_device_.updateDescriptorSets(
-			uint32_t(std::size(write_descriptor_set)), write_descriptor_set,
-			0u, nullptr);
+			{
+				{
+					*main_descriptor_set_,
+					g_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_image_info[0],
+					nullptr,
+					nullptr
+				},
+				{
+					*main_descriptor_set_,
+					g_brightness_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_image_info[1],
+					nullptr,
+					nullptr
+				},
+				{
+					*main_descriptor_set_,
+					g_exposure_accumulate_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eStorageBuffer,
+					nullptr,
+					&descriptor_exposure_accumulate_buffer_info,
+					nullptr
+				},
+				{
+					*main_descriptor_set_,
+					g_blured_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_image_info[2],
+					nullptr,
+					nullptr
+				},
+			},
+			{});
 	}
 
 	for(BloomBuffer& bloom_buffer : bloom_buffers_)
@@ -563,19 +561,20 @@ Tonemapper::Tonemapper(Settings& settings, WindowVulkan& window_vulkan)
 			&bloom_buffer == &bloom_buffers_[0] ? *brightness_calculate_image_view_ : *bloom_buffers_[0].image_view,
 			vk::ImageLayout::eShaderReadOnlyOptimal);
 
-		const vk::WriteDescriptorSet write_descriptor_set(
-			*bloom_buffer.descriptor_set,
-			g_tex_uniform_binding,
-			0u,
-			1u,
-			vk::DescriptorType::eCombinedImageSampler,
-			&descriptor_image_info,
-			nullptr,
-			nullptr);
-
 		vk_device_.updateDescriptorSets(
-			1u, &write_descriptor_set,
-			0u, nullptr);
+			{
+				{
+					*bloom_buffer.descriptor_set,
+					g_tex_uniform_binding,
+					0u,
+					1u,
+					vk::DescriptorType::eCombinedImageSampler,
+					&descriptor_image_info,
+					nullptr,
+					nullptr
+				}
+			},
+			{});
 	}
 }
 
