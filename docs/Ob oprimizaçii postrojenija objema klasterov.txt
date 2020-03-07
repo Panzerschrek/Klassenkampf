@@ -1,0 +1,10 @@
+Ocevidnym rešenijem optimizaçii postrojenija klasterov jestj perenos jego na GPU.
+
+Togda na CPU ne nado budet osuscestvlätj rasscotov, krome otsecenija istocnikov sveta po piramide vidimosti.
+Na GPU nado budet peredavatj toljko spisok istocnikov sveta, kotoryj i tak sejcas peredajotsä.
+
+Perenos na GPU dajot vozmožnostj ulucšitj algoritm, za scot ispoljzovanija bufera glubiny sçeny.
+Sejcas vsä piramida klasterov sostoit iz 24 slojov, logarifmiceski raspoložennyh ot bližnej k daljnej ploskostäm otsecenija.
+Za scot ispoljzovanija bufera glubiny, možno razbivatj každyj ekrannyj kvadrat na menjšeje kolicestvo slojov (naprimer 4), ot minimaljnoj k maksimaljnoj glubine v nöm.
+Eto pozvolit ispoljzovatj menjše pamäti na sloi i boljše pamäti na razbijenije v prostranstve ekrrana - 16x8x24 zamenitsä na 32x24x4, naprimer.
+Minus dannogo podhoda - problemy s osvescenijem poluprozracnoj geometrii (castiç, stökol).
