@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+
 namespace KK
 {
 
@@ -636,6 +637,13 @@ FileData DoExport(const std::vector<TriangleGroupIndexed>& triangle_groups, cons
 		out_light.radius= int16_t(std::min(std::max(-c_max_coord_value, light.radius * inv_max_scale), +c_max_coord_value));
 	}
 
+	std::cout << "Out stats:" << std::endl;
+	std::cout << "vertices:	" << get_data_file().vertex_count << "\n";
+	std::cout << "triangles: " << get_data_file().index_count / 3u << "\n";
+	std::cout << "triangle groups: " << get_data_file().triangle_group_count << "\n";
+	std::cout << "materials: " << get_data_file().material_count << "\n";
+	std::cout << "lights: " << get_data_file().light_count << "\n";
+
 	return file_data;
 }
 
@@ -823,13 +831,10 @@ std::vector<SceneNode> ReadScene(const tinyxml2::XMLElement& collada_element)
 		visual_scene != nullptr;
 		visual_scene= visual_scene->NextSiblingElement("visual_scene"))
 	{
-		std::cout << "Scene: " << std::endl;
 		for(const tinyxml2::XMLElement* node= visual_scene->FirstChildElement("node");
 			node != nullptr;
 			node= node->NextSiblingElement("node"))
 		{
-			std::cout << "Node: " << node->Attribute("id") << std::endl;
-
 			SceneNode out_node;
 
 			const tinyxml2::XMLElement* const matrix= node->FirstChildElement("matrix");
