@@ -1390,13 +1390,13 @@ void WorldRenderer::LoadMaterial(const std::string& material_name)
 
 	Material& out_material= materials_[material_name];
 
-	out_material.albedo_image_id= material_name + "-albedo";
+	out_material.albedo_image_id= material_name + "_albedo";
 	LoadImage(out_material.albedo_image_id);
 
-	out_material.normals_image_id= material_name + "-normals";
+	out_material.normals_image_id= material_name + "_normal";
 	LoadImage(out_material.normals_image_id);
 
-	out_material.occlusion_image_id= material_name + "-occlusion";
+	out_material.occlusion_image_id= material_name + "_orm";
 	LoadImage(out_material.occlusion_image_id);
 }
 
