@@ -340,6 +340,14 @@ TriangleGroup ReadTriangleGroup(
 	if(material != nullptr)
 		result.material= material;
 
+	static const char material_namepostfix[] = "-material";
+	if(const auto pos = result.material.find(material_namepostfix);
+		pos != std::string::npos && pos + std::strlen(material_namepostfix) == result.material.size())
+	{
+		result.material.erase(pos, result.material.size());
+	}
+
+	std::cout << result.material << std::endl;
 	return result;
 }
 
