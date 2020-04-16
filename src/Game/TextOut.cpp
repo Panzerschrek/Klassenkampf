@@ -185,7 +185,7 @@ TextOut::TextOut(
 
 	// Create font image
 	{
-		const auto image_loaded_opt= Image::Load("mono_font_sdf.png");
+		const auto image_loaded_opt= Image::Load("textures/mono_font_sdf.png");
 		KK_ASSERT(image_loaded_opt != std::nullopt);
 		const Image& image_loaded= *image_loaded_opt;
 
