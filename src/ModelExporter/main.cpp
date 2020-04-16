@@ -347,7 +347,6 @@ TriangleGroup ReadTriangleGroup(
 		result.material.erase(pos, result.material.size());
 	}
 
-	std::cout << result.material << std::endl;
 	return result;
 }
 
