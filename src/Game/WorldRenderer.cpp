@@ -180,9 +180,9 @@ WorldRenderer::WorldRenderer(
 		{ WorldData::SegmentType::FloorWallJoint, "floor_wall_join" },
 		{ WorldData::SegmentType::FloorWallWallJoint, "floor_wall_wall_join" },
 		{ WorldData::SegmentType::Wall, "wall_segment" },
-		{ WorldData::SegmentType::CeilingArch4, "arc4_segment" },
-		{ WorldData::SegmentType::Column4, "column4_segment" },
-		{ WorldData::SegmentType::Column4Lights, "column4_lights" },
+		{ WorldData::SegmentType::CeilingArch3, "arc3_segment" },
+		{ WorldData::SegmentType::Column3, "column3_segment" },
+		{ WorldData::SegmentType::Column3Lights, "column3_lights" },
 	};
 
 	SegmentModels segment_models;

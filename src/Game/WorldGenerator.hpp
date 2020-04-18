@@ -20,9 +20,9 @@ enum class SegmentType
 	FloorWallWallJoint,
 	Corridor,
 	Shaft,
-	CeilingArch4,
-	Column4,
-	Column4Lights,
+	CeilingArch3,
+	Column3,
+	Column3Lights,
 };
 
 struct Segment

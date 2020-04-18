@@ -45,14 +45,14 @@ WorldData::World WorldGenerator::Generate()
 		WorldData::Sector root_sector;
 		root_sector.type= WorldData::SectorType::Room;
 
-		root_sector.bb_min[0]= -4;
-		root_sector.bb_min[1]= -4;
+		root_sector.bb_min[0]= -3;
+		root_sector.bb_min[1]= -3;
 		root_sector.bb_min[2]= +0;
-		root_sector.bb_max[0]= +4;
-		root_sector.bb_max[1]= +4;
+		root_sector.bb_max[0]= +3;
+		root_sector.bb_max[1]= +3;
 		root_sector.bb_max[2]= +8;
 		root_sector.ceiling_height= 2;
-		root_sector.columns_step= 4;
+		root_sector.columns_step= 3;
 
 		result_.sectors.push_back(std::move(root_sector));
 	}
@@ -101,7 +101,7 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 	if(rand_.RandBool(1u, 5u))
 		return;
 
-	const LongRand::RandResultType size_mul= 4u;
+	const LongRand::RandResultType size_mul= 3u;
 	const WorldData::CoordType room_size[]=
 	{
 		WorldData::CoordType((rand_.Rand() % 4u + 1u) * size_mul),
@@ -116,7 +116,7 @@ void WorldGenerator::ProcessCorridor(const size_t sector_index)
 	new_room.bb_min[2]= corridor.bb_min[2];
 	new_room.bb_max[2]= corridor.bb_min[2] + room_size[2];
 	new_room.ceiling_height= 2;
-	new_room.columns_step= 4;
+	new_room.columns_step= size_mul;
 
 	// Do not place corridors in place of columns.
 	WorldData::CoordType room_x= corridor.bb_min[0] - (room_size[0] >> 1);
@@ -567,7 +567,7 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; y+= sector.columns_step)
 	{
 		WorldData::Segment segment;
-		segment.type= WorldData::SegmentType::CeilingArch4;
+		segment.type= WorldData::SegmentType::CeilingArch3;
 		segment.pos[0]= x;
 		segment.pos[1]= y;
 		segment.pos[2]= sector.bb_max[2] - sector.ceiling_height;
@@ -583,7 +583,7 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 			y > sector.bb_min[1] && y < sector.bb_max[1])
 		{
 			WorldData::Segment segment;
-			segment.type= WorldData::SegmentType::Column4Lights;
+			segment.type= WorldData::SegmentType::Column3Lights;
 			segment.pos[0]= x;
 			segment.pos[1]= y;
 			segment.pos[2]= sector.bb_min[2];
@@ -593,7 +593,7 @@ void WorldGenerator::FillSegmentsRoom(WorldData::Sector& sector)
 		for(WorldData::CoordType z= sector.bb_min[2]; z < sector.bb_max[2] - sector.ceiling_height; ++z)
 		{
 			WorldData::Segment segment;
-			segment.type= WorldData::SegmentType::Column4;
+			segment.type= WorldData::SegmentType::Column3;
 			segment.pos[0]= x;
 			segment.pos[1]= y;
 			segment.pos[2]= z;
