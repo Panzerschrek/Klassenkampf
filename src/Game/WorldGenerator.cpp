@@ -15,12 +15,21 @@ WorldData::PortalKey MakePortalKey(const size_t sector_index0, const size_t sect
 	return std::min(sector_index0, sector_index1) << 32u | std::max(sector_index0, sector_index1);
 }
 
+using Coord3= WorldData::CoordType[3];
+
 class WorldGenerator final
 {
 public:
 	WorldData::World Generate();
 
 private:
+
+	// Returns true, if successfully generated.
+	bool GeneratePath_r(
+		const Coord3& to,
+		std::vector<WorldData::Sector>& sectors_stack);
+
+
 	void Genrate_r(size_t current_sector_index);
 
 	void ProcessCorridor(size_t sector_index);
@@ -94,6 +103,41 @@ void WorldGenerator::Genrate_r(const size_t current_sector_index)
 		ProcessShaft(current_sector_index);
 		break;
 	}
+}
+
+bool WorldGenerator::GeneratePath_r(
+	const Coord3& to,
+	std::vector<WorldData::Sector>& sectors_stack)
+{
+	KK_ASSERT(!sectors_stack.empty());
+
+	// TODO - retun true if reached destination here.
+
+	std::vector<WorldData::Sector> candidate_sectors;
+
+	switch(sectors_stack.back().type)
+	{
+	// TODO - get list of all posible connections for current sector.
+	case WorldData::SectorType::Corridor:
+		break;
+	case WorldData::SectorType::Room:
+		break;
+	case WorldData::SectorType::Shaft:
+		break;
+	};
+
+	// TODO - sort candidate sectors here.
+
+	for(const WorldData::Sector& candidate_sector : candidate_sectors)
+	{
+		sectors_stack.push_back(candidate_sector);
+
+		const bool ok= GeneratePath_r(to, sectors_stack);
+		if(ok)
+			return true;
+	}
+
+	return false;
 }
 
 void WorldGenerator::ProcessCorridor(const size_t sector_index)
