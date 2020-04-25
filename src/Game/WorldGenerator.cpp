@@ -28,7 +28,9 @@ const WorldData::CoordType c_min_room_size_archs = 2;
 const WorldData::CoordType c_max_room_size_archs = 5;
 const WorldData::CoordType c_min_room_height = 3;
 const WorldData::CoordType c_max_room_height = 7;
+
 const WorldData::CoordType c_column_step= 3;
+const WorldData::CoordType c_ceiling_height= 2;
 
 const WorldData::CoordType c_min_corridor_length = 2;
 const WorldData::CoordType c_max_corridor_length = 10;
@@ -326,6 +328,7 @@ std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSe
 				WorldData::Sector new_room;
 				new_room.type= WorldData::SectorType::Room;
 				new_room.columns_step= c_column_step;
+				new_room.ceiling_height= c_ceiling_height;
 
 				WorldData::Portal portal;
 
@@ -363,6 +366,7 @@ std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSe
 				WorldData::Sector new_room;
 				new_room.type= WorldData::SectorType::Room;
 				new_room.columns_step= c_column_step;
+				new_room.ceiling_height= c_ceiling_height;
 
 				WorldData::Portal portal;
 
@@ -412,6 +416,7 @@ std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSe
 		WorldData::Sector new_room;
 		new_room.type= WorldData::SectorType::Room;
 		new_room.columns_step= c_column_step;
+		new_room.ceiling_height= c_ceiling_height;
 
 		WorldData::Portal portal;
 
