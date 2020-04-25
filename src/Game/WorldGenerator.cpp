@@ -24,6 +24,18 @@ struct PathSearchNode
 	WorldData::Portal portal;
 };
 
+const WorldData::CoordType c_min_room_size_archs = 2;
+const WorldData::CoordType c_max_room_size_archs = 5;
+const WorldData::CoordType c_min_room_height = 3;
+const WorldData::CoordType c_max_room_height = 7;
+const WorldData::CoordType c_column_step= 3;
+
+const WorldData::CoordType c_min_corridor_length = 2;
+const WorldData::CoordType c_max_corridor_length = 10;
+
+const WorldData::CoordType c_min_shaft_height= 2;
+const WorldData::CoordType c_max_shaft_height= 6;
+
 class WorldGenerator final
 {
 public:
@@ -36,6 +48,7 @@ private:
 
 	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector);
 	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector);
+	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsShaft(const WorldData::Sector& sector);
 
 	bool CanPlace(const WorldData::Sector& sector, const PathSearchNode& parent_path);
 
@@ -68,7 +81,7 @@ WorldData::World WorldGenerator::Generate()
 	{
 		128 + WorldData::CoordType(rand_.Rand() & 16u),
 		128 + WorldData::CoordType(rand_.Rand() & 16u),
-		0,
+		-64 - WorldData::CoordType(rand_.Rand() & 16u),
 	};
 
 	const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, dst);
@@ -140,6 +153,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			candidate_sectors= GenPossibleLinkedSectorsCorridor(sector);
 			break;
 		case WorldData::SectorType::Shaft:
+			candidate_sectors= GenPossibleLinkedSectorsShaft(sector);
 			break;
 		};
 
@@ -177,9 +191,6 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector)
 {
 	KK_ASSERT(sector.type == WorldData::SectorType::Room);
-
-	const WorldData::CoordType c_min_corridor_length = 2;
-	const WorldData::CoordType c_max_corridor_length = 10;
 
 	const Coord3 sector_size
 	{
@@ -270,18 +281,37 @@ std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSe
 		result.emplace_back(new_corridor, portal);
 	}
 
+	for(WorldData::CoordType x= sector.bb_min[0] + 1; x < sector.bb_max[0]; x += c_column_step)
+	for(WorldData::CoordType y= sector.bb_min[1] + 1; y < sector.bb_max[1]; y += c_column_step)
+	for(WorldData::CoordType h= c_min_shaft_height; h <= c_max_shaft_height; ++h)
+	{
+		WorldData::Sector new_shaft;
+		new_shaft.type= WorldData::SectorType::Shaft;
+
+		WorldData::Portal portal;
+
+		new_shaft.bb_min[0]= x;
+		new_shaft.bb_max[0]= new_shaft.bb_min[0] + 1;
+		new_shaft.bb_min[1]= y;
+		new_shaft.bb_max[1]= new_shaft.bb_min[1] + 1;
+		new_shaft.bb_max[2]= sector.bb_min[2];
+		new_shaft.bb_min[2]= new_shaft.bb_max[2] - h;
+
+		portal.bb_min[0]= new_shaft.bb_min[0];
+		portal.bb_max[0]= new_shaft.bb_max[0];
+		portal.bb_min[1]= new_shaft.bb_min[1];
+		portal.bb_max[1]= new_shaft.bb_max[1];
+		portal.bb_min[2]= portal.bb_max[2]= new_shaft.bb_max[2];
+
+		result.emplace_back(new_shaft, portal);
+	}
+
 	return result;
 }
 
 std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector)
 {
 	KK_ASSERT(sector.type == WorldData::SectorType::Corridor);
-
-	const WorldData::CoordType c_min_room_size_archs = 2;
-	const WorldData::CoordType c_max_room_size_archs = 5;
-	const WorldData::CoordType c_min_room_height = 3;
-	const WorldData::CoordType c_max_room_height = 7;
-	const WorldData::CoordType c_column_step= 3;
 
 	std::vector<SectorAndPortal> result;
 
@@ -364,6 +394,42 @@ std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSe
 				result.emplace_back(new_room, portal);
 			}
 		}
+	}
+
+	return result;
+}
+
+std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSectorsShaft(const WorldData::Sector& sector)
+{
+	std::vector<SectorAndPortal> result;
+
+	for(WorldData::CoordType arch_x = c_min_room_size_archs; arch_x <= c_max_room_size_archs; ++arch_x)
+	for(WorldData::CoordType arch_y = c_min_room_size_archs; arch_y <= c_max_room_size_archs; ++arch_y)
+	for(WorldData::CoordType height = c_min_room_height; height <= c_max_room_height; ++height)
+	for(WorldData::CoordType connection_x = 0; connection_x < arch_x; ++connection_x)
+	for(WorldData::CoordType connection_y = 0; connection_y < arch_y; ++connection_y)
+	{
+		WorldData::Sector new_room;
+		new_room.type= WorldData::SectorType::Room;
+		new_room.columns_step= c_column_step;
+
+		WorldData::Portal portal;
+
+		new_room.bb_min[0]= sector.bb_min[0] - connection_x * c_column_step - c_column_step / 2;
+		new_room.bb_max[0]= new_room.bb_min[0] + arch_x * c_column_step;
+		new_room.bb_min[1]= sector.bb_min[1] - connection_y * c_column_step - c_column_step / 2;
+		new_room.bb_max[1]= new_room.bb_min[1] + arch_y * c_column_step;
+
+		new_room.bb_max[2]= sector.bb_min[2];
+		new_room.bb_min[2]= new_room.bb_max[2] - height;
+
+		portal.bb_min[0]= sector.bb_min[0];
+		portal.bb_max[0]= sector.bb_max[0];
+		portal.bb_min[1]= sector.bb_min[1];
+		portal.bb_max[1]= sector.bb_max[1];
+		portal.bb_min[2]= portal.bb_max[2]= sector.bb_min[2];
+
+		result.emplace_back(new_room, portal);
 	}
 
 	return result;
