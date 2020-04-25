@@ -1,5 +1,6 @@
 #include "WorldGenerator.hpp"
 #include "Assert.hpp"
+#include "Log.hpp"
 #include "Rand.hpp"
 #include <algorithm>
 #include <map>
@@ -41,7 +42,7 @@ const WorldData::CoordType c_max_shaft_height= 6;
 class WorldGenerator final
 {
 public:
-	WorldData::World Generate();
+	WorldData::World Generate(LongRand::RandResultType seed);
 
 private:
 	PathSearchNodePtr GeneratePathIterative(const WorldData::Sector& start_sector, const Coord3& to);
@@ -65,8 +66,10 @@ private:
 	LongRand rand_;
 };
 
-WorldData::World WorldGenerator::Generate()
+WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 {
+	rand_.SetInnerState(seed);
+
 	WorldData::Sector root_sector;
 	root_sector.type= WorldData::SectorType::Room;
 
@@ -81,9 +84,9 @@ WorldData::World WorldGenerator::Generate()
 
 	const Coord3 dst
 	{
-		128 + WorldData::CoordType(rand_.Rand() & 16u),
-		128 + WorldData::CoordType(rand_.Rand() & 16u),
-		-64 - WorldData::CoordType(rand_.Rand() & 16u),
+		80 + WorldData::CoordType(rand_.Rand() & 31u),
+		80 + WorldData::CoordType(rand_.Rand() & 31u),
+		-40 - WorldData::CoordType(rand_.Rand() & 15u),
 	};
 
 	const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, dst);
@@ -130,8 +133,12 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 		node_heap.emplace(0, std::move(node));
 	}
 
-	while(!node_heap.empty())
+	const size_t c_max_iterations= 1024u * 1024u;
+	size_t iterations= 0u;
+	while(!node_heap.empty() && iterations < c_max_iterations)
 	{
+		++iterations;
+
 		const PathSearchNodePtr node= node_heap.begin()->second;
 		node_heap.erase(node_heap.begin());
 
@@ -142,7 +149,10 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			std::abs(to[0] * 2 - (sector.bb_max[0] + sector.bb_min[0])) <= c_threshold &&
 			std::abs(to[1] * 2 - (sector.bb_max[1] + sector.bb_min[1])) <= c_threshold &&
 			std::abs(to[2] * 2 - (sector.bb_max[2] + sector.bb_min[2])) <= c_threshold)
+		{
+			Log::Info("Path search finished. Iterations: ", iterations, ", heap size: ", node_heap.size());
 			return node;
+		}
 
 		std::vector<SectorAndPortal> candidate_sectors;
 
@@ -176,7 +186,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			Priority priority= Priority(std::sqrt(double(square_doubled_dist))) / 4; // TODO - remove floating point arithmetic, use integer inly.
 
 			// Add some random to priority
-			priority= priority * Priority((rand_.Rand() & 63u) + 64u) + Priority(rand_.Rand() & 15u);
+			priority= priority * Priority((rand_.Rand() & 63u) + 32u) + Priority(rand_.Rand() % 1024u);
 
 			auto new_node= std::make_shared<PathSearchNode>();
 			new_node->parent= node;
@@ -185,7 +195,18 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 
 			node_heap.emplace(priority, std::move(new_node));
 		}
+
+		// Do not consume too much memory, remove low-priority nodes when limit of heap reached.
+		const size_t c_max_nodes_in_heap= 512u * 1024u * 1024u / (sizeof(Priority) + sizeof(PathSearchNodePtr) + sizeof(PathSearchNode));
+
+		while(node_heap.size() > c_max_nodes_in_heap)
+			node_heap.erase(std::prev(node_heap.end()));
 	}
+
+	if(node_heap.empty())
+		Log::Info("Nodes heap is empty and result not reached");
+	if(iterations >= c_max_iterations)
+		Log::Info("Max iterations reached");
 
 	return nullptr;
 }
@@ -700,7 +721,7 @@ void WorldGenerator::FillSegmentsShaft(WorldData::Sector& sector)
 WorldData::World GenerateWorld()
 {
 	WorldGenerator generator;
-	return generator.Generate();
+	return generator.Generate(9);
 }
 
 } // namespace KK
