@@ -29,6 +29,8 @@ private:
 		const Coord3& to,
 		std::vector<WorldData::Sector>& sectors_stack);
 
+	std::vector<WorldData::Sector> GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector);
+	std::vector<WorldData::Sector> GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector);
 
 	void Genrate_r(size_t current_sector_index);
 
@@ -117,10 +119,11 @@ bool WorldGenerator::GeneratePath_r(
 
 	switch(sectors_stack.back().type)
 	{
-	// TODO - get list of all posible connections for current sector.
-	case WorldData::SectorType::Corridor:
-		break;
 	case WorldData::SectorType::Room:
+		candidate_sectors= GenPossibleLinkedSectorsRoom(sectors_stack.back());
+		break;
+	case WorldData::SectorType::Corridor:
+		candidate_sectors= GenPossibleLinkedSectorsCorridor(sectors_stack.back());
 		break;
 	case WorldData::SectorType::Shaft:
 		break;
@@ -139,6 +142,159 @@ bool WorldGenerator::GeneratePath_r(
 
 	return false;
 }
+
+std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector)
+{
+	KK_ASSERT(sector.type == WorldData::SectorType::Room);
+
+	const WorldData::CoordType c_min_corridor_length = 2;
+	const WorldData::CoordType c_max_corridor_length = 8;
+
+	const Coord3 sector_size
+	{
+		sector.bb_max[0] - sector.bb_min[0],
+		sector.bb_max[1] - sector.bb_min[1],
+		sector.bb_max[2] - sector.bb_min[2],
+	};
+
+	std::vector<WorldData::Sector> result;
+
+	for(WorldData::CoordType side_x = sector.columns_step / 2; side_x < sector_size[0]; side_x += sector.columns_step)
+	for(WorldData::CoordType side_y = 0; side_y < 2; ++side_y)
+	for(WorldData::CoordType corridor_length = c_min_corridor_length; corridor_length <= c_max_corridor_length; ++corridor_length)
+	{
+		WorldData::Sector new_corridor;
+		new_corridor.type= WorldData::SectorType::Corridor;
+
+		if(side_y == 0)
+		{
+			new_corridor.direction= WorldData::Direction::YPlus;
+			new_corridor.bb_min[1]= sector.bb_max[1];
+			new_corridor.bb_max[1]= sector.bb_max[1] + corridor_length;
+		}
+		else
+		{
+			new_corridor.direction= WorldData::Direction::YMinus;
+			new_corridor.bb_max[1]= sector.bb_min[1];
+			new_corridor.bb_min[1]= sector.bb_min[1] - corridor_length;
+		}
+		new_corridor.bb_min[0]= sector.bb_min[0] + side_x;
+		new_corridor.bb_max[0]= new_corridor.bb_min[0] + 1;
+
+		new_corridor.bb_min[2]= sector.bb_min[2];
+		new_corridor.bb_max[2]= new_corridor.bb_min[2] + 1;
+
+		result.push_back(new_corridor);
+	}
+
+	for(WorldData::CoordType side_y = sector.columns_step / 2; side_y < sector_size[1]; side_y += sector.columns_step)
+	for(WorldData::CoordType side_x = 0; side_x < 2; ++side_x)
+	for(WorldData::CoordType corridor_length = c_min_corridor_length; corridor_length <= c_max_corridor_length; ++corridor_length)
+	{
+		WorldData::Sector new_corridor;
+		new_corridor.type= WorldData::SectorType::Corridor;
+
+		if(side_x == 0)
+		{
+			new_corridor.direction= WorldData::Direction::XPlus;
+			new_corridor.bb_min[0]= sector.bb_max[0];
+			new_corridor.bb_max[0]= sector.bb_max[0] + corridor_length;
+		}
+		else
+		{
+			new_corridor.direction= WorldData::Direction::XMinus;
+			new_corridor.bb_max[0]= sector.bb_min[0];
+			new_corridor.bb_min[0]= sector.bb_min[0] - corridor_length;
+		}
+		new_corridor.bb_min[1]= sector.bb_min[1] + side_y;
+		new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
+
+		new_corridor.bb_min[2]= sector.bb_min[2];
+		new_corridor.bb_max[2]= new_corridor.bb_min[2] + 1;
+
+		result.push_back(new_corridor);
+	}
+
+	return result;
+}
+
+std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector)
+{
+	KK_ASSERT(sector.type == WorldData::SectorType::Corridor);
+
+	const WorldData::CoordType c_min_room_size_archs = 1;
+	const WorldData::CoordType c_max_room_size_archs = 6;
+	const WorldData::CoordType c_min_room_height = 4;
+	const WorldData::CoordType c_max_room_height = 10;
+	const LongRand::RandResultType c_column_step= 3u;
+
+
+	std::vector<WorldData::Sector> result;
+
+	for(WorldData::CoordType arch_x = c_min_room_size_archs; arch_x <= c_max_room_size_archs; ++arch_x)
+	for(WorldData::CoordType arch_y = c_min_room_size_archs; arch_y <= c_max_room_size_archs; ++arch_y)
+	for(WorldData::CoordType height = c_min_room_height; height <= c_max_room_height; ++height)
+	{
+		if(sector.direction == WorldData::Direction::XPlus || sector.direction == WorldData::Direction::XMinus)
+		{
+			for(WorldData::CoordType connection_y = 0; connection_y < arch_y; ++connection_y)
+			{
+				WorldData::Sector new_room;
+				new_room.type= WorldData::SectorType::Room;
+				new_room.columns_step= c_column_step;
+
+				if(sector.direction == WorldData::Direction::XPlus)
+				{
+					new_room.bb_min[0]= sector.bb_max[0];
+					new_room.bb_max[0]= sector.bb_max[0] + arch_x * c_column_step;
+				}
+				else
+				{
+					new_room.bb_max[0]= sector.bb_min[0];
+					new_room.bb_min[0]= sector.bb_min[0] - arch_x * c_column_step;
+
+				}
+				new_room.bb_min[1]= sector.bb_min[1] + (arch_y - connection_y) * c_column_step;
+				new_room.bb_max[1]= new_room.bb_min[1] + arch_y * c_column_step;
+				new_room.bb_min[2]= sector.bb_min[2];
+				new_room.bb_max[2]= new_room.bb_min[2] + height;
+
+				result.push_back(new_room);
+			}
+		}
+		else
+		{
+			for(WorldData::CoordType connection_x = 0; connection_x < arch_x; ++connection_x)
+			{
+				WorldData::Sector new_room;
+				new_room.type= WorldData::SectorType::Room;
+				new_room.columns_step= c_column_step;
+
+				if(sector.direction == WorldData::Direction::YPlus)
+				{
+					new_room.bb_min[1]= sector.bb_max[1];
+					new_room.bb_max[1]= sector.bb_max[1] + arch_y * c_column_step;
+				}
+				else
+				{
+					new_room.bb_max[1]= sector.bb_min[1];
+					new_room.bb_min[1]= sector.bb_min[1] - arch_y * c_column_step;
+
+				}
+				new_room.bb_min[0]= sector.bb_min[0] + (arch_x - connection_x) * c_column_step;
+				new_room.bb_max[0]= new_room.bb_min[0] + arch_x * c_column_step;
+				new_room.bb_min[2]= sector.bb_min[2];
+				new_room.bb_max[2]= new_room.bb_min[2] + height;
+
+				result.push_back(new_room);
+			}
+		}
+	}
+
+
+	return result;
+}
+
 
 void WorldGenerator::ProcessCorridor(const size_t sector_index)
 {
