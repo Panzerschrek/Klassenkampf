@@ -282,7 +282,7 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(
 					new_room.bb_min[0]= sector.bb_min[0] - arch_x * c_column_step;
 
 				}
-				new_room.bb_min[1]= sector.bb_min[1] + (connection_y - arch_y) * c_column_step;
+				new_room.bb_min[1]= sector.bb_min[1] - connection_y * c_column_step - c_column_step / 2;
 				new_room.bb_max[1]= new_room.bb_min[1] + arch_y * c_column_step;
 				new_room.bb_min[2]= sector.bb_min[2];
 				new_room.bb_max[2]= new_room.bb_min[2] + height;
@@ -309,7 +309,7 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(
 					new_room.bb_min[1]= sector.bb_min[1] - arch_y * c_column_step;
 
 				}
-				new_room.bb_min[0]= sector.bb_min[0] + (connection_x - arch_x) * c_column_step;
+				new_room.bb_min[0]= sector.bb_min[0] - connection_x * c_column_step - c_column_step / 2;
 				new_room.bb_max[0]= new_room.bb_min[0] + arch_x * c_column_step;
 				new_room.bb_min[2]= sector.bb_min[2];
 				new_room.bb_max[2]= new_room.bb_min[2] + height;
