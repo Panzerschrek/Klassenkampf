@@ -10,15 +10,8 @@ namespace KK
 
 namespace
 {
-/*
-WorldData::PortalKey MakePortalKey(const size_t sector_index0, const size_t sector_index1)
-{
-	KK_ASSERT(sector_index0 != sector_index1);
-	return std::min(sector_index0, sector_index1) << 32u | std::max(sector_index0, sector_index1);
-}
-*/
-using Coord3= WorldData::CoordType[3];
 
+using Coord3= WorldData::CoordType[3];
 
 struct PathSearchNode;
 using PathSearchNodePtr= std::shared_ptr<PathSearchNode>;
@@ -28,6 +21,7 @@ struct PathSearchNode
 	PathSearchNodePtr parent;
 
 	WorldData::Sector sector;
+	WorldData::Portal portal;
 };
 
 class WorldGenerator final
@@ -38,8 +32,10 @@ public:
 private:
 	PathSearchNodePtr GeneratePathIterative(const WorldData::Sector& start_sector, const Coord3& to);
 
-	static std::vector<WorldData::Sector> GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector);
-	static std::vector<WorldData::Sector> GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector);
+	using SectorAndPortal= std::pair<WorldData::Sector, WorldData::Portal>;
+
+	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector);
+	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector);
 
 	bool CanPlace(const WorldData::Sector& sector, const PathSearchNode& parent_path);
 
@@ -77,7 +73,10 @@ WorldData::World WorldGenerator::Generate()
 
 	const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, dst);
 	for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
+	{
 		result_.sectors.push_back(node->sector);
+		result_.portals.push_back(node->portal);
+	}
 
 	for(WorldData::Sector& sector : result_.sectors)
 	{
@@ -130,7 +129,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			std::abs(to[2] * 2 - (sector.bb_max[2] + sector.bb_min[2])) <= c_threshold)
 			return node;
 
-		std::vector<WorldData::Sector> candidate_sectors;
+		std::vector<SectorAndPortal> candidate_sectors;
 
 		switch(sector.type)
 		{
@@ -144,8 +143,10 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			break;
 		};
 
-		for(const WorldData::Sector& candidate_sector : candidate_sectors)
+		for(const SectorAndPortal& candidate : candidate_sectors)
 		{
+			const WorldData::Sector& candidate_sector= candidate.first;
+			const WorldData::Portal& candidate_portal= candidate.second;
 			if(!CanPlace(candidate_sector, *node))
 				continue;
 
@@ -164,6 +165,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			auto new_node= std::make_shared<PathSearchNode>();
 			new_node->parent= node;
 			new_node->sector= candidate_sector;
+			new_node->portal= candidate_portal;
 
 			node_heap.emplace(priority, std::move(new_node));
 		}
@@ -172,7 +174,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 	return nullptr;
 }
 
-std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector)
+std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector)
 {
 	KK_ASSERT(sector.type == WorldData::SectorType::Room);
 
@@ -186,7 +188,7 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(cons
 		sector.bb_max[2] - sector.bb_min[2],
 	};
 
-	std::vector<WorldData::Sector> result;
+	std::vector<SectorAndPortal> result;
 
 	for(WorldData::CoordType side_x = sector.columns_step / 2; side_x < sector_size[0]; side_x += sector.columns_step)
 	for(WorldData::CoordType side_y = 0; side_y < 2; ++side_y)
@@ -195,17 +197,23 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(cons
 		WorldData::Sector new_corridor;
 		new_corridor.type= WorldData::SectorType::Corridor;
 
+		WorldData::Portal portal;
+
 		if(side_y == 0)
 		{
 			new_corridor.direction= WorldData::Direction::YPlus;
 			new_corridor.bb_min[1]= sector.bb_max[1];
 			new_corridor.bb_max[1]= sector.bb_max[1] + corridor_length;
+
+			portal.bb_min[1]= portal.bb_max[1]= new_corridor.bb_min[1];
 		}
 		else
 		{
 			new_corridor.direction= WorldData::Direction::YMinus;
 			new_corridor.bb_max[1]= sector.bb_min[1];
 			new_corridor.bb_min[1]= sector.bb_min[1] - corridor_length;
+
+			portal.bb_min[1]= portal.bb_max[1]= new_corridor.bb_max[1];
 		}
 		new_corridor.bb_min[0]= sector.bb_min[0] + side_x;
 		new_corridor.bb_max[0]= new_corridor.bb_min[0] + 1;
@@ -213,7 +221,13 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(cons
 		new_corridor.bb_min[2]= sector.bb_min[2];
 		new_corridor.bb_max[2]= new_corridor.bb_min[2] + 1;
 
-		result.push_back(new_corridor);
+		portal.bb_min[0]= new_corridor.bb_min[0];
+		portal.bb_max[0]= new_corridor.bb_max[0];
+
+		portal.bb_min[2]= new_corridor.bb_min[2];
+		portal.bb_max[2]= new_corridor.bb_max[2];
+
+		result.emplace_back(new_corridor, portal);
 	}
 
 	for(WorldData::CoordType side_y = sector.columns_step / 2; side_y < sector_size[1]; side_y += sector.columns_step)
@@ -223,17 +237,23 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(cons
 		WorldData::Sector new_corridor;
 		new_corridor.type= WorldData::SectorType::Corridor;
 
+		WorldData::Portal portal;
+
 		if(side_x == 0)
 		{
 			new_corridor.direction= WorldData::Direction::XPlus;
 			new_corridor.bb_min[0]= sector.bb_max[0];
 			new_corridor.bb_max[0]= sector.bb_max[0] + corridor_length;
+
+			portal.bb_min[0]= portal.bb_max[0]= new_corridor.bb_min[0];
 		}
 		else
 		{
 			new_corridor.direction= WorldData::Direction::XMinus;
 			new_corridor.bb_max[0]= sector.bb_min[0];
 			new_corridor.bb_min[0]= sector.bb_min[0] - corridor_length;
+
+			portal.bb_min[0]= portal.bb_max[0]= new_corridor.bb_max[0];
 		}
 		new_corridor.bb_min[1]= sector.bb_min[1] + side_y;
 		new_corridor.bb_max[1]= new_corridor.bb_min[1] + 1;
@@ -241,13 +261,19 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsRoom(cons
 		new_corridor.bb_min[2]= sector.bb_min[2];
 		new_corridor.bb_max[2]= new_corridor.bb_min[2] + 1;
 
-		result.push_back(new_corridor);
+		portal.bb_min[1]= new_corridor.bb_min[1];
+		portal.bb_max[1]= new_corridor.bb_max[1];
+
+		portal.bb_min[2]= new_corridor.bb_min[2];
+		portal.bb_max[2]= new_corridor.bb_max[2];
+
+		result.emplace_back(new_corridor, portal);
 	}
 
 	return result;
 }
 
-std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector)
+std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector)
 {
 	KK_ASSERT(sector.type == WorldData::SectorType::Corridor);
 
@@ -257,7 +283,7 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(
 	const WorldData::CoordType c_max_room_height = 7;
 	const WorldData::CoordType c_column_step= 3;
 
-	std::vector<WorldData::Sector> result;
+	std::vector<SectorAndPortal> result;
 
 	for(WorldData::CoordType arch_x = c_min_room_size_archs; arch_x <= c_max_room_size_archs; ++arch_x)
 	for(WorldData::CoordType arch_y = c_min_room_size_archs; arch_y <= c_max_room_size_archs; ++arch_y)
@@ -271,23 +297,33 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(
 				new_room.type= WorldData::SectorType::Room;
 				new_room.columns_step= c_column_step;
 
+				WorldData::Portal portal;
+
 				if(sector.direction == WorldData::Direction::XPlus)
 				{
 					new_room.bb_min[0]= sector.bb_max[0];
 					new_room.bb_max[0]= sector.bb_max[0] + arch_x * c_column_step;
+
+					portal.bb_min[0]= portal.bb_max[0]= sector.bb_max[0];
 				}
 				else
 				{
 					new_room.bb_max[0]= sector.bb_min[0];
 					new_room.bb_min[0]= sector.bb_min[0] - arch_x * c_column_step;
 
+					portal.bb_min[0]= portal.bb_max[0]= sector.bb_min[0];
 				}
 				new_room.bb_min[1]= sector.bb_min[1] - connection_y * c_column_step - c_column_step / 2;
 				new_room.bb_max[1]= new_room.bb_min[1] + arch_y * c_column_step;
 				new_room.bb_min[2]= sector.bb_min[2];
 				new_room.bb_max[2]= new_room.bb_min[2] + height;
 
-				result.push_back(new_room);
+				portal.bb_min[1]= sector.bb_min[1];
+				portal.bb_max[1]= sector.bb_max[1];
+				portal.bb_min[2]= sector.bb_min[2];
+				portal.bb_max[2]= sector.bb_max[2];
+
+				result.emplace_back(new_room, portal);
 			}
 		}
 		else
@@ -298,23 +334,34 @@ std::vector<WorldData::Sector> WorldGenerator::GenPossibleLinkedSectorsCorridor(
 				new_room.type= WorldData::SectorType::Room;
 				new_room.columns_step= c_column_step;
 
+				WorldData::Portal portal;
+
 				if(sector.direction == WorldData::Direction::YPlus)
 				{
 					new_room.bb_min[1]= sector.bb_max[1];
 					new_room.bb_max[1]= sector.bb_max[1] + arch_y * c_column_step;
+
+					portal.bb_min[1]= portal.bb_max[1]= sector.bb_max[1];
+
 				}
 				else
 				{
 					new_room.bb_max[1]= sector.bb_min[1];
 					new_room.bb_min[1]= sector.bb_min[1] - arch_y * c_column_step;
 
+					portal.bb_min[1]= portal.bb_max[1]= sector.bb_min[1];
 				}
 				new_room.bb_min[0]= sector.bb_min[0] - connection_x * c_column_step - c_column_step / 2;
 				new_room.bb_max[0]= new_room.bb_min[0] + arch_x * c_column_step;
 				new_room.bb_min[2]= sector.bb_min[2];
 				new_room.bb_max[2]= new_room.bb_min[2] + height;
 
-				result.push_back(new_room);
+				portal.bb_min[0]= sector.bb_min[0];
+				portal.bb_max[0]= sector.bb_max[0];
+				portal.bb_min[2]= sector.bb_min[2];
+				portal.bb_max[2]= sector.bb_max[2];
+
+				result.emplace_back(new_room, portal);
 			}
 		}
 	}
@@ -356,10 +403,8 @@ bool WorldGenerator::CanPlace(const WorldData::Sector& sector, const PathSearchN
 
 const WorldData::Portal* WorldGenerator::FindPortal(const WorldData::CoordType* const cell)
 {
-	for(const auto& portal_pair : result_.portals)
+	for(const WorldData::Portal& portal : result_.portals)
 	{
-		const WorldData::Portal& portal= portal_pair.second;
-
 		if(portal.bb_min[0] == portal.bb_max[0])
 		{
 			if(  cell[1] >= portal.bb_min[1] && cell[1] < portal.bb_max[1] &&

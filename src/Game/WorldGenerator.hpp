@@ -66,15 +66,10 @@ struct Portal
 	CoordType bb_max[3]{};
 };
 
-// Pair of indexes.
-// value= first << 32 | secodnd
-// first must be always less, than second.
-using PortalKey= uint64_t;
-
 struct World
 {
 	std::vector<Sector> sectors;
-	std::unordered_map<PortalKey, Portal> portals;
+	std::vector<Portal> portals;
 };
 
 } // namespace WorldData
