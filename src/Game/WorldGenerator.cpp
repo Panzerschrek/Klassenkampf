@@ -89,11 +89,14 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		-40 - WorldData::CoordType(rand_.Rand() & 15u),
 	};
 
-	const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, dst);
-	for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
+	for(size_t i= 0u; i < 2u; ++i)
 	{
-		result_.sectors.push_back(node->sector);
-		result_.portals.push_back(node->portal);
+		const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, dst);
+		for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
+		{
+			result_.sectors.push_back(node->sector);
+			result_.portals.push_back(node->portal);
+		}
 	}
 
 	for(WorldData::Sector& sector : result_.sectors)
@@ -144,7 +147,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 
 		const WorldData::Sector& sector= node->sector;
 
-		const WorldData::CoordType c_threshold= 2;
+		const WorldData::CoordType c_threshold= 9;
 		if(
 			std::abs(to[0] * 2 - (sector.bb_max[0] + sector.bb_min[0])) <= c_threshold &&
 			std::abs(to[1] * 2 - (sector.bb_max[1] + sector.bb_min[1])) <= c_threshold &&
