@@ -56,7 +56,10 @@ public:
 	WorldData::World Generate(LongRand::RandResultType seed);
 
 private:
-	PathSearchNodePtr GeneratePathIterative(const WorldData::Sector& start_sector, const WorldData::Portal& target_portal);
+	PathSearchNodePtr GeneratePathIterative(
+		const WorldData::Sector& start_sector,
+		const WorldData::Portal& target_portal,
+		WorldData::CoordType accuracy);
 
 	PathSearchNodePtr TryJoin(const WorldData::Portal& a, const WorldData::Portal& b, const PathSearchNodePtr& node);
 
@@ -96,13 +99,13 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 	start_sector.ceiling_height= 2;
 	start_sector.columns_step= 3;
 
-	for(size_t i= 0u; i < 5u; ++i)
+	for(size_t i= 0u; i < 6u; ++i)
 	{
 		const Coord3 dst
 		{
-			start_sector.bb_max[0] + 20 + WorldData::CoordType(rand_.Rand() & 15u),
+			start_sector.bb_max[0] + WorldData::CoordType(rand_.Rand() & 31u),
 			start_sector.bb_max[1] + 20 + WorldData::CoordType(rand_.Rand() & 15u),
-			start_sector.bb_min[2],
+			start_sector.bb_min[2] - WorldData::CoordType((rand_.RandBool(1, 3) ? 1u : 0u) * (6u + (rand_.Rand() & 7u))),
 		};
 
 		WorldData::Portal target_portal;
@@ -114,10 +117,9 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		target_portal.bb_max[2]= target_portal.bb_min[2] + 1;
 
 		// TODO - use non-exact search for first path generation.
-		PathSearchNodePtr path_node= GeneratePathIterative(start_sector, target_portal);
+		PathSearchNodePtr path_node= GeneratePathIterative(start_sector, target_portal, 6);
 		if(path_node == nullptr)
 			break;
-		path_node= path_node->parent; // Skip joint node
 		for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
 		{
 			result_.sectors.push_back(node->sector);
@@ -149,7 +151,10 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 	return std::move(result_);
 }
 
-PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector& start_sector, const WorldData::Portal& target_portal)
+PathSearchNodePtr WorldGenerator::GeneratePathIterative(
+	const WorldData::Sector& start_sector,
+	const WorldData::Portal& target_portal,
+	const WorldData::CoordType accuracy)
 {
 	/*
 	Perform here some kind of best-first search.
@@ -178,6 +183,14 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 
 		if(node->portal == target_portal)
 			return node->parent;
+		if(accuracy > 0)
+		{
+			WorldData::CoordType delta= 0;
+			for(size_t j= 0u; j < 3u; ++j)
+				delta+= std::abs(node->sector.bb_min[j] + node->sector.bb_max[j] - target_portal.bb_min[j] - target_portal.bb_max[j]);
+			if(delta <= accuracy * 2)
+				return node;
+		}
 
 		const WorldData::Sector& sector= node->sector;
 
@@ -205,8 +218,11 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 
 			if(candidate_portal == target_portal)
 				return node;
-			if(const auto joint_node= TryJoin(candidate_portal, target_portal, node))
-				return joint_node;
+			if(accuracy == 0)
+			{
+				if(const auto joint_node= TryJoin(candidate_portal, target_portal, node))
+					return joint_node;
+			}
 
 			if(!CanPlace(candidate_sector, node.get()))
 				continue;
@@ -803,7 +819,7 @@ void WorldGenerator::FillSegmentsJoint(WorldData::Sector& sector)
 WorldData::World GenerateWorld()
 {
 	WorldGenerator generator;
-	return generator.Generate(2);
+	return generator.Generate(0);
 }
 
 } // namespace KK
