@@ -129,6 +129,49 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		Log::Info("finish path search iteration ", i);
 	}
 
+	const size_t sectors_size_limit= result_.sectors.size() * 3u;
+	while(result_.sectors.size() <= sectors_size_limit)
+	{
+		const size_t old_size= result_.sectors.size();
+		for(size_t i= 0u; i < old_size; ++i)
+		{
+			std::vector<SectorAndPortal> candidate_sectors;
+
+			switch(result_.sectors[i].type)
+			{
+			case WorldData::SectorType::Room:
+				candidate_sectors= GenPossibleLinkedSectorsRoom(result_.sectors[i]);
+				break;
+			case WorldData::SectorType::Corridor:
+				candidate_sectors= GenPossibleLinkedSectorsCorridor(result_.sectors[i]);
+				break;
+			case WorldData::SectorType::Shaft:
+				candidate_sectors= GenPossibleLinkedSectorsShaft(result_.sectors[i]);
+				break;
+			case WorldData::SectorType::Joint:
+				break;
+			};
+
+			for(
+				size_t j= 0u, sectors_placed= 0u, max_additional_sectors= (rand_.Rand() % 96u) / 64u;
+				j < 16u && sectors_placed < max_additional_sectors;
+				++j)
+			{
+				const SectorAndPortal candidate_connection= candidate_sectors[rand_.Rand() % candidate_sectors.size()];
+				if(CanPlace(candidate_connection.first, nullptr))
+				{
+					result_.sectors.push_back(candidate_connection.first);
+					result_.portals.push_back(candidate_connection.second);
+
+					++sectors_placed;
+				}
+			}
+		}
+
+		if(result_.sectors.size() == old_size)
+			break;
+	}
+
 	for(WorldData::Sector& sector : result_.sectors)
 	{
 		switch(sector.type)
