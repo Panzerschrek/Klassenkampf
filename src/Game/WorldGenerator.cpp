@@ -84,48 +84,47 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 {
 	rand_.SetInnerState(seed);
 
-	WorldData::Sector root_sector;
-	root_sector.type= WorldData::SectorType::Room;
+	WorldData::Sector start_sector;
+	start_sector.type= WorldData::SectorType::Room;
 
-	root_sector.bb_min[0]= -3;
-	root_sector.bb_min[1]= -3;
-	root_sector.bb_min[2]= +0;
-	root_sector.bb_max[0]= +3;
-	root_sector.bb_max[1]= +3;
-	root_sector.bb_max[2]= +16;
-	root_sector.ceiling_height= 2;
-	root_sector.columns_step= 3;
+	start_sector.bb_min[0]= -3;
+	start_sector.bb_min[1]= -3;
+	start_sector.bb_min[2]= +0;
+	start_sector.bb_max[0]= +3;
+	start_sector.bb_max[1]= +3;
+	start_sector.bb_max[2]= +16;
+	start_sector.ceiling_height= 2;
+	start_sector.columns_step= 3;
 
-	const Coord3 dst
+	for(size_t i= 0u; i < 5u; ++i)
 	{
-		0,
-		40,
-		0
-	};
+		const Coord3 dst
+		{
+			start_sector.bb_max[0] + 20 + WorldData::CoordType(rand_.Rand() & 15u),
+			start_sector.bb_max[1] + 20 + WorldData::CoordType(rand_.Rand() & 15u),
+			start_sector.bb_min[2],
+		};
 
-	WorldData::Portal target_portals[2];
-	target_portals[0].bb_min[0]= dst[0] - 12;
-	target_portals[0].bb_min[1]= dst[1];
-	target_portals[0].bb_min[2]= dst[2];
-	target_portals[0].bb_max[0]= target_portals[0].bb_min[0] + 1;
-	target_portals[0].bb_max[1]= target_portals[0].bb_min[1];
-	target_portals[0].bb_max[2]= target_portals[0].bb_min[2] + 1;
+		WorldData::Portal target_portal;
+		target_portal.bb_min[0]= dst[0];
+		target_portal.bb_min[1]= dst[1];
+		target_portal.bb_min[2]= dst[2];
+		target_portal.bb_max[0]= target_portal.bb_min[0] + 1;
+		target_portal.bb_max[1]= target_portal.bb_min[1];
+		target_portal.bb_max[2]= target_portal.bb_min[2] + 1;
 
-	target_portals[1].bb_min[0]= dst[0] + 12;
-	target_portals[1].bb_min[1]= dst[1];
-	target_portals[1].bb_min[2]= dst[2];
-	target_portals[1].bb_max[0]= target_portals[1].bb_min[0] + 1;
-	target_portals[1].bb_max[1]= target_portals[1].bb_min[1];
-	target_portals[1].bb_max[2]= target_portals[1].bb_min[2] + 1;
-
-	for(const WorldData::Portal& target_portal : target_portals)
-	{
-		const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, target_portal);
+		// TODO - use non-exact search for first path generation.
+		PathSearchNodePtr path_node= GeneratePathIterative(start_sector, target_portal);
+		if(path_node == nullptr)
+			break;
+		path_node= path_node->parent; // Skip joint node
 		for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
 		{
 			result_.sectors.push_back(node->sector);
 			result_.portals.push_back(node->portal);
 		}
+		start_sector= path_node->sector;
+		Log::Info("finish path search iteration ", i);
 	}
 
 	for(WorldData::Sector& sector : result_.sectors)
@@ -222,7 +221,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 			Priority priority= Priority(std::sqrt(double(square_doubled_dist))) / 4; // TODO - remove floating point arithmetic, use integer inly.
 
 			// Add some random to priority
-			priority= priority * Priority((rand_.Rand() & 63u) + 256u);
+			priority= priority * Priority((rand_.Rand() & 63u) + 32u);
 
 			auto new_node= std::make_shared<PathSearchNode>();
 			new_node->parent= node;
@@ -804,7 +803,7 @@ void WorldGenerator::FillSegmentsJoint(WorldData::Sector& sector)
 WorldData::World GenerateWorld()
 {
 	WorldGenerator generator;
-	return generator.Generate(9);
+	return generator.Generate(2);
 }
 
 } // namespace KK
