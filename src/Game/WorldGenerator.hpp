@@ -37,6 +37,7 @@ enum class SectorType
 	Room,
 	Corridor,
 	Shaft,
+	Joint,
 };
 
 enum class Direction

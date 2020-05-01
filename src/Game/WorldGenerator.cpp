@@ -12,6 +12,17 @@ namespace KK
 namespace
 {
 
+bool operator==(const WorldData::Portal& l, const WorldData::Portal& r)
+{
+	return
+		l.bb_min[0] == r.bb_min[0] &&
+		l.bb_min[1] == r.bb_min[1] &&
+		l.bb_min[2] == r.bb_min[2] &&
+		l.bb_max[0] == r.bb_max[0] &&
+		l.bb_max[1] == r.bb_max[1] &&
+		l.bb_max[2] == r.bb_max[2];
+}
+
 using Coord3= WorldData::CoordType[3];
 
 struct PathSearchNode;
@@ -45,7 +56,9 @@ public:
 	WorldData::World Generate(LongRand::RandResultType seed);
 
 private:
-	PathSearchNodePtr GeneratePathIterative(const WorldData::Sector& start_sector, const Coord3& to);
+	PathSearchNodePtr GeneratePathIterative(const WorldData::Sector& start_sector, const WorldData::Portal& target_portal);
+
+	PathSearchNodePtr TryJoin(const WorldData::Portal& a, const WorldData::Portal& b, const PathSearchNodePtr& node);
 
 	using SectorAndPortal= std::pair<WorldData::Sector, WorldData::Portal>;
 
@@ -53,13 +66,14 @@ private:
 	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsCorridor(const WorldData::Sector& sector);
 	static std::vector<SectorAndPortal> GenPossibleLinkedSectorsShaft(const WorldData::Sector& sector);
 
-	bool CanPlace(const WorldData::Sector& sector, const PathSearchNode& parent_path);
+	bool CanPlace(const WorldData::Sector& sector, const PathSearchNode* parent_path);
 
 	const WorldData::Portal* FindPortal(const WorldData::CoordType* cell);
 
 	void FillSegmentsCorridor(WorldData::Sector& sector);
 	void FillSegmentsRoom(WorldData::Sector& sector);
 	void FillSegmentsShaft(WorldData::Sector& sector);
+	void FillSegmentsJoint(WorldData::Sector& sector);
 
 private:
 	WorldData::World result_;
@@ -84,14 +98,29 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 
 	const Coord3 dst
 	{
-		80 + WorldData::CoordType(rand_.Rand() & 31u),
-		80 + WorldData::CoordType(rand_.Rand() & 31u),
-		-40 - WorldData::CoordType(rand_.Rand() & 15u),
+		0,
+		40,
+		0
 	};
 
-	for(size_t i= 0u; i < 2u; ++i)
+	WorldData::Portal target_portals[2];
+	target_portals[0].bb_min[0]= dst[0] - 12;
+	target_portals[0].bb_min[1]= dst[1];
+	target_portals[0].bb_min[2]= dst[2];
+	target_portals[0].bb_max[0]= target_portals[0].bb_min[0] + 1;
+	target_portals[0].bb_max[1]= target_portals[0].bb_min[1];
+	target_portals[0].bb_max[2]= target_portals[0].bb_min[2] + 1;
+
+	target_portals[1].bb_min[0]= dst[0] + 12;
+	target_portals[1].bb_min[1]= dst[1];
+	target_portals[1].bb_min[2]= dst[2];
+	target_portals[1].bb_max[0]= target_portals[1].bb_min[0] + 1;
+	target_portals[1].bb_max[1]= target_portals[1].bb_min[1];
+	target_portals[1].bb_max[2]= target_portals[1].bb_min[2] + 1;
+
+	for(const WorldData::Portal& target_portal : target_portals)
 	{
-		const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, dst);
+		const PathSearchNodePtr path_node= GeneratePathIterative(root_sector, target_portal);
 		for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
 		{
 			result_.sectors.push_back(node->sector);
@@ -112,13 +141,16 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		case WorldData::SectorType::Shaft:
 			FillSegmentsShaft(sector);
 			break;
+		case WorldData::SectorType::Joint:
+			FillSegmentsJoint(sector);
+			break;
 		}
 	}
 
 	return std::move(result_);
 }
 
-PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector& start_sector, const Coord3& to)
+PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector& start_sector, const WorldData::Portal& target_portal)
 {
 	/*
 	Perform here some kind of best-first search.
@@ -145,17 +177,10 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 		const PathSearchNodePtr node= node_heap.begin()->second;
 		node_heap.erase(node_heap.begin());
 
-		const WorldData::Sector& sector= node->sector;
+		if(node->portal == target_portal)
+			return node->parent;
 
-		const WorldData::CoordType c_threshold= 9;
-		if(
-			std::abs(to[0] * 2 - (sector.bb_max[0] + sector.bb_min[0])) <= c_threshold &&
-			std::abs(to[1] * 2 - (sector.bb_max[1] + sector.bb_min[1])) <= c_threshold &&
-			std::abs(to[2] * 2 - (sector.bb_max[2] + sector.bb_min[2])) <= c_threshold)
-		{
-			Log::Info("Path search finished. Iterations: ", iterations, ", heap size: ", node_heap.size());
-			return node;
-		}
+		const WorldData::Sector& sector= node->sector;
 
 		std::vector<SectorAndPortal> candidate_sectors;
 
@@ -170,26 +195,34 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 		case WorldData::SectorType::Shaft:
 			candidate_sectors= GenPossibleLinkedSectorsShaft(sector);
 			break;
+		case WorldData::SectorType::Joint:
+			break;
 		};
 
 		for(const SectorAndPortal& candidate : candidate_sectors)
 		{
 			const WorldData::Sector& candidate_sector= candidate.first;
 			const WorldData::Portal& candidate_portal= candidate.second;
-			if(!CanPlace(candidate_sector, *node))
-				continue;
 
+			if(candidate_portal == target_portal)
+				return node;
+			if(const auto joint_node= TryJoin(candidate_portal, target_portal, node))
+				return joint_node;
+
+			if(!CanPlace(candidate_sector, node.get()))
+				continue;
 
 			WorldData::CoordType square_doubled_dist= 0;
 			for(size_t j= 0u; j < 3u; ++j)
 			{
-				const WorldData::CoordType d= 2 * to[j] - (candidate_sector.bb_min[j] + candidate_sector.bb_max[j]);
+				const WorldData::CoordType d=
+					(target_portal.bb_min[j] + target_portal.bb_max[j]) - (candidate_portal.bb_min[j] + candidate_portal.bb_max[j]);
 				square_doubled_dist+= d * d;
 			}
 			Priority priority= Priority(std::sqrt(double(square_doubled_dist))) / 4; // TODO - remove floating point arithmetic, use integer inly.
 
 			// Add some random to priority
-			priority= priority * Priority((rand_.Rand() & 63u) + 32u) + Priority(rand_.Rand() % 1024u);
+			priority= priority * Priority((rand_.Rand() & 63u) + 256u);
 
 			auto new_node= std::make_shared<PathSearchNode>();
 			new_node->parent= node;
@@ -212,6 +245,36 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(const WorldData::Sector&
 		Log::Info("Max iterations reached");
 
 	return nullptr;
+}
+
+PathSearchNodePtr WorldGenerator::TryJoin(const WorldData::Portal& a, const WorldData::Portal& b, const PathSearchNodePtr& node)
+{
+	if(!(a.bb_min[2] == b.bb_min[2] && a.bb_max[2] == b.bb_max[2]))
+		return nullptr;
+
+	WorldData::Sector out_sector;
+	out_sector.type= WorldData::SectorType::Joint;
+	out_sector.bb_min[0]= std::min(a.bb_min[0], b.bb_min[0]);
+	out_sector.bb_min[1]= std::min(a.bb_min[1], b.bb_min[1]);
+	out_sector.bb_max[0]= std::max(a.bb_max[0], b.bb_max[0]);
+	out_sector.bb_max[1]= std::max(a.bb_max[1], b.bb_max[1]);
+	out_sector.bb_min[2]= a.bb_min[2];
+	out_sector.bb_max[2]= a.bb_max[2];
+
+	const WorldData::CoordType c_min_size= 1;
+	const WorldData::CoordType c_max_size= 4;
+	const WorldData::CoordType size[]{ out_sector.bb_max[0] - out_sector.bb_min[0], out_sector.bb_max[1] - out_sector.bb_min[1] };
+	if(size[0] < c_min_size || size[0] > c_max_size || size[1] < c_min_size || size[1] > c_max_size)
+		return nullptr;
+
+	if(!CanPlace(out_sector, node.get()))
+		return nullptr;
+
+	auto result_node= std::make_shared<PathSearchNode>();
+	result_node->parent= node;
+	result_node->sector= out_sector;
+	result_node->portal= a;
+	return result_node;
 }
 
 std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSectorsRoom(const WorldData::Sector& sector)
@@ -464,7 +527,7 @@ std::vector<WorldGenerator::SectorAndPortal> WorldGenerator::GenPossibleLinkedSe
 	return result;
 }
 
-bool WorldGenerator::CanPlace(const WorldData::Sector& sector, const PathSearchNode& parent_path)
+bool WorldGenerator::CanPlace(const WorldData::Sector& sector, const PathSearchNode* const parent_path)
 {
 	const Coord3& bb_min= sector.bb_min;
 	const Coord3& bb_max= sector.bb_max;
@@ -481,7 +544,7 @@ bool WorldGenerator::CanPlace(const WorldData::Sector& sector, const PathSearchN
 		return false;
 	}
 
-	for(const PathSearchNode* node= &parent_path; node != nullptr; node= node->parent.get())
+	for(const PathSearchNode* node= parent_path; node != nullptr; node= node->parent.get())
 	{
 		if( node->sector.bb_min[0] >= bb_max[0] ||
 			node->sector.bb_min[1] >= bb_max[1] ||
@@ -715,6 +778,23 @@ void WorldGenerator::FillSegmentsShaft(WorldData::Sector& sector)
 		segment.pos[1]= sector.bb_min[1];
 		segment.pos[2]= z;
 		segment.angle= 0;
+		sector.segments.push_back(std::move(segment));
+	}
+}
+
+void WorldGenerator::FillSegmentsJoint(WorldData::Sector& sector)
+{
+	KK_ASSERT(sector.type == WorldData::SectorType::Joint);
+	for(WorldData::CoordType x= sector.bb_min[0]; x < sector.bb_max[0]; ++x)
+	for(WorldData::CoordType y= sector.bb_min[1]; y < sector.bb_max[1]; ++y)
+	{
+		WorldData::Segment segment;
+		segment.type= WorldData::SegmentType::Floor;
+		segment.pos[0]= x;
+		segment.pos[1]= y;
+		segment.pos[2]= sector.bb_min[2];
+		segment.angle= uint8_t((rand_.Rand() & 255u) / 64u);
+
 		sector.segments.push_back(std::move(segment));
 	}
 }
