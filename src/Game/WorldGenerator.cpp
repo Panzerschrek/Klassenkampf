@@ -52,7 +52,7 @@ const WorldData::CoordType c_min_shaft_height= 2;
 const WorldData::CoordType c_max_shaft_height= 6;
 
 const size_t c_max_iterations_for_primary_path_search= 1u << 18u;
-const size_t c_max_iterations_for_key_room_search= 1u << 16u;
+const size_t c_max_iterations_for_key_room_search= 1u << 12u;
 
 const WorldData::CoordType c_primary_path_search_accuracy= 6;
 
@@ -141,7 +141,66 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		Log::Info("finish path search iteration ", i);
 	}
 
-	const size_t sectors_size_limit= result_.sectors.size() * 3u;
+	for(
+		size_t key_rooms_added= 0u, iterations= 0u, iterations_limit= result_.sectors.size() * 8u, key_rooms_limit= 3u;
+		key_rooms_added < key_rooms_limit && iterations < iterations_limit;
+		++iterations)
+	{
+		const WorldData::Sector& sector= result_.sectors[ rand_.Rand() % result_.sectors.size() ];
+		if(sector.type != WorldData::SectorType::Room)
+			continue;
+
+		const Coord3 pos
+		{
+			sector.bb_min[0] + WorldData::CoordType(rand_.Rand() & 31u),
+			sector.bb_min[1] + WorldData::CoordType(rand_.Rand() & 31u),
+			0u,
+		};
+
+		const Coord3 size
+		{
+			WorldData::CoordType(rand_.Rand() % (c_max_room_size_archs - c_min_room_size_archs) + c_min_room_size_archs) * c_column_step,
+			WorldData::CoordType(rand_.Rand() % (c_max_room_size_archs - c_min_room_size_archs) + c_min_room_size_archs) * c_column_step,
+			WorldData::CoordType(rand_.Rand() % (c_max_room_height - c_min_room_height)) + c_min_room_height
+		};
+
+		WorldData::Sector key_sector;
+		key_sector.type= WorldData::SectorType::Room;
+		key_sector.ceiling_height= c_ceiling_height;
+		key_sector.columns_step= c_column_step;
+		key_sector.bb_min[0]= pos[0];
+		key_sector.bb_min[1]= pos[1];
+		key_sector.bb_min[2]= pos[2];
+		key_sector.bb_max[0]= pos[0] + size[0];
+		key_sector.bb_max[1]= pos[1] + size[1];
+		key_sector.bb_max[2]= pos[2] + size[2];
+
+		if(!CanPlace(key_sector, nullptr))
+			continue;
+
+		size_t connections_placed= 0u;
+		for(size_t i= 0u; i < 16u && connections_placed < 2u; ++i)
+		{
+			if(const auto path_node= GeneratePathIterative(sector, key_sector, c_max_iterations_for_key_room_search))
+			{
+				Log::Info("Path to key room found");
+				for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
+				{
+					result_.sectors.push_back(node->sector);
+					result_.portals.push_back(node->portal);
+				}
+				++connections_placed;
+			}
+		}
+
+		if(connections_placed != 0)
+		{
+			result_.sectors.push_back(key_sector);
+			++key_rooms_added;
+		}
+	}
+
+	const size_t sectors_size_limit= result_.sectors.size() * 3u * 0u;
 	while(result_.sectors.size() <= sectors_size_limit)
 	{
 		const size_t old_size= result_.sectors.size();
