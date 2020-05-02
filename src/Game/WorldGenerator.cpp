@@ -4,6 +4,7 @@
 #include "Rand.hpp"
 #include <algorithm>
 #include <map>
+#include <variant>
 
 
 namespace KK
@@ -61,11 +62,13 @@ public:
 	WorldData::World Generate(LongRand::RandResultType seed);
 
 private:
+	using PathSearchPortal= std::pair<WorldData::Portal, WorldData::CoordType>;
+	using PathSearchTarget= std::variant<PathSearchPortal, WorldData::Sector>;
+
 	PathSearchNodePtr GeneratePathIterative(
 		const WorldData::Sector& start_sector,
-		const WorldData::Portal& target_portal,
-		size_t max_iterations,
-		WorldData::CoordType accuracy);
+		const PathSearchTarget& target,
+		size_t max_iterations);
 
 	PathSearchNodePtr TryJoin(const WorldData::Portal& a, const WorldData::Portal& b, const PathSearchNodePtr& node);
 
@@ -125,9 +128,8 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		// TODO - use non-exact search for first path generation.
 		PathSearchNodePtr path_node= GeneratePathIterative(
 				start_sector,
-				target_portal,
-				c_max_iterations_for_primary_path_search,
-				c_primary_path_search_accuracy);
+				PathSearchPortal(target_portal, c_primary_path_search_accuracy),
+				c_max_iterations_for_primary_path_search);
 		if(path_node == nullptr)
 			break;
 		for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
@@ -164,7 +166,7 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 
 			for(
 				size_t j= 0u, sectors_placed= 0u, max_additional_sectors= (rand_.Rand() % 96u) / 64u;
-				j < 16u && sectors_placed < max_additional_sectors;
+				!candidate_sectors.empty() && j < 16u && sectors_placed < max_additional_sectors;
 				++j)
 			{
 				const SectorAndPortal candidate_connection= candidate_sectors[rand_.Rand() % candidate_sectors.size()];
@@ -206,9 +208,8 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 
 PathSearchNodePtr WorldGenerator::GeneratePathIterative(
 	const WorldData::Sector& start_sector,
-	const WorldData::Portal& target_portal,
-	const size_t max_iterations,
-	const WorldData::CoordType accuracy)
+	const PathSearchTarget& target,
+	const size_t max_iterations)
 {
 	/*
 	Perform here some kind of best-first search.
@@ -234,16 +235,30 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(
 		const PathSearchNodePtr node= node_heap.begin()->second;
 		node_heap.erase(node_heap.begin());
 
-		if(node->portal == target_portal)
-			return node->parent;
-		if(accuracy > 0)
+		if(const auto target_portal= std::get_if<PathSearchPortal>(&target))
 		{
-			WorldData::CoordType delta= 0;
-			for(size_t j= 0u; j < 3u; ++j)
-				delta+= std::abs(node->sector.bb_min[j] + node->sector.bb_max[j] - target_portal.bb_min[j] - target_portal.bb_max[j]);
-			if(delta <= accuracy * 2)
-				return node;
+			if(node->portal == target_portal->first)
+				return node->parent;
+			const auto accuracy = target_portal->second;
+			if(accuracy > 0)
+			{
+				WorldData::CoordType delta= 0;
+				for(size_t j= 0u; j < 3u; ++j)
+					delta+=
+						std::abs(node->sector.bb_min[j] + node->sector.bb_max[j] -
+						(target_portal->first.bb_min[j] + target_portal->first.bb_max[j]));
+				if(delta <= accuracy * 2)
+					return node;
+			}
 		}
+		else if(const auto target_sector= std::get_if<WorldData::Sector>(&target))
+		{
+			if( node->sector.bb_min[0] == target_sector->bb_min[0] && node->sector.bb_max[0] == target_sector->bb_max[0] &&
+				node->sector.bb_min[1] == target_sector->bb_min[1] && node->sector.bb_max[1] == target_sector->bb_max[1] &&
+				node->sector.bb_min[2] == target_sector->bb_min[2] && node->sector.bb_max[2] == target_sector->bb_max[2])
+				return node->parent;
+		}
+		else KK_ASSERT(false);
 
 		const WorldData::Sector& sector= node->sector;
 
@@ -269,24 +284,46 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(
 			const WorldData::Sector& candidate_sector= candidate.first;
 			const WorldData::Portal& candidate_portal= candidate.second;
 
-			if(candidate_portal == target_portal)
-				return node;
-			if(accuracy == 0)
+			if(const auto target_portal= std::get_if<PathSearchPortal>(&target))
 			{
-				if(const auto joint_node= TryJoin(candidate_portal, target_portal, node))
+				if(candidate_portal == target_portal->first)
+					return node;
+				if(const auto joint_node= TryJoin(candidate_portal, target_portal->first, node))
 					return joint_node;
 			}
+			else if(const auto target_sector= std::get_if<WorldData::Sector>(&target))
+			{
+				if( candidate_sector.bb_min[0] == target_sector->bb_min[0] && candidate_sector.bb_max[0] == target_sector->bb_max[0] &&
+					candidate_sector.bb_min[1] == target_sector->bb_min[1] && candidate_sector.bb_max[1] == target_sector->bb_max[1] &&
+					candidate_sector.bb_min[2] == target_sector->bb_min[2] && candidate_sector.bb_max[2] == target_sector->bb_max[2])
+					return node;
+			}
+			else KK_ASSERT(false);
 
 			if(!CanPlace(candidate_sector, node.get()))
 				continue;
 
 			WorldData::CoordType square_doubled_dist= 0;
-			for(size_t j= 0u; j < 3u; ++j)
+
+			if(const auto target_portal= std::get_if<PathSearchPortal>(&target))
 			{
-				const WorldData::CoordType d=
-					(target_portal.bb_min[j] + target_portal.bb_max[j]) - (candidate_portal.bb_min[j] + candidate_portal.bb_max[j]);
-				square_doubled_dist+= d * d;
+				for(size_t j= 0u; j < 3u; ++j)
+				{
+					const WorldData::CoordType d=
+						(target_portal->first.bb_min[j] + target_portal->first.bb_max[j]) - (candidate_portal.bb_min[j] + candidate_portal.bb_max[j]);
+					square_doubled_dist+= d * d;
+				}
 			}
+			else if(const auto target_sector= std::get_if<WorldData::Sector>(&target))
+			{
+				for(size_t j= 0u; j < 3u; ++j)
+				{
+					const WorldData::CoordType d=
+						(target_sector->bb_min[j] + target_sector->bb_max[j]) - (candidate_portal.bb_min[j] + candidate_portal.bb_max[j]);
+					square_doubled_dist+= d * d;
+				}
+			}
+			else KK_ASSERT(false);
 			Priority priority= Priority(std::sqrt(double(square_doubled_dist))) / 4; // TODO - remove floating point arithmetic, use integer inly.
 
 			// Add some random to priority
