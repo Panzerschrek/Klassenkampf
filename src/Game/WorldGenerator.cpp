@@ -50,6 +50,11 @@ const WorldData::CoordType c_max_corridor_length = 10;
 const WorldData::CoordType c_min_shaft_height= 2;
 const WorldData::CoordType c_max_shaft_height= 6;
 
+const size_t c_max_iterations_for_primary_path_search= 1u << 18u;
+const size_t c_max_iterations_for_key_room_search= 1u << 16u;
+
+const WorldData::CoordType c_primary_path_search_accuracy= 6;
+
 class WorldGenerator final
 {
 public:
@@ -59,6 +64,7 @@ private:
 	PathSearchNodePtr GeneratePathIterative(
 		const WorldData::Sector& start_sector,
 		const WorldData::Portal& target_portal,
+		size_t max_iterations,
 		WorldData::CoordType accuracy);
 
 	PathSearchNodePtr TryJoin(const WorldData::Portal& a, const WorldData::Portal& b, const PathSearchNodePtr& node);
@@ -117,7 +123,11 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		target_portal.bb_max[2]= target_portal.bb_min[2] + 1;
 
 		// TODO - use non-exact search for first path generation.
-		PathSearchNodePtr path_node= GeneratePathIterative(start_sector, target_portal, 6);
+		PathSearchNodePtr path_node= GeneratePathIterative(
+				start_sector,
+				target_portal,
+				c_max_iterations_for_primary_path_search,
+				c_primary_path_search_accuracy);
 		if(path_node == nullptr)
 			break;
 		for(const PathSearchNode* node= path_node.get(); node != nullptr; node= node->parent.get())
@@ -197,6 +207,7 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 PathSearchNodePtr WorldGenerator::GeneratePathIterative(
 	const WorldData::Sector& start_sector,
 	const WorldData::Portal& target_portal,
+	const size_t max_iterations,
 	const WorldData::CoordType accuracy)
 {
 	/*
@@ -215,9 +226,8 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(
 		node_heap.emplace(0, std::move(node));
 	}
 
-	const size_t c_max_iterations= 1024u * 1024u;
 	size_t iterations= 0u;
-	while(!node_heap.empty() && iterations < c_max_iterations)
+	while(!node_heap.empty() && iterations < max_iterations)
 	{
 		++iterations;
 
@@ -299,7 +309,7 @@ PathSearchNodePtr WorldGenerator::GeneratePathIterative(
 
 	if(node_heap.empty())
 		Log::Info("Nodes heap is empty and result not reached");
-	if(iterations >= c_max_iterations)
+	if(iterations >= max_iterations)
 		Log::Info("Max iterations reached");
 
 	return nullptr;
