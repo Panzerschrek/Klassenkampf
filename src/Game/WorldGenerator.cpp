@@ -141,8 +141,9 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		Log::Info("finish path search iteration ", i);
 	}
 
+	// This code is too slow and almost not working.
 	for(
-		size_t key_rooms_added= 0u, iterations= 0u, iterations_limit= result_.sectors.size() * 8u, key_rooms_limit= 3u;
+		size_t key_rooms_added= 0u, iterations= 0u, iterations_limit= result_.sectors.size() * 0u, key_rooms_limit= 3u;
 		key_rooms_added < key_rooms_limit && iterations < iterations_limit;
 		++iterations)
 	{
@@ -150,11 +151,17 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		if(sector.type != WorldData::SectorType::Room)
 			continue;
 
+		const Coord3 center
+		{
+			(sector.bb_min[0] + sector.bb_max[0]) >> 1,
+			(sector.bb_min[1] + sector.bb_max[1]) >> 1,
+			(sector.bb_min[2] + sector.bb_max[2]) >> 1,
+		};
 		const Coord3 pos
 		{
-			sector.bb_min[0] + WorldData::CoordType(rand_.Rand() & 31u),
-			sector.bb_min[1] + WorldData::CoordType(rand_.Rand() & 31u),
-			0u,
+			center[0] + WorldData::CoordType(rand_.RandBool() ? +1 : -1) * WorldData::CoordType(4u + rand_.Rand() % 10u),
+			center[1] + WorldData::CoordType(rand_.RandBool() ? +1 : -1) * WorldData::CoordType(4u + rand_.Rand() % 10u),
+			sector.bb_min[2],
 		};
 
 		const Coord3 size
@@ -168,18 +175,18 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		key_sector.type= WorldData::SectorType::Room;
 		key_sector.ceiling_height= c_ceiling_height;
 		key_sector.columns_step= c_column_step;
-		key_sector.bb_min[0]= pos[0];
-		key_sector.bb_min[1]= pos[1];
+		key_sector.bb_min[0]= pos[0] - (size[0] >> 1);
+		key_sector.bb_min[1]= pos[1] - (size[1] >> 1);
 		key_sector.bb_min[2]= pos[2];
-		key_sector.bb_max[0]= pos[0] + size[0];
-		key_sector.bb_max[1]= pos[1] + size[1];
-		key_sector.bb_max[2]= pos[2] + size[2];
+		key_sector.bb_max[0]= key_sector.bb_min[0] + size[0];
+		key_sector.bb_max[1]= key_sector.bb_min[1] + size[1];
+		key_sector.bb_max[2]= key_sector.bb_min[2] + size[2];
 
 		if(!CanPlace(key_sector, nullptr))
 			continue;
 
 		size_t connections_placed= 0u;
-		for(size_t i= 0u; i < 16u && connections_placed < 2u; ++i)
+		for(size_t i= 0u; i < 2u && connections_placed < 2u; ++i)
 		{
 			if(const auto path_node= GeneratePathIterative(sector, key_sector, c_max_iterations_for_key_room_search))
 			{
@@ -191,6 +198,8 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 				}
 				++connections_placed;
 			}
+			else
+				break;
 		}
 
 		if(connections_placed != 0)
@@ -200,7 +209,7 @@ WorldData::World WorldGenerator::Generate(const LongRand::RandResultType seed)
 		}
 	}
 
-	const size_t sectors_size_limit= result_.sectors.size() * 3u * 0u;
+	const size_t sectors_size_limit= result_.sectors.size() * 5u / 2u;
 	while(result_.sectors.size() <= sectors_size_limit)
 	{
 		const size_t old_size= result_.sectors.size();
