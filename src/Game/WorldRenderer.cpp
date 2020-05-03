@@ -576,6 +576,16 @@ void WorldRenderer::BeginFrame(const vk::CommandBuffer command_buffer)
 	command_buffer.updateBuffer(*cluster_offset_buffer_, 0u, uint32_t(offsets_buffer.size() * sizeof(uint32_t)), offsets_buffer.data());
 	command_buffer.updateBuffer(*lights_list_buffer_, 0u, uint32_t(ligts_list_buffer.size() * sizeof(ClusterVolumeBuilder::ElementId)), ligts_list_buffer.data());
 
+	// Add barrier for preventing of drawing commands start before all calls to "updateBuffer" finished.
+	// TODO - optimize, use buffer memory barrier.
+	command_buffer.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eAllGraphics,
+		vk::DependencyFlagBits(),
+		{ {vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead} },
+		{},
+		{});
+
 	// Draw shadows
 	for(const ShadowmapLight& light : lights_for_shadow_update)
 	{

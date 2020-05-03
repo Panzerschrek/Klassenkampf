@@ -506,6 +506,16 @@ void TextOut::BeginFrame(const vk::CommandBuffer command_buffer)
 		0u,
 		std::min(glyph_data_.size(), max_glyphs_in_buffer_) * sizeof(Glyph),
 		glyph_data_.data());
+
+	// Make sure that shader does not execute before end of "updateBuffer".
+	// TODO - optimize, use buffer memory barrier.
+	command_buffer.pipelineBarrier(
+		vk::PipelineStageFlagBits::eTransfer,
+		vk::PipelineStageFlagBits::eAllGraphics,
+		vk::DependencyFlagBits(),
+		{ {vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead} },
+		{},
+		{});
 }
 
 void TextOut::EndFrame(const vk::CommandBuffer command_buffer)
